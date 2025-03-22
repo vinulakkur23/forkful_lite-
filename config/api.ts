@@ -5,7 +5,7 @@
 
 export const API_CONFIG = {
   // Base URL for API
-  BASE_URL: 'http://localhost:8000',
+  BASE_URL: 'https://dishitout-imageinhancer.onrender.com',
   
   // API endpoints
   ENDPOINTS: {

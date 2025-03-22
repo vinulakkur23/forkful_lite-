@@ -4,6 +4,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList } from '../App';
+import API_CONFIG from '../config/api';
 
 type EditPhotoScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditPhoto'>;
 type EditPhotoScreenRouteProp = RouteProp<RootStackParamList, 'EditPhoto'>;
@@ -51,7 +52,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   // API configuration
-  const API_BASE_URL = 'http://localhost:8000'; // Change to your actual API URL when deployed
+  const API_BASE_URL = API_CONFIG.getBaseUrl(); // Change to your actual API URL when deployed
   
   // Function to convert image URI to a form-compatible file
   const uriToBlob = async (uri: string) => {
