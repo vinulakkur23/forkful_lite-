@@ -50,35 +50,173 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
   
-  const processPhoto = (): void => {
+  // API configuration
+  const API_BASE_URL = 'http://localhost:8000'; // Change to your actual API URL when deployed
+  
+  // Function to convert image URI to a form-compatible file
+  const uriToBlob = async (uri: string) => {
+    return new Promise<Blob>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function() {
+        resolve(xhr.response);
+      };
+      xhr.onerror = function() {
+        reject(new Error('uriToBlob failed'));
+      };
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+  };
+
+  const processPhoto = async (): Promise<void> => {
     // Only process if at least one option is selected
     const anySelected = editOptions.some(option => option.selected);
     
     if (anySelected) {
       setIsProcessing(true);
       
-      // Simulate backend processing
-      setTimeout(() => {
+      try {
+        // Convert URI to blob
+        const imageBlob = await uriToBlob(photo.uri);
+        
+        // Create form data
+        const formData = new FormData();
+        
+        // Create a file object from the blob
+        // React Native has a specific way to create file objects for FormData
+        const fileExtension = photo.uri.split('.').pop() || 'jpg';
+        const fileName = `photo.${fileExtension}`;
+        const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
+        
+        // Add the image - note the specific structure needed for React Native
+        formData.append('image', {
+          uri: photo.uri,
+          name: fileName,
+          type: fileType,
+        } as any);
+        
+        // Add selected options
+        const selectedOptions = editOptions
+          .filter(option => option.selected)
+          .map(option => option.id);
+        formData.append('options', JSON.stringify(selectedOptions));
+        
+        // Add location data if available
+        if (location) {
+          formData.append('latitude', location.latitude.toString());
+          formData.append('longitude', location.longitude.toString());
+        }
+        
+        console.log('Sending request to API:', `${API_BASE_URL}/edit-photo`);
+        console.log('Selected options:', selectedOptions);
+        
+        // Send to your API
+        const response = await fetch(`${API_BASE_URL}/edit-photo`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Network response error ${response.status}: ${errorText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Received API response');
+        
+        // Check if we have a processed image
+        if (result.processed_image) {
+          // Update the image with the processed version
+          setImageSource({ uri: result.processed_image });
+          
+          // Log any message from the model (optional)
+          if (result.model_response) {
+            console.log('Model response:', result.model_response);
+          }
+        } else {
+          throw new Error('API response did not contain a processed image');
+        }
+      } catch (error) {
+        console.error('Error processing photo:', error);
+        alert(`Failed to process photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
         setIsProcessing(false);
-        // In a real app, you'd receive a processed image from your backend
-        // For now, we'll just use the same image
-      }, 2000);
+      }
     } else {
       // Show some feedback that no options were selected
       alert('Please select at least one edit option');
     }
   };
   
-  const processGoBig = (): void => {
-    // "Go Big" is a special editing option that makes specific changes
+  const processGoBig = async (): Promise<void> => {
     setIsProcessing(true);
     
-    // Simulate backend processing
-    setTimeout(() => {
+    try {
+      // Convert URI to blob
+      const imageBlob = await uriToBlob(photo.uri);
+      
+      // Create form data
+      const formData = new FormData();
+      
+      // Create a file object from the blob
+      const fileExtension = photo.uri.split('.').pop() || 'jpg';
+      const fileName = `photo.${fileExtension}`;
+      const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
+      
+      // Add the image - note the specific structure needed for React Native
+      formData.append('image', {
+        uri: photo.uri,
+        name: fileName,
+        type: fileType,
+      } as any);
+      
+      // Add location data if available
+      if (location) {
+        formData.append('latitude', location.latitude.toString());
+        formData.append('longitude', location.longitude.toString());
+      }
+      
+      console.log('Sending Go Big request to API');
+      
+      // Send to your API
+      const response = await fetch(`${API_BASE_URL}/go-big`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Network response error ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Received Go Big API response');
+      
+      // Check if we have a processed image
+      if (result.processed_image) {
+        // Update the image with the processed version
+        setImageSource({ uri: result.processed_image });
+        
+        // Log any message from the model (optional)
+        if (result.model_response) {
+          console.log('Model response:', result.model_response);
+        }
+      } else {
+        throw new Error('API response did not contain a processed image');
+      }
+    } catch (error) {
+      console.error('Error processing Go Big:', error);
+      alert(`Failed to enhance photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
       setIsProcessing(false);
-      // In a real app, you'd receive a differently processed image
-      // For now, we'll just use the same image
-    }, 2000);
+    }
   };
   
   const continueToRating = (): void => {

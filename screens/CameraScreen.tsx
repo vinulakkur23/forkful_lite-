@@ -16,11 +16,15 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     longitude: -122.4194
   });
   
+  // Use a hard-coded image path
+  // IMPORTANT: Replace this with an actual image path on your computer
+  const hardcodedImagePath = "file:////Users/vinulakkur/PycharmProjects/ImageRandomizer/extracted_images/image_282.jpeg";
+  
   // This function simulates taking a photo
   const takeMockPicture = () => {
-    // Mock photo data with a placeholder image
+    // Mock photo data with a hardcoded image
     const mockPhoto = {
-      uri: 'https://picsum.photos/400/300',  // Random placeholder image
+      uri: hardcodedImagePath,  // Hardcoded local image path
       width: 400,
       height: 300
     };
@@ -36,10 +40,12 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.mockCameraView}>
         <Text style={styles.mockText}>Camera Preview</Text>
-        <Text style={styles.mockSubText}>(Simulator Mode)</Text>
+        <Text style={styles.mockSubText}>(Using Hardcoded Image)</Text>
+        
+        {/* Display the hardcoded image */}
         <Image
-          source={require('../assets/camera-placeholder.png')}
-          style={styles.placeholderImage}
+          source={{ uri: hardcodedImagePath }}
+          style={styles.previewImage}
           resizeMode="contain"
         />
       </View>
@@ -73,12 +79,14 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 16,
     marginTop: 8,
+    marginBottom: 20,
   },
-  placeholderImage: {
-    width: 200,
-    height: 200,
-    marginTop: 20,
-    opacity: 0.7,
+  previewImage: {
+    width: 300,
+    height: 300,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'white',
   },
   buttonContainer: {
     flexDirection: 'row',
