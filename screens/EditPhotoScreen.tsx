@@ -5,6 +5,7 @@ import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList } from '../App';
 import API_CONFIG from '../config/api';
+import ImageResizer from 'react-native-image-resizer';
 
 type EditPhotoScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditPhoto'>;
 type EditPhotoScreenRouteProp = RouteProp<RootStackParamList, 'EditPhoto'>;
@@ -34,6 +35,19 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     { id: 'background', label: 'Remove Background Clutter', selected: false },
   ]);
   
+  // Test basic API connectivity on component mount
+  useEffect(() => {
+    const testApi = async () => {
+      try {
+        const response = await fetch('https://dishitout-imageinhancer.onrender.com/');
+        console.log('API reached with status:', response.status);
+      } catch (error) {
+        console.log('API test failed:', error);
+      }
+    };
+    testApi();
+  }, []);
+  
   // Handle cases where the photo URI might be a remote URL (for simulator testing)
   useEffect(() => {
     if (photo && photo.uri) {
@@ -51,23 +65,36 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
   
-  // API configuration
-  const API_BASE_URL = API_CONFIG.getBaseUrl(); // Change to your actual API URL when deployed
+  // API configuration - hardcoded for testing
+  const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
   
-  // Function to convert image URI to a form-compatible file
-  const uriToBlob = async (uri: string) => {
-    return new Promise<Blob>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = function() {
-        resolve(xhr.response);
-      };
-      xhr.onerror = function() {
-        reject(new Error('uriToBlob failed'));
-      };
-      xhr.responseType = 'blob';
-      xhr.open('GET', uri, true);
-      xhr.send(null);
-    });
+  // Add this new function to resize the image
+  const resizeAndUploadImage = async (uri: string): Promise<string> => {
+    try {
+      console.log('Resizing image from:', uri);
+      
+      // Resize to a reasonable size (1000x1000 max, maintaining aspect ratio)
+      const resizedImage = await ImageResizer.createResizedImage(
+        uri,
+        1000,
+        1000,
+        'JPEG',
+        70,  // 70% quality - good balance between size and quality
+        0,
+        undefined,
+        false,
+        { mode: 'contain', onlyScaleDown: true }
+      );
+      
+      console.log('Resized image path:', resizedImage.uri);
+      console.log('Resized image size:', resizedImage.size / 1024, 'KB');
+      
+      return resizedImage.uri;
+    } catch (error) {
+      console.error('Error resizing image:', error);
+      // Fall back to original if resizing fails
+      return uri;
+    }
   };
 
   const processPhoto = async (): Promise<void> => {
@@ -78,21 +105,20 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsProcessing(true);
       
       try {
-        // Convert URI to blob
-        const imageBlob = await uriToBlob(photo.uri);
+        // Resize the image first - add this line
+        const resizedImageUri = await resizeAndUploadImage(photo.uri);
         
         // Create form data
         const formData = new FormData();
         
-        // Create a file object from the blob
-        // React Native has a specific way to create file objects for FormData
-        const fileExtension = photo.uri.split('.').pop() || 'jpg';
+        // Create a file object from the resized image - update this section
+        const fileExtension = resizedImageUri.split('.').pop() || 'jpg';
         const fileName = `photo.${fileExtension}`;
         const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
         
-        // Add the image - note the specific structure needed for React Native
+        // Add the resized image instead of the original
         formData.append('image', {
-          uri: photo.uri,
+          uri: resizedImageUri,  // Use the resized image URI
           name: fileName,
           type: fileType,
         } as any);
@@ -109,11 +135,11 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
           formData.append('longitude', location.longitude.toString());
         }
         
-        console.log('Sending request to API:', `${API_BASE_URL}/edit-photo`);
-        console.log('Selected options:', selectedOptions);
+        console.log('Sending request to API');
+        console.log('Full API URL:', `${HARDCODED_URL}/edit-photo`);  // Use hardcoded URL for testing
         
-        // Send to your API
-        const response = await fetch(`${API_BASE_URL}/edit-photo`, {
+        // Send to your API using hardcoded URL
+        const response = await fetch(`${HARDCODED_URL}/edit-photo`, {
           method: 'POST',
           body: formData,
           headers: {
@@ -157,20 +183,20 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     setIsProcessing(true);
     
     try {
-      // Convert URI to blob
-      const imageBlob = await uriToBlob(photo.uri);
+      // Resize the image first - add this line
+      const resizedImageUri = await resizeAndUploadImage(photo.uri);
       
       // Create form data
       const formData = new FormData();
       
-      // Create a file object from the blob
-      const fileExtension = photo.uri.split('.').pop() || 'jpg';
+      // Create a file object from the resized image - update this section
+      const fileExtension = resizedImageUri.split('.').pop() || 'jpg';
       const fileName = `photo.${fileExtension}`;
       const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
       
-      // Add the image - note the specific structure needed for React Native
+      // Add the resized image instead of the original
       formData.append('image', {
-        uri: photo.uri,
+        uri: resizedImageUri,  // Use the resized image URI
         name: fileName,
         type: fileType,
       } as any);
@@ -182,9 +208,10 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       }
       
       console.log('Sending Go Big request to API');
+      console.log('Full API URL for Go Big:', `${HARDCODED_URL}/go-big`);
       
-      // Send to your API
-      const response = await fetch(`${API_BASE_URL}/go-big`, {
+      // Send to your API using hardcoded URL
+      const response = await fetch(`${HARDCODED_URL}/go-big`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -222,7 +249,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   
   const continueToRating = (): void => {
     navigation.navigate('Rating', {
-      photo: photo,
+      photo: imageSource,  // Use the possibly processed image
       location: location,
     });
   };
@@ -239,7 +266,10 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         {isProcessing && (
           <View style={styles.processingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.processingText}>Processing your edits...</Text>
+            <Text style={styles.processingText}>
+              AI is enhancing your photo...{'\n'}
+              This may take up to 30 seconds
+            </Text>
           </View>
         )}
       </View>
@@ -330,6 +360,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: 10,
     fontSize: 16,
+    textAlign: 'center',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -397,7 +428,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
-
 });
 
 export default EditPhotoScreen;
