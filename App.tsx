@@ -47,7 +47,10 @@ export type RootStackParamList = {
       longitude: number;
     } | null;
     rating: number;
+    restaurant?: string;
+    meal?: string;
   };
+    
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -87,3 +90,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

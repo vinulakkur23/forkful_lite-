@@ -332,6 +332,15 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 };
 
+// Using the Google Places API
+const getNearbyRestaurants = async (latitude, longitude) => {
+  const response = await fetch(
+    `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&type=restaurant&key=YOUR_API_KEY`
+  );
+  const data = await response.json();
+  return data.results;
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

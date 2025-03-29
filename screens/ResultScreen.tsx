@@ -7,14 +7,13 @@ import { RootStackParamList } from '../App';
 
 type ResultScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Result'>;
 type ResultScreenRouteProp = RouteProp<RootStackParamList, 'Result'>;
-
 type Props = {
   navigation: ResultScreenNavigationProp;
   route: ResultScreenRouteProp;
 };
 
 const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, location, rating } = route.params;
+  const { photo, location, rating, restaurant, meal } = route.params;
   
   const handleShare = async (): Promise<void> => {
     try {
@@ -62,6 +61,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               ))}
             </View>
           </View>
+          {restaurant && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Restaurant:</Text>
+              <Text style={styles.infoValue}>{restaurant}</Text>
+            </View>
+          )}
+
+          {meal && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Meal:</Text>
+              <Text style={styles.infoValue}>{meal}</Text>
+            </View>
+          )}
+          
           
           <View style={styles.locationContainer}>
             <Text style={styles.locationLabel}>Location:</Text>
@@ -88,6 +101,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -190,6 +204,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 10,
   },
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    },
+  infoLabel: {
+    fontWeight: '600',
+    marginRight: 10,
+    },
+  infoValue: {
+    flex: 1,
+    },
+
 });
+
+
 
 export default ResultScreen;
