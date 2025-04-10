@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDFTJ98G2KmkW3RMylrZ1Yj1rPjtoOt5Ks</string>
+	<key>GCM_SENDER_ID</key>
+	<string>476812977799</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>manu.mealratingapp</string>
+	<key>PROJECT_ID</key>
+	<string>mealratingapp</string>
+	<key>STORAGE_BUCKET</key>
+	<string>mealratingapp.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:476812977799:ios:970a2e7c18b99c5406fa22</string>
+</dict>
+</plist>
