@@ -34,10 +34,15 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [menuItems, setMenuItems] = useState<string[]>([]);
   const [showRestaurantModal, setShowRestaurantModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   
   // API configuration - hardcoded for testing
   const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
+  
+  // Get suggestions when the screen loads
+  useEffect(() => {
+    getSuggestions();
+  }, []);
   
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
@@ -46,7 +51,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   // Function to get restaurant and meal suggestions
   const getSuggestions = async () => {
     if (!location) {
-      alert('Location data is required for suggestions');
+      setIsLoadingSuggestions(false);
       return;
     }
     
@@ -104,7 +109,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       
     } catch (error) {
       console.error('Error getting suggestions:', error);
-      alert('Could not get suggestions. Please enter manually.');
+      // Don't show an alert, just silently fail and let user enter data manually
     } finally {
       setIsLoadingSuggestions(false);
     }
@@ -169,21 +174,11 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
           )}
         </View>
         
-        {!restaurant && !mealName && (
-          <TouchableOpacity
-            style={styles.suggestAllButton}
-            onPress={getSuggestions}
-            disabled={isLoadingSuggestions}
-          >
-            {isLoadingSuggestions ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <>
-                <MaterialIcon name="restaurant" size={16} color="white" />
-                <Text style={styles.suggestAllButtonText}>Auto-detect Restaurant & Meal</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {isLoadingSuggestions && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#ff6b6b" />
+            <Text style={styles.loadingText}>Getting suggestions...</Text>
+          </View>
         )}
       </View>
       
@@ -311,7 +306,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 180,  // Reduced height to make room for restaurant info
+    height: 180,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#eee',
@@ -351,20 +346,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#777',
     borderRadius: 5,
   },
-  suggestAllButton: {
+  loadingContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#6200ee',
-    padding: 12,
-    borderRadius: 5,
-    marginTop: 5,
-    marginBottom: 5,
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  suggestAllButtonText: {
-    color: 'white',
+  loadingText: {
     marginLeft: 8,
-    fontWeight: '600',
+    fontSize: 14,
+    color: '#666',
   },
   // Modal styles
   modalContainer: {

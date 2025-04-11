@@ -1,9 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  Alert,
+  SafeAreaView
+} from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import Geolocation from '@react-native-community/geolocation';
 import { RootStackParamList } from '../App';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
@@ -18,53 +31,157 @@ interface MealEntry {
   rating: number;
   restaurant: string;
   meal: string;
+  userId: string;
+  userName?: string;
+  userPhoto?: string;
+  location: {
+    latitude: number;
+    longitude: number;
+  } | null;
   createdAt: any;
+  distance?: number; // Distance in meters from user's current location
 }
+
+const { width } = Dimensions.get('window');
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [user, setUser] = useState<any>(null);
-  const [recentMeals, setRecentMeals] = useState<MealEntry[]>([]);
+  const [nearbyMeals, setNearbyMeals] = useState<MealEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
+  // Get user's current location
   useEffect(() => {
-    // Check if user is logged in
-    const currentUser = auth().currentUser;
-    setUser(currentUser);
-
-    // Fetch recent meals if logged in
-    if (currentUser) {
-      fetchRecentMeals();
-    }
+    Geolocation.getCurrentPosition(
+      position => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setLocationError(null);
+      },
+      error => {
+        console.log('Location error:', error);
+        setLocationError(error.message);
+        Alert.alert('Location Error', 'Could not get your location. Showing all meals instead.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
   }, []);
 
-  const fetchRecentMeals = async () => {
-    try {
-      const userId = auth().currentUser?.uid;
-      if (!userId) return;
+  // Check if user is logged in
+  useEffect(() => {
+    const currentUser = auth().currentUser;
+    setUser(currentUser);
+  }, []);
 
+  // Fetch nearby meals whenever userLocation changes
+  useEffect(() => {
+    if (userLocation) {
+      fetchNearbyMeals();
+    }
+  }, [userLocation]);
+
+  // Calculate distance between two coordinates in kilometers
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c; // Distance in km
+    return distance;
+  };
+  
+  const deg2rad = (deg: number): number => {
+    return deg * (Math.PI/180);
+  };
+
+  const fetchNearbyMeals = async () => {
+    try {
+      setLoading(true);
+      
+      // Get all meals from Firestore - we'll filter locally for nearby ones
       const querySnapshot = await firestore()
         .collection('mealEntries')
-        .where('userId', '==', userId)
         .orderBy('createdAt', 'desc')
-        .limit(3)
+        .limit(100) // Limit to prevent excessive data usage
         .get();
 
       const meals: MealEntry[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+      
+      // Process meals and calculate distance
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data() as MealEntry;
+        
+        // Skip entries without location
+        if (!data.location) continue;
+        
+        // Calculate distance if user location is available
+        let distance = null;
+        if (userLocation) {
+          distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            data.location.latitude,
+            data.location.longitude
+          );
+        }
+        
+        // Get user data for each meal
+        let userName = '';
+        let userPhoto = '';
+        
+        if (data.userId) {
+          try {
+            const userDoc = await firestore().collection('users').doc(data.userId).get();
+            if (userDoc.exists) {
+              const userData = userDoc.data();
+              userName = userData?.displayName || '';
+              userPhoto = userData?.photoURL || '';
+            }
+          } catch (error) {
+            console.log('Error fetching user data:', error);
+          }
+        }
+        
         meals.push({
           id: doc.id,
-          photoUrl: data.photoUrl,
-          rating: data.rating,
-          restaurant: data.restaurant || '',
-          meal: data.meal || '',
+          ...data,
+          userName,
+          userPhoto,
+          distance: distance,
           createdAt: data.createdAt?.toDate?.() || new Date()
         });
-      });
-
-      setRecentMeals(meals);
+      }
+      
+      // Sort by distance if location is available, otherwise by date
+      let sortedMeals = userLocation
+        ? meals.sort((a, b) => (a.distance || 9999) - (b.distance || 9999))
+        : meals;
+      
+      setNearbyMeals(sortedMeals);
     } catch (error) {
-      console.error('Error fetching recent meals:', error);
+      console.error('Error fetching nearby meals:', error);
+      Alert.alert('Error', 'Failed to load nearby meals');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchNearbyMeals();
+  };
+
+  const viewMealDetails = (meal: MealEntry) => {
+    navigation.navigate('MealDetail', { mealId: meal.id });
   };
 
   const renderStars = (rating: number) => {
@@ -82,114 +199,112 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>
-            Welcome{user ? `, ${user.displayName?.split(' ')[0] || 'there'}` : ''}!
-          </Text>
-          <Text style={styles.subtitle}>Rate, enhance, and save your meals</Text>
+  const formatDistance = (distance: number | undefined): string => {
+    if (!distance) return "Unknown distance";
+    
+    if (distance < 1) {
+      // Convert to meters
+      return `${Math.round(distance * 1000)}m away`;
+    } else {
+      // In kilometers with one decimal
+      return `${distance.toFixed(1)}km away`;
+    }
+  };
+
+  // Render a meal item in the feed
+  const renderMealItem = ({ item }: { item: MealEntry }) => (
+    <TouchableOpacity
+      style={styles.mealCard}
+      onPress={() => viewMealDetails(item)}
+    >
+      <Image
+        source={{ uri: item.photoUrl }}
+        style={styles.mealImage}
+        resizeMode="cover"
+      />
+      
+      <View style={styles.mealCardContent}>
+        <View style={styles.mealCardHeader}>
+          {item.userPhoto ? (
+            <Image source={{ uri: item.userPhoto }} style={styles.userPhoto} />
+          ) : (
+            <View style={styles.userPhotoPlaceholder}>
+              <Icon name="person" size={16} color="#fff" />
+            </View>
+          )}
+          <Text style={styles.userName}>{item.userName || 'Food Lover'}</Text>
         </View>
-        {user && user.photoURL && (
-          <Image
-            source={{ uri: user.photoURL }}
-            style={styles.profileImage}
-          />
-        )}
-      </View>
-
-      {/* Main Action Button */}
-      <TouchableOpacity
-        style={styles.mainButton}
-        onPress={() => navigation.navigate('Camera')}
-      >
-        <Icon name="camera-alt" size={24} color="white" />
-        <Text style={styles.mainButtonText}>Capture a Meal</Text>
-      </TouchableOpacity>
-
-      {/* Recent Meals Section */}
-      {user && (
-        <View style={styles.recentMealsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Meals</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('FoodPassport')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
+        
+        <Text style={styles.mealName} numberOfLines={1}>
+          {item.meal || 'Delicious meal'}
+        </Text>
+        
+        {item.restaurant && (
+          <View style={styles.restaurantRow}>
+            <Icon name="restaurant" size={14} color="#666" />
+            <Text style={styles.restaurantName} numberOfLines={1}>
+              {item.restaurant}
+            </Text>
           </View>
+        )}
+        
+        <View style={styles.mealCardFooter}>
+          {renderStars(item.rating)}
           
-          {recentMeals.length === 0 ? (
-            <View style={styles.emptyMealsContainer}>
-              <Icon name="restaurant" size={48} color="#ccc" />
-              <Text style={styles.emptyMealsText}>No meals yet</Text>
-              <Text style={styles.emptyMealsSubtext}>
-                Take a photo of your meal to start building your food passport
+          {item.distance !== undefined && (
+            <View style={styles.distanceContainer}>
+              <Icon name="place" size={12} color="#666" />
+              <Text style={styles.distanceText}>
+                {formatDistance(item.distance)}
               </Text>
             </View>
-          ) : (
-            <ScrollView
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-              style={styles.recentMealsScrollView}
-            >
-              {recentMeals.map((meal) => (
-                <TouchableOpacity
-                  key={meal.id}
-                  style={styles.mealCard}
-                  onPress={() => navigation.navigate('MealDetail', { mealId: meal.id })}
-                >
-                  <Image
-                    source={{ uri: meal.photoUrl }}
-                    style={styles.mealImage}
-                  />
-                  <View style={styles.mealCardInfo}>
-                    <Text style={styles.mealName} numberOfLines={1}>
-                      {meal.meal || 'Unnamed Meal'}
-                    </Text>
-                    <Text style={styles.restaurantName} numberOfLines={1}>
-                      {meal.restaurant || 'Unknown Restaurant'}
-                    </Text>
-                    {renderStars(meal.rating)}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           )}
         </View>
-      )}
+      </View>
+    </TouchableOpacity>
+  );
 
-      {/* Info Cards */}
-      <View style={styles.infoCardsContainer}>
-        <View style={styles.infoCard}>
-          <Icon name="photo-camera" size={32} color="#ff6b6b" />
-          <Text style={styles.infoCardTitle}>Capture</Text>
-          <Text style={styles.infoCardText}>Take a photo of your meal with our camera</Text>
-        </View>
-        
-        <View style={styles.infoCard}>
-          <Icon name="auto-fix-high" size={32} color="#ff6b6b" />
-          <Text style={styles.infoCardTitle}>Enhance</Text>
-          <Text style={styles.infoCardText}>Make your food look amazing with AI enhancement</Text>
-        </View>
-        
-        <View style={styles.infoCard}>
-          <Icon name="menu-book" size={32} color="#ff6b6b" />
-          <Text style={styles.infoCardTitle}>Collect</Text>
-          <Text style={styles.infoCardText}>Build your personal food passport collection</Text>
-        </View>
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Fixed Header */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>Nearby Meals</Text>
       </View>
 
-      {/* Login Prompt for Guest Users */}
-      {!user && (
-        <TouchableOpacity
-          style={styles.loginPrompt}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Icon name="login" size={24} color="white" />
-          <Text style={styles.loginPromptText}>Sign in to save your meals</Text>
-        </TouchableOpacity>
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ff6b6b" />
+          <Text style={styles.loadingText}>Finding meals nearby...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={nearbyMeals}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMealItem}
+          contentContainerStyle={styles.feedContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#ff6b6b']}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Icon name="no-meals" size={64} color="#ccc" />
+              <Text style={styles.emptyText}>
+                {locationError
+                  ? "Couldn't access your location. Please check your settings."
+                  : "No meals found nearby"}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                Be the first to add a meal in this area!
+              </Text>
+            </View>
+          }
+        />
       )}
-    </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -198,164 +313,132 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f8f8',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
+  headerContainer: {
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    zIndex: 10,
   },
-  welcomeText: {
-    fontSize: 24,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 5,
+    color: 'white',
+    textAlign: 'center',
   },
-  subtitle: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 50,
+  },
+  loadingText: {
+    marginTop: 10,
     fontSize: 16,
     color: '#666',
   },
-  profileImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#eee',
-  },
-  mainButton: {
-    backgroundColor: '#ff6b6b',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 20,
-    paddingVertical: 15,
-    borderRadius: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  mainButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  recentMealsSection: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  viewAllText: {
-    color: '#ff6b6b',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  recentMealsScrollView: {
-    marginBottom: 20,
+  feedContainer: {
+    paddingBottom: 20,
   },
   mealCard: {
-    width: 180,
     backgroundColor: 'white',
     borderRadius: 12,
-    marginRight: 15,
+    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginTop: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
-    overflow: 'hidden',
   },
   mealImage: {
     width: '100%',
-    height: 120,
+    height: 300,
   },
-  mealCardInfo: {
-    padding: 12,
+  mealCardContent: {
+    padding: 16,
+  },
+  mealCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  userPhoto: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 8,
+  },
+  userPhotoPlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  userName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
   },
   mealName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 3,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  restaurantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   restaurantName: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 5,
+    marginLeft: 4,
+  },
+  mealCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
   },
   starsContainer: {
     flexDirection: 'row',
   },
-  emptyMealsContainer: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emptyMealsText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 10,
-    marginBottom: 5,
-  },
-  emptyMealsSubtext: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  infoCardsContainer: {
+  distanceContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    marginVertical: 20,
-  },
-  infoCard: {
-    width: '31%',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 15,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
   },
-  infoCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 10,
-    marginBottom: 5,
-  },
-  infoCardText: {
+  distanceText: {
     fontSize: 12,
     color: '#666',
-    textAlign: 'center',
+    marginLeft: 4,
   },
-  loginPrompt: {
-    backgroundColor: '#ff6b6b',
-    flexDirection: 'row',
+  emptyContainer: {
+    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 20,
-    marginVertical: 20,
-    paddingVertical: 15,
-    borderRadius: 12,
+    marginTop: 60,
   },
-  loginPromptText: {
-    color: 'white',
-    fontSize: 16,
+  emptyText: {
+    fontSize: 18,
     fontWeight: '600',
-    marginLeft: 10,
+    color: '#666',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 
