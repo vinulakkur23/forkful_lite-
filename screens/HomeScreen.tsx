@@ -266,9 +266,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Fixed Header */}
+      {/* Updated Header */}
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Nearby Meals</Text>
+        <Text style={styles.headerTitle}>DishItOut</Text>
       </View>
 
       {loading && !refreshing ? (
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   headerContainer: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ff8b8b', // Lighter color than before
     paddingVertical: 15,
     paddingHorizontal: 20,
     elevation: 4,
@@ -325,10 +325,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
-    textAlign: 'center',
+    textAlign: 'left', // Align to the left instead of center
+    paddingLeft: 5, // Add a bit of padding
   },
   loadingContainer: {
     flex: 1,

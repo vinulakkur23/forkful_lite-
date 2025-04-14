@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Image } from 'react-native';
 import auth from '@react-native-firebase/auth';
 
 // Screens
@@ -111,8 +112,19 @@ function TabNavigator() {
         options={{
           title: 'Nearby',
           headerShown: false, // Hide header as we have a custom header
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="place" color={color} size={size + 2} />
+          tabBarIcon: ({ color, focused }) => (
+            // Use custom icon if available, otherwise use Material icon
+            focused ?
+              <Image
+                source={require('./assets/icons/place-active.png')}
+                style={{ width: 24, height: 24 }}
+              /> :
+              <Image
+                source={require('./assets/icons/place-inactive.png')}
+                style={{ width: 24, height: 24 }}
+              />
+            // Fallback to Material icon if custom icons not available
+            // <Icon name="place" color={color} size={26} />
           ),
         }}
       />
@@ -122,8 +134,19 @@ function TabNavigator() {
         options={{
           title: 'Capture Meal',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="camera-alt" color={color} size={size + 2} />
+          tabBarIcon: ({ color, focused }) => (
+            // Use custom icon if available, otherwise use Material icon
+            focused ?
+              <Image
+                source={require('./assets/icons/camera-active.png')}
+                style={{ width: 24, height: 24 }}
+              /> :
+              <Image
+                source={require('./assets/icons/camera-inactive.png')}
+                style={{ width: 24, height: 24 }}
+              />
+            // Fallback to Material icon if custom icons not available
+            // <Icon name="camera-alt" color={color} size={26} />
           ),
         }}
       />
@@ -133,8 +156,19 @@ function TabNavigator() {
         options={{
           title: 'My Passport',
           headerTitle: 'My Food Passport',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="book" color={color} size={size + 2} />
+          tabBarIcon: ({ color, focused }) => (
+            // Use custom icon if available, otherwise use Material icon
+            focused ?
+              <Image
+                source={require('./assets/icons/passport-active.png')}
+                style={{ width: 24, height: 24 }}
+              /> :
+              <Image
+                source={require('./assets/icons/passport-inactive.png')}
+                style={{ width: 24, height: 24 }}
+              />
+            // Fallback to Material icon if custom icons not available
+            // <Icon name="book" color={color} size={26} />
           ),
         }}
       />
