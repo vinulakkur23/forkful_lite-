@@ -3,8 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { Image } from 'react-native';
-import auth from '@react-native-firebase/auth';
+import { Image, ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { getAuth } from '@react-native-firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -123,8 +124,6 @@ function TabNavigator() {
                 source={require('./assets/icons/place-inactive.png')}
                 style={{ width: 24, height: 24 }}
               />
-            // Fallback to Material icon if custom icons not available
-            // <Icon name="place" color={color} size={26} />
           ),
         }}
       />
@@ -145,8 +144,6 @@ function TabNavigator() {
                 source={require('./assets/icons/camera-inactive.png')}
                 style={{ width: 24, height: 24 }}
               />
-            // Fallback to Material icon if custom icons not available
-            // <Icon name="camera-alt" color={color} size={26} />
           ),
         }}
       />
@@ -167,8 +164,6 @@ function TabNavigator() {
                 source={require('./assets/icons/passport-inactive.png')}
                 style={{ width: 24, height: 24 }}
               />
-            // Fallback to Material icon if custom icons not available
-            // <Icon name="book" color={color} size={26} />
           ),
         }}
       />
@@ -180,20 +175,37 @@ const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
 
+  // Initialize GoogleSignin on app start
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '476812977799-7dmlpm8g3plslrsftesst7op6ipm71a4.apps.googleusercontent.com',
+      iosClientId: '476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4.apps.googleusercontent.com',
+      offlineAccess: true,
+      forceCodeForRefreshToken: true,
+    });
+  }, []);
+
   // Handle user state changes
   function onAuthStateChanged(user: any) {
+    console.log("[App.tsx] Auth state changed:", user ? "User logged in" : "No user");
     setUser(user);
     if (initializing) setInitializing(false);
   }
 
   useEffect(() => {
-    const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
+    const auth = getAuth();
+    const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
     return subscriber; // unsubscribe on unmount
   }, []);
 
   if (initializing) {
-    // You could show a splash screen here
-    return null;
+    // Show a loading screen
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ff6b6b" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
   }
 
   return (
@@ -245,5 +257,19 @@ const App: React.FC = () => {
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  }
+});
 
 export default App;

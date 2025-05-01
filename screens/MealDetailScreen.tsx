@@ -1,23 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  ScrollView,
-  Alert,
-  Share
-} from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/FontAwesome';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import auth from '@react-native-firebase/auth';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import { RootStackParamList } from '../App';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import { RootStackParamList } from '../App';
+import { getAuth } from '@react-native-firebase/auth';
+
+
 
 type MealDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MealDetail'>;
 type MealDetailScreenRouteProp = RouteProp<RootStackParamList, 'MealDetail'>;
@@ -27,186 +19,283 @@ type Props = {
   route: MealDetailScreenRouteProp;
 };
 
-interface MealEntry {
-  id: string;
-  userId: string;
-  photoUrl: string;
-  rating: number;
-  restaurant: string;
-  meal: string;
-  location: {
-    latitude: number;
-    longitude: number;
-  } | null;
-  createdAt: number;
-}
-
 const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+  // Extract the mealId from route params
   const { mealId } = route.params;
-  const [mealData, setMealData] = useState<MealEntry | null>(null);
+  
+  // State to hold the meal data once loaded
+  const [meal, setMeal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
+  const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  
+  // Log the route params for debugging
+  console.log("MealDetail Route params:", route.params);
+  console.log("Meal ID:", mealId);
+  
+  // Fetch the meal data when the component mounts
   useEffect(() => {
-    fetchMealData();
-  }, []);
-
-  const fetchMealData = async () => {
-    try {
-      setLoading(true);
-      const docRef = await firestore().collection('mealEntries').doc(mealId).get();
-
-      if (docRef.exists) {
-        const data = docRef.data() as MealEntry;
-        setMealData({
-          id: docRef.id,
-          ...data
-        });
-      } else {
-        Alert.alert('Error', 'This meal entry no longer exists');
-        navigation.goBack();
+    const fetchMealDetails = async () => {
+      try {
+        setLoading(true);
+        
+        if (!mealId) {
+          setError('No meal ID provided');
+          setLoading(false);
+          return;
+        }
+        
+        // Get the meal document from Firestore
+        console.log("Fetching meal document with ID:", mealId);
+        const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+        
+        if (!mealDoc.exists) {
+          console.log("Meal document not found");
+          setError('Meal not found');
+          setLoading(false);
+          return;
+        }
+        
+        const mealData = mealDoc.data();
+        console.log("Meal data retrieved:", mealData ? "Data exists" : "No data");
+        
+        setMeal(mealData);
+      } catch (err) {
+        console.error('Error fetching meal details:', err);
+        setError('Failed to load meal details');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching meal details:', error);
-      Alert.alert('Error', 'Failed to load meal details');
-    } finally {
-      setLoading(false);
-    }
+    };
+    
+    fetchMealDetails();
+  }, [mealId]);
+  
+  // Handle image load error
+  const handleImageError = () => {
+    console.log('Failed to load image in MealDetailScreen');
+    setImageError(true);
   };
+    
+    const handleDeleteMeal = () => {
+      // Show confirmation dialog first
+      Alert.alert(
+        "Delete Entry",
+        "Are you sure you want to delete this meal from your Food Passport?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: deleteMealEntry
+          }
+        ]
+      );
+    };
 
-  const handleShare = async () => {
-    if (!mealData) return;
-
+    // Handle delete meal
+    const deleteMealEntry = async () => {
     try {
-      const ratingText = '⭐'.repeat(mealData.rating);
-      const message = `Check out my ${mealData.rating}${ratingText} meal${mealData.restaurant ? ` at ${mealData.restaurant}` : ''}!`;
+    // Start loading state
+    setLoading(true);
 
+    // Check if user is owner of this meal entry
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user || !meal || user.uid !== meal.userId) {
+      Alert.alert("Error", "You don't have permission to delete this entry");
+      setLoading(false);
+      return;
+    }
+
+    // First, if there's a photo URL, delete the image from Firebase Storage
+    if (meal.photoUrl) {
+      try {
+        // Extract the file path from the URL
+        const storageRef = storage().refFromURL(meal.photoUrl);
+        await storageRef.delete();
+        console.log('Image deleted from storage');
+      } catch (storageError) {
+        console.error('Error deleting image:', storageError);
+        // Continue with deleting the record even if image deletion fails
+      }
+    }
+
+    // Delete the record from Firestore
+    await firestore().collection('mealEntries').doc(mealId).delete();
+    console.log('Meal entry deleted from Firestore');
+
+    // Navigate back to the Food Passport with a success message
+    Alert.alert(
+      "Deleted",
+      "The meal has been removed from your Food Passport",
+      [
+        {
+          text: "OK",
+          onPress: () => navigation.goBack()
+        }
+      ]
+    );
+    } catch (error) {
+    console.error('Error deleting meal:', error);
+    Alert.alert('Error', 'Failed to delete meal entry');
+    setLoading(false);
+    }
+    };
+  
+  // Share the meal
+  const handleShare = async () => {
+    try {
       await Share.share({
-        message,
-        url: mealData.photoUrl, // iOS only
+        message: `I rated ${meal.meal || 'my meal'} ${meal.rating} stars${meal.restaurant ? ` at ${meal.restaurant}` : ''}!`,
+        url: meal.photoUrl
       });
     } catch (error) {
       console.log('Sharing error:', error);
     }
   };
-
-  const confirmDelete = () => {
-    Alert.alert(
-      'Delete Meal Entry',
-      'Are you sure you want to delete this meal entry? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', onPress: deleteMealEntry, style: 'destructive' }
-      ],
-      { cancelable: true }
-    );
+  
+  // Navigate back
+  const goBack = () => {
+    navigation.goBack();
   };
-
-  const deleteMealEntry = async () => {
-    if (!mealData) return;
-
-    try {
-      setLoading(true);
-
-      // Delete image from storage if it's a Firebase storage URL
-      if (mealData.photoUrl && mealData.photoUrl.includes('firebasestorage')) {
-        const storageRef = storage().refFromURL(mealData.photoUrl);
-        await storageRef.delete();
-      }
-
-      // Delete document from Firestore
-      await firestore().collection('mealEntries').doc(mealId).delete();
-
-      Alert.alert('Success', 'Meal entry has been deleted');
-      navigation.goBack();
-    } catch (error) {
-      console.error('Error deleting meal entry:', error);
-      Alert.alert('Error', 'Failed to delete meal entry');
-      setLoading(false);
-    }
-  };
-
-  const formatDate = (timestamp: number) => {
-    if (!timestamp) return 'Unknown date';
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
+  
+  // Show loading state
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff6b6b" />
+        <Text style={styles.loadingText}>Loading meal details...</Text>
       </View>
     );
   }
-
-  if (!mealData) {
+  
+  // Show error state
+  if (error || !meal) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <Text>Meal entry not found</Text>
+      <View style={styles.errorContainer}>
+        <Icon name="error" size={64} color="#ff6b6b" />
+        <Text style={styles.errorTitle}>Something went wrong</Text>
+        <Text style={styles.errorMessage}>{error || 'Failed to load meal'}</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
-
+  
+  // Format date
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Unknown date';
+    
+    try {
+      // Firestore timestamp to JS Date
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (err) {
+      console.error("Date formatting error:", err);
+      return 'Unknown date';
+    }
+  };
+  
   return (
     <ScrollView style={styles.container}>
+      {/* Meal image */}
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: mealData.photoUrl }}
-          style={styles.mealImage}
-          resizeMode="cover"
-        />
-      </View>
-
-      <View style={styles.detailsContainer}>
-        <View style={styles.headerRow}>
-          <View style={styles.mealHeader}>
-            <Text style={styles.mealName}>{mealData.meal || 'Unnamed Meal'}</Text>
-            <Text style={styles.dateText}>{formatDate(mealData.createdAt)}</Text>
+        {meal.photoUrl && !imageError ? (
+          <Image
+            source={{ uri: meal.photoUrl }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={handleImageError}
+          />
+        ) : (
+          <View style={styles.noImageContainer}>
+            <Icon name="no-photography" size={64} color="#ccc" />
+            <Text style={styles.noImageText}>No image available</Text>
           </View>
-          <View style={styles.ratingContainer}>
+        )}
+      </View>
+      
+      {/* Meal details */}
+      <View style={styles.detailsContainer}>
+        <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+        
+        {meal.restaurant && (
+          <View style={styles.infoRow}>
+            <Icon name="restaurant" size={18} color="#666" />
+            <Text style={styles.restaurantName}>{meal.restaurant}</Text>
+          </View>
+        )}
+        
+        <View style={styles.ratingContainer}>
+          <Text style={styles.ratingLabel}>Rating:</Text>
+          <View style={styles.starsContainer}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <Icon
+              <FontAwesome
                 key={star}
-                name={star <= mealData.rating ? 'star' : 'star-o'}
+                name={star <= meal.rating ? 'star' : 'star-o'}
                 size={18}
-                color={star <= mealData.rating ? '#FFD700' : '#BDC3C7'}
+                color={star <= meal.rating ? '#FFD700' : '#BDC3C7'}
                 style={styles.star}
               />
             ))}
           </View>
         </View>
-
-        {mealData.restaurant && (
-          <View style={styles.infoRow}>
-            <MaterialIcon name="restaurant" size={20} color="#666" style={styles.infoIcon} />
-            <Text style={styles.infoText}>{mealData.restaurant}</Text>
-          </View>
-        )}
-
-        {mealData.location && (
-          <View style={styles.infoRow}>
-            <MaterialIcon name="location-on" size={20} color="#666" style={styles.infoIcon} />
-            <Text style={styles.infoText}>
-              {`${mealData.location.latitude.toFixed(4)}, ${mealData.location.longitude.toFixed(4)}`}
+        
+        {meal.location && (
+          <View style={styles.locationContainer}>
+            <Icon name="place" size={18} color="#666" />
+            <Text style={styles.locationText}>
+              {`${meal.location.latitude.toFixed(4)}, ${meal.location.longitude.toFixed(4)}`}
             </Text>
           </View>
         )}
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <MaterialIcon name="share" size={20} color="white" />
-            <Text style={styles.actionButtonText}>Share</Text>
+        
+        <Text style={styles.dateText}>
+          {formatDate(meal.createdAt)}
+        </Text>
+      </View>
+      
+      {/* Action buttons */}
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={handleShare}
+        >
+          <Icon name="share" size={18} color="white" />
+          <Text style={styles.buttonText}>Share</Text>
+        </TouchableOpacity>
+        
+        {/* Only show delete button if the user is the owner */}
+        {meal.userId === getAuth().currentUser?.uid && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteMeal}
+          >
+            <Icon name="delete" size={18} color="white" />
+            <Text style={styles.buttonText}>Delete</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={confirmDelete}>
-            <MaterialIcon name="delete" size={20} color="white" />
-            <Text style={styles.actionButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
+        )}
+        
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={goBack}
+        >
+          <Icon name="arrow-back" size={18} color="white" />
+          <Text style={styles.buttonText}>Back</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -218,88 +307,160 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f8f8f8',
   },
-  centerContent: {
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f8f8',
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ff6b6b',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  errorMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+    marginBottom: 30,
+  },
+  backButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#ff6b6b',
+    borderRadius: 5,
+  },
+  backButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   imageContainer: {
     width: '100%',
     height: 300,
     backgroundColor: '#eee',
   },
-  mealImage: {
+  image: {
     width: '100%',
     height: '100%',
   },
+  noImageContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  noImageText: {
+    marginTop: 10,
+    color: '#999',
+    fontSize: 16,
+  },
   detailsContainer: {
     padding: 20,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 15,
-  },
-  mealHeader: {
-    flex: 1,
+    backgroundColor: 'white',
+    margin: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   mealName: {
     fontSize: 24,
     fontWeight: 'bold',
-  },
-  dateText: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 5,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f2f2f2',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  star: {
-    marginHorizontal: 2,
+    marginBottom: 15,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
   },
-  infoIcon: {
+  restaurantName: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  ratingLabel: {
+    fontSize: 16,
     marginRight: 10,
   },
-  infoText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  actionButtons: {
+  starsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
   },
-  actionButton: {
+  star: {
+    marginRight: 5,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 10,
+    textAlign: 'right',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 20,
+  },
+  shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#3498db',
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
-    flex: 1,
-    marginHorizontal: 5,
+    borderRadius: 5,
+  },
+  buttonText: {
+    color: 'white',
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 5,
   },
   deleteButton: {
-    backgroundColor: '#F44336',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e74c3c',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 5,
   },
 });
 

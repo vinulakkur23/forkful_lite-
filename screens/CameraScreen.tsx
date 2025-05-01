@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, StatusBar, Platform } from 'react-native';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -17,6 +17,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasPermission, setHasPermission] = useState(false);
+  const [isTakingPicture, setIsTakingPicture] = useState(false);
   
   // Get all devices and manually find the back camera
   const devices = useCameraDevices();
@@ -80,25 +81,54 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const takePicture = async () => {
     if (camera.current) {
       try {
+        // Prevent multiple taps
+        if (isTakingPicture) {
+          return;
+        }
+        
+        setIsTakingPicture(true);
         console.log("Taking photo...");
+        
         const photo = await camera.current.takePhoto({
           qualityPrioritization: 'quality',
           flash: 'off',
         });
         
+        // Verify we got a valid photo
+        if (!photo || !photo.path) {
+          console.error("No photo path returned from camera");
+          Alert.alert('Error', 'Failed to capture photo');
+          setIsTakingPicture(false);
+          return;
+        }
+        
         console.log("Photo taken:", photo.path);
         
+        // Normalize the file path based on platform
+        let normalizedPath = photo.path;
+        if (Platform.OS === 'ios' && !normalizedPath.startsWith('file://')) {
+          normalizedPath = `file://${normalizedPath}`;
+        } else if (Platform.OS === 'android' && !normalizedPath.startsWith('file://')) {
+          normalizedPath = `file://${normalizedPath}`;
+        }
+        
+        console.log("Normalized photo path:", normalizedPath);
+        
+        // Navigate with the normalized path
         navigation.navigate('EditPhoto', {
           photo: {
-            uri: `file://${photo.path}`,
+            uri: normalizedPath,
             width: photo.width,
             height: photo.height,
           },
           location: location,
         });
+        
       } catch (error) {
         console.error('Error taking photo:', error);
         Alert.alert('Error', 'Failed to take photo');
+      } finally {
+        setIsTakingPicture(false);
       }
     } else {
       console.log("Camera ref is null");
@@ -162,10 +192,14 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           style={styles.fallbackButton}
           onPress={() => {
-            // Navigate with a mock image
+            // Navigate with a mock image - but provide an explicit and valid URI
+            const mockImageUri = Platform.OS === 'ios'
+              ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000'
+              : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000';
+            
             navigation.navigate('EditPhoto', {
               photo: {
-                uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000',
+                uri: mockImageUri,
                 width: 800,
                 height: 600
               },
@@ -199,7 +233,11 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       </View>
       
       <View style={styles.buttonContainer}>
-        <TouchableOpacity onPress={takePicture} style={styles.captureButton}>
+        <TouchableOpacity
+          onPress={takePicture}
+          style={styles.captureButton}
+          disabled={isTakingPicture}
+        >
           <View style={styles.captureButtonInner} />
         </TouchableOpacity>
       </View>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Alert, ActivityIndicator, Platform } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 
@@ -21,80 +21,155 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
+    // Validate the photo object
+    if (!photo || !photo.uri) {
+      console.error("Invalid photo object in ResultScreen:", photo);
+      Alert.alert(
+        "Error",
+        "Invalid photo data received. Please try again.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Log photo information for debugging
+    console.log("Photo received in ResultScreen:", {
+      uri: photo.uri,
+      hasWidth: !!photo.width,
+      hasHeight: !!photo.height
+    });
+    
     // If user is logged in, save data automatically
-    const user = auth().currentUser;
+    const auth = getAuth();
+    const user = auth.currentUser;
     if (user) {
       saveToFirebase();
     }
+    
+    // Test Firebase connection
+    checkFirebaseConnection();
   }, []);
+  
+  // Debug function to check Firebase connection
+  const checkFirebaseConnection = async () => {
+    try {
+      // Test Firebase access
+      const auth = getAuth();
+      const user = auth.currentUser;
+      console.log("Current user:", user ? user.uid : "No user");
+      
+      // Test Storage access if user is logged in
+      if (user) {
+        try {
+          const testRef = storage().ref(`test_${Date.now()}.txt`);
+          const testString = "Testing Firebase Storage connection";
+          
+          await testRef.putString(testString);
+          console.log("Storage write test succeeded");
+          
+          // Try to read it back
+          const url = await testRef.getDownloadURL();
+          console.log("Storage read test succeeded, URL:", url);
+          
+          // Clean up
+          await testRef.delete();
+          console.log("Test file deleted");
+        } catch (storageError) {
+          console.error("Storage test failed:", storageError);
+        }
+      }
+    } catch (error) {
+      console.error("Firebase connection check failed:", error);
+    }
+  };
 
   const uploadImageToFirebase = async (): Promise<string> => {
-    const user = auth().currentUser;
+    const auth = getAuth();
+    const user = auth.currentUser;
     if (!user) throw new Error('User not logged in');
 
     try {
-      // Extract the image uri
-      const imageUri = photo.uri;
+      // Check if photo is defined and has a uri property
+      if (!photo || !photo.uri) {
+        console.error("Photo object is invalid:", photo);
+        throw new Error('Invalid photo object');
+      }
+
+      // Extract and normalize the image uri
+      let imageUri = photo.uri;
       console.log("Original image URI:", imageUri);
+      
+      // Normalize URI based on platform
+      if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
+        imageUri = imageUri.replace('file://', '');
+      } else if (Platform.OS === 'android' && !imageUri.startsWith('file://')) {
+        imageUri = `file://${imageUri}`;
+      }
+      
+      console.log("Normalized image URI:", imageUri);
 
       // Create a storage reference
       const timestamp = new Date().getTime();
       const filename = `meal_${user.uid}_${timestamp}.jpg`;
       const storageRef = storage().ref(`meals/${user.uid}/${filename}`);
       
-      // Approach 1: Use the built-in uploadFile method with a more careful URI handling
-      // For iOS, make sure to handle the file:// prefix correctly
-      let uploadUri = imageUri;
-      console.log("Attempting to upload from:", uploadUri);
+      let downloadUrl = '';
       
-      // Try a direct upload first
       try {
-        // First, try uploading directly
-        const task = storageRef.putFile(uploadUri);
+        console.log("Starting direct upload");
+        const task = storageRef.putFile(imageUri);
         
-        // Monitor the upload progress (optional)
-        task.on('state_changed', taskSnapshot => {
-          console.log(`${taskSnapshot.bytesTransferred} transferred out of ${taskSnapshot.totalBytes}`);
-        });
+        // Add progress monitoring
+        task.on('state_changed',
+          taskSnapshot => {
+            const progress = (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) * 100;
+            console.log(`Upload progress: ${progress.toFixed(2)}%`);
+          },
+          error => {
+            console.error("Upload error:", error.code, error.message);
+            throw error;
+          }
+        );
         
-        // Wait for the upload to complete
         await task;
         console.log("Direct upload completed successfully");
-      } catch (error) {
-        console.error("Direct upload failed:", error);
         
-        // If direct upload fails, try an alternative approach
-        // Fetch the image data as a blob
-        console.log("Trying alternative upload method...");
+        // Get the download URL
+        downloadUrl = await storageRef.getDownloadURL();
+      } catch (uploadError) {
+        console.error("Direct upload failed:", uploadError);
+        
+        // Try alternative approach with blob
+        console.log("Trying blob upload method");
         const response = await fetch(imageUri);
         const blob = await response.blob();
         
-        // Upload the blob
         await storageRef.put(blob);
-        console.log("Alternative upload completed successfully");
+        console.log("Blob upload completed successfully");
+        
+        // Get the download URL
+        downloadUrl = await storageRef.getDownloadURL();
       }
       
-      // Get the download URL
-      const url = await storageRef.getDownloadURL();
-      console.log("Download URL obtained:", url);
-      return url;
+      console.log("Download URL obtained:", downloadUrl);
+      return downloadUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      
-      // Show more specific error message
-      if (error.code === 'storage/object-not-found') {
-        console.error('The specified file does not exist at the given path');
-      }
-      
       throw error;
     }
   };
 
   const saveToFirebase = async (): Promise<void> => {
-    const user = auth().currentUser;
+    const auth = getAuth();
+    const user = auth.currentUser;
     if (!user) {
       Alert.alert(
         'Not Logged In',
@@ -127,26 +202,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         createdAt: firestore.FieldValue.serverTimestamp()
       };
 
-      console.log("Attempting to save to Firestore with data:", JSON.stringify(mealData));
+      console.log("Attempting to save to Firestore with data:", JSON.stringify({
+        ...mealData,
+        createdAt: 'Timestamp object'
+      }));
+      
       const docRef = await firestore().collection('mealEntries').add(mealData);
       
       setSaved(true);
       console.log('Meal saved with ID:', docRef.id);
     } catch (error) {
       console.error('Error saving meal to Firebase:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      
-      // Check if error is related to Firestore
-      if (error.code && error.code.includes('firestore')) {
-        console.error('Firestore-specific error:', error.code);
-      }
-      
-      // Check if error is related to Storage
-      if (error.code && error.code.includes('storage')) {
-        console.error('Storage-specific error:', error.code);
-      }
-      
-      Alert.alert('Error', `Failed to save your meal: ${error.message || 'Unknown error'}`);
+      Alert.alert('Error', `Failed to save your meal: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -175,11 +242,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // Navigate to the MyPassport tab in our new navigation structure
     navigation.reset({
       index: 0,
-      routes: [{ name: 'MainTabs' }],
+      routes: [{ name: 'MainTabs', params: { screen: 'FoodPassport' } }],
     });
-    
-    // Note: We'd ideally want to navigate to the specific tab, but this would require
-    // additional setup with a custom navigator ref. For now, we'll just reset to the main tabs.
+  };
+
+  // Handle image load error
+  const handleImageError = () => {
+    console.log('Image failed to load in ResultScreen');
+    setImageError(true);
   };
 
   return (
@@ -188,11 +258,19 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
       <View style={styles.resultCard}>
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: photo.uri }}
-            style={styles.image}
-            resizeMode="cover"
-          />
+          {!imageError && photo && photo.uri ? (
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.image}
+              resizeMode="cover"
+              onError={handleImageError}
+            />
+          ) : (
+            <View style={styles.errorImageContainer}>
+              <MaterialIcon name="broken-image" size={64} color="#ccc" />
+              <Text style={styles.errorImageText}>Image not available</Text>
+            </View>
+          )}
           {saving && (
             <View style={styles.savingOverlay}>
               <ActivityIndicator size="large" color="#fff" />
@@ -206,7 +284,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.ratingLabel}>Your Rating:</Text>
             <View style={styles.starsContainer}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <Icon
+                <FontAwesome
                   key={star}
                   name={star <= rating ? 'star' : 'star-o'}
                   size={20}
@@ -221,6 +299,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Restaurant:</Text>
               <Text style={styles.infoValue}>{restaurant}</Text>
+              <MaterialIcon name="restaurant" size={16} color="#666" style={{marginLeft: 5}} />
             </View>
           )}
 
@@ -244,11 +323,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
       <View style={styles.buttonsContainer}>
         <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-          <Icon name="share-alt" size={20} color="white" />
+          <FontAwesome name="share-alt" size={20} color="white" />
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
 
-        {auth().currentUser ? (
+        {getAuth().currentUser ? (
           <TouchableOpacity style={styles.passportButton} onPress={viewPassport}>
             <MaterialIcon name="menu-book" size={20} color="white" />
             <Text style={styles.buttonText}>Food Passport</Text>
@@ -271,7 +350,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         <TouchableOpacity style={styles.homeButton} onPress={goHome}>
-          <Icon name="home" size={20} color="white" />
+          <FontAwesome name="home" size={20} color="white" />
           <Text style={styles.buttonText}>New Rating</Text>
         </TouchableOpacity>
       </View>
@@ -316,6 +395,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  errorImageContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  errorImageText: {
+    marginTop: 10,
+    color: '#999',
+    fontSize: 16,
+  },
   savingOverlay: {
     position: 'absolute',
     top: 0,
@@ -353,6 +444,7 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     marginBottom: 10,
+    alignItems: 'center',
   },
   infoLabel: {
     fontWeight: '600',

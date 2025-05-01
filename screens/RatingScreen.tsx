@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, FlatList, Modal, ActivityIndicator, SafeAreaView } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, FlatList, Modal, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -35,12 +35,29 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [showRestaurantModal, setShowRestaurantModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
+  const [imageError, setImageError] = useState(false);
   
   // API configuration - hardcoded for testing
   const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
   
-  // Get suggestions when the screen loads
+  // Add validation on component mount
   useEffect(() => {
+    if (!photo || !photo.uri) {
+      console.error("Invalid photo object in RatingScreen:", photo);
+      Alert.alert(
+        "Error",
+        "Invalid photo data received. Please try again.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Get suggestions when the screen loads if photo is valid
     getSuggestions();
   }, []);
   
@@ -50,7 +67,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   
   // Function to get restaurant and meal suggestions
   const getSuggestions = async () => {
-    if (!location) {
+    if (!location || !photo || !photo.uri) {
       setIsLoadingSuggestions(false);
       return;
     }
@@ -127,16 +144,30 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   };
   
+  // Handle image load error
+  const handleImageError = () => {
+    console.log('Image failed to load in RatingScreen');
+    setImageError(true);
+  };
+  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.contentContainer}>
         {/* Increased image size */}
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: photo.uri }}
-            style={styles.image}
-            resizeMode="contain"
-          />
+          {!imageError && photo && photo.uri ? (
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.image}
+              resizeMode="contain"
+              onError={handleImageError}
+            />
+          ) : (
+            <View style={styles.errorImageContainer}>
+              <Icon name="broken-image" size={64} color="#ccc" />
+              <Text style={styles.errorImageText}>Failed to load image</Text>
+            </View>
+          )}
         </View>
         
         {/* Restaurant and Meal Information */}
@@ -150,11 +181,14 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
               placeholder="Enter restaurant name"
             />
             <TouchableOpacity
-              style={styles.suggestButton}
+              style={[
+                styles.suggestButton,
+                suggestedRestaurants.length === 0 ? styles.suggestButtonDisabled : {}
+              ]}
               onPress={() => setShowRestaurantModal(true)}
               disabled={suggestedRestaurants.length === 0}
             >
-              <MaterialIcon name="list" size={16} color="white" />
+              <MaterialIcon name="restaurant" size={16} color="white" />
             </TouchableOpacity>
           </View>
           
@@ -193,7 +227,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
                 key={star}
                 onPress={() => handleRating(star)}
               >
-                <Icon
+                <FontAwesome
                   name={star <= rating ? 'star' : 'star-o'}
                   size={40}
                   color={star <= rating ? '#FFD700' : '#BDC3C7'}
@@ -326,6 +360,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  errorImageContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  errorImageText: {
+    marginTop: 10,
+    color: '#999',
+    fontSize: 16,
+  },
   // Restaurant and meal info styles
   infoSection: {
     width: '100%',
@@ -355,6 +401,9 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#777',
     borderRadius: 5,
+  },
+  suggestButtonDisabled: {
+    backgroundColor: '#ccc',
   },
   loadingContainer: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -25,7 +25,7 @@ interface EditOption {
 const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   const { photo, location } = route.params;
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [imageSource, setImageSource] = useState<{uri: string}>(photo);
+  const [imageSource, setImageSource] = useState<{uri: string}>({uri: ''});
   // Edit options with checkboxes
   const [editOptions, setEditOptions] = useState<EditOption[]>([
     { id: 'angle', label: 'Change Angle', selected: false },
@@ -34,9 +34,29 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     { id: 'plate', label: 'Change Plate', selected: false },
     { id: 'background', label: 'Remove Background Clutter', selected: false },
   ]);
+  const [imageError, setImageError] = useState<boolean>(false);
   
-  // Test basic API connectivity on component mount
+  // Add validation on component mount
   useEffect(() => {
+    if (!photo || !photo.uri) {
+      console.error("Invalid photo object in EditPhotoScreen:", photo);
+      Alert.alert(
+        "Error",
+        "Invalid photo data received. Please try taking a photo again.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+      return;
+    }
+
+    // Set image source if photo is valid
+    setImageSource({ uri: photo.uri });
+    
+    // Test basic API connectivity on component mount
     const testApi = async () => {
       try {
         const response = await fetch('https://dishitout-imageinhancer.onrender.com/');
@@ -47,13 +67,6 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     };
     testApi();
   }, []);
-  
-  // Handle cases where the photo URI might be a remote URL (for simulator testing)
-  useEffect(() => {
-    if (photo && photo.uri) {
-      setImageSource({ uri: photo.uri });
-    }
-  }, [photo]);
   
   const toggleEditOption = (id: string): void => {
     setEditOptions(prevOptions =>
@@ -105,13 +118,18 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsProcessing(true);
       
       try {
-        // Resize the image first - add this line
+        // Verify photo.uri exists
+        if (!photo || !photo.uri) {
+          throw new Error('Invalid photo object');
+        }
+        
+        // Resize the image first
         const resizedImageUri = await resizeAndUploadImage(photo.uri);
         
         // Create form data
         const formData = new FormData();
         
-        // Create a file object from the resized image - update this section
+        // Create a file object from the resized image
         const fileExtension = resizedImageUri.split('.').pop() || 'jpg';
         const fileName = `photo.${fileExtension}`;
         const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
@@ -136,7 +154,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         }
         
         console.log('Sending request to API');
-        console.log('Full API URL:', `${HARDCODED_URL}/edit-photo`);  // Use hardcoded URL for testing
+        console.log('Full API URL:', `${HARDCODED_URL}/edit-photo`);
         
         // Send to your API using hardcoded URL
         const response = await fetch(`${HARDCODED_URL}/edit-photo`, {
@@ -159,6 +177,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         if (result.processed_image) {
           // Update the image with the processed version
           setImageSource({ uri: result.processed_image });
+          setImageError(false); // Reset any image error state
           
           // Log any message from the model (optional)
           if (result.model_response) {
@@ -183,13 +202,18 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     setIsProcessing(true);
     
     try {
-      // Resize the image first - add this line
+      // Verify photo.uri exists
+      if (!photo || !photo.uri) {
+        throw new Error('Invalid photo object');
+      }
+      
+      // Resize the image first
       const resizedImageUri = await resizeAndUploadImage(photo.uri);
       
       // Create form data
       const formData = new FormData();
       
-      // Create a file object from the resized image - update this section
+      // Create a file object from the resized image
       const fileExtension = resizedImageUri.split('.').pop() || 'jpg';
       const fileName = `photo.${fileExtension}`;
       const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
@@ -231,6 +255,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       if (result.processed_image) {
         // Update the image with the processed version
         setImageSource({ uri: result.processed_image });
+        setImageError(false); // Reset any image error state
         
         // Log any message from the model (optional)
         if (result.model_response) {
@@ -254,15 +279,29 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   };
   
+  // Handle image load error
+  const handleImageError = () => {
+    console.log('Image failed to load in EditPhotoScreen');
+    setImageError(true);
+  };
+  
   return (
     <View style={styles.container}>
       {/* Top half - Image preview */}
       <View style={styles.imageContainer}>
-        <Image
-          source={imageSource}
-          style={styles.image}
-          resizeMode="cover"
-        />
+        {!imageError ? (
+          <Image
+            source={imageSource}
+            style={styles.image}
+            resizeMode="cover"
+            onError={handleImageError}
+          />
+        ) : (
+          <View style={styles.errorImageContainer}>
+            <Icon name="broken-image" size={64} color="#ccc" />
+            <Text style={styles.errorImageText}>Failed to load image</Text>
+          </View>
+        )}
         {isProcessing && (
           <View style={styles.processingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -332,15 +371,6 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 };
 
-// Using the Google Places API
-const getNearbyRestaurants = async (latitude, longitude) => {
-  const response = await fetch(
-    `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&type=restaurant&key=YOUR_API_KEY`
-  );
-  const data = await response.json();
-  return data.results;
-};
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -354,6 +384,18 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  errorImageContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  errorImageText: {
+    marginTop: 10,
+    color: '#999',
+    fontSize: 16,
   },
   processingOverlay: {
     position: 'absolute',

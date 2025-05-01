@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
@@ -51,6 +52,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
 
   // Get user's current location
   useEffect(() => {
@@ -177,20 +179,27 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleRefresh = () => {
     setRefreshing(true);
+    setImageErrors({}); // Reset image errors on refresh
     fetchNearbyMeals();
   };
 
   const viewMealDetails = (meal: MealEntry) => {
+    console.log("Navigating to meal detail with ID:", meal.id);
     navigation.navigate('MealDetail', { mealId: meal.id });
+  };
+
+  const handleImageError = (mealId: string) => {
+    console.log(`Image load error for meal: ${mealId}`);
+    setImageErrors(prev => ({...prev, [mealId]: true}));
   };
 
   const renderStars = (rating: number) => {
     return (
       <View style={styles.starsContainer}>
         {[1, 2, 3, 4, 5].map((star) => (
-          <Icon
+          <FontAwesome
             key={star}
-            name={star <= rating ? 'star' : 'star-outline'}
+            name={star <= rating ? 'star' : 'star-o'}
             size={14}
             color={star <= rating ? '#FFD700' : '#BDC3C7'}
           />
@@ -217,16 +226,28 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       style={styles.mealCard}
       onPress={() => viewMealDetails(item)}
     >
-      <Image
-        source={{ uri: item.photoUrl }}
-        style={styles.mealImage}
-        resizeMode="cover"
-      />
+      {/* Add safe image handling */}
+      {item.photoUrl && !imageErrors[item.id] ? (
+        <Image
+          source={{ uri: item.photoUrl }}
+          style={styles.mealImage}
+          resizeMode="cover"
+          onError={() => handleImageError(item.id)}
+        />
+      ) : (
+        <View style={[styles.mealImage, styles.placeholderContainer]}>
+          <Icon name="image-not-supported" size={32} color="#ddd" />
+        </View>
+      )}
       
       <View style={styles.mealCardContent}>
         <View style={styles.mealCardHeader}>
-          {item.userPhoto ? (
-            <Image source={{ uri: item.userPhoto }} style={styles.userPhoto} />
+          {item.userPhoto && !imageErrors[`user-${item.userId}`] ? (
+            <Image
+              source={{ uri: item.userPhoto }}
+              style={styles.userPhoto}
+              onError={() => setImageErrors(prev => ({...prev, [`user-${item.userId}`]: true}))}
+            />
           ) : (
             <View style={styles.userPhotoPlaceholder}>
               <Icon name="person" size={16} color="#fff" />
@@ -360,6 +381,11 @@ const styles = StyleSheet.create({
   mealImage: {
     width: '100%',
     height: 300,
+  },
+  placeholderContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
   mealCardContent: {
     padding: 16,
