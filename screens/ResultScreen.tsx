@@ -2,15 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Alert, ActivityIndicator, Platform } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../App';
+import { RootStackParamList, TabParamList } from '../App';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 
-type ResultScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Result'>;
-type ResultScreenRouteProp = RouteProp<RootStackParamList, 'Result'>;
+// Update the navigation prop type to use composite navigation
+type ResultScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'Result'>,
+  StackNavigationProp<RootStackParamList>
+>;
+
+type ResultScreenRouteProp = RouteProp<TabParamList, 'Result'>;
+
 type Props = {
   navigation: ResultScreenNavigationProp;
   route: ResultScreenRouteProp;
@@ -231,19 +239,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const goHome = (): void => {
-    // Navigate to the Nearby tab in our new navigation structure
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],
-    });
+    // Navigate to the Home tab
+    navigation.navigate('Home');
   };
 
   const viewPassport = (): void => {
-    // Navigate to the MyPassport tab in our new navigation structure
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs', params: { screen: 'FoodPassport' } }],
-    });
+    // Navigate to the FoodPassport tab
+    navigation.navigate('FoodPassport');
   };
 
   // Handle image load error

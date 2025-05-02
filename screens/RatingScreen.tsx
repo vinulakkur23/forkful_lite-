@@ -2,12 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, FlatList, Modal, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../App';
+import { RootStackParamList, TabParamList } from '../App';
 
-type RatingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Rating'>;
-type RatingScreenRouteProp = RouteProp<RootStackParamList, 'Rating'>;
+// Update the navigation prop type to use composite navigation
+type RatingScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'Rating'>,
+  StackNavigationProp<RootStackParamList>
+>;
+
+type RatingScreenRouteProp = RouteProp<TabParamList, 'Rating'>;
 
 type Props = {
   navigation: RatingScreenNavigationProp;
@@ -133,8 +140,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   const saveRating = (): void => {
-    // Here you would typically save the rating and data to your backend
-    // For now, we'll just navigate to the result screen
+    // Updated navigation to use tab navigation
     navigation.navigate('Result', {
       photo: photo,
       location: location,
@@ -164,7 +170,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
             />
           ) : (
             <View style={styles.errorImageContainer}>
-              <Icon name="broken-image" size={64} color="#ccc" />
+              <MaterialIcon name="broken-image" size={64} color="#ccc" />
               <Text style={styles.errorImageText}>Failed to load image</Text>
             </View>
           )}

@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { RootStackParamList } from '../App';
+import { RootStackParamList, TabParamList } from '../App';
 import API_CONFIG from '../config/api';
 import ImageResizer from 'react-native-image-resizer';
 
-type EditPhotoScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditPhoto'>;
-type EditPhotoScreenRouteProp = RouteProp<RootStackParamList, 'EditPhoto'>;
+// Update the navigation prop type to use composite navigation
+type EditPhotoScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'EditPhoto'>,
+  StackNavigationProp<RootStackParamList>
+>;
+
+type EditPhotoScreenRouteProp = RouteProp<TabParamList, 'EditPhoto'>;
 
 type Props = {
   navigation: EditPhotoScreenNavigationProp;
@@ -35,6 +42,41 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     { id: 'background', label: 'Remove Background Clutter', selected: false },
   ]);
   const [imageError, setImageError] = useState<boolean>(false);
+  
+  // Reset state when the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('EditPhoto screen focused - setting up with new photo data');
+      
+      // Always reset the edit options when the screen is focused
+      setEditOptions([
+        { id: 'angle', label: 'Change Angle', selected: false },
+        { id: 'sharpen', label: 'Sharpen Image', selected: false },
+        { id: 'lighting', label: 'Improve Lighting', selected: false },
+        { id: 'plate', label: 'Change Plate', selected: false },
+        { id: 'background', label: 'Remove Background Clutter', selected: false },
+      ]);
+      
+      // Reset processing state
+      setIsProcessing(false);
+      
+      // Reset image error state
+      setImageError(false);
+      
+      // Set image source from route params
+      if (photo && photo.uri) {
+        setImageSource({ uri: photo.uri });
+        console.log("Set new image source from route params:", photo.uri);
+      } else {
+        console.error("No valid photo in route params:", photo);
+      }
+      
+      return () => {
+        // Cleanup when screen loses focus (if needed)
+        console.log('EditPhoto screen blurred');
+      };
+    }, [photo]) // Depend on photo prop to re-run when it changes
+  );
   
   // Add validation on component mount
   useEffect(() => {
@@ -273,6 +315,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   const continueToRating = (): void => {
+    // Updated to use tab navigator directly
     navigation.navigate('Rating', {
       photo: imageSource,  // Use the possibly processed image
       location: location,

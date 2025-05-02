@@ -1,18 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share } from 'react-native';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
-import { RootStackParamList } from '../App';
+import { RootStackParamList, TabParamList } from '../App';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import { getAuth } from '@react-native-firebase/auth';
 
+// Update the navigation prop type to use composite navigation
+type MealDetailScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'MealDetail'>,
+  StackNavigationProp<RootStackParamList>
+>;
 
-
-type MealDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MealDetail'>;
-type MealDetailScreenRouteProp = RouteProp<RootStackParamList, 'MealDetail'>;
+type MealDetailScreenRouteProp = RouteProp<TabParamList, 'MealDetail'>;
 
 type Props = {
   navigation: MealDetailScreenNavigationProp;
@@ -77,75 +82,75 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setImageError(true);
   };
     
-    const handleDeleteMeal = () => {
-      // Show confirmation dialog first
-      Alert.alert(
-        "Delete Entry",
-        "Are you sure you want to delete this meal from your Food Passport?",
-        [
-          {
-            text: "Cancel",
-            style: "cancel"
-          },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: deleteMealEntry
-          }
-        ]
-      );
-    };
-
-    // Handle delete meal
-    const deleteMealEntry = async () => {
-    try {
-    // Start loading state
-    setLoading(true);
-
-    // Check if user is owner of this meal entry
-    const auth = getAuth();
-    const user = auth.currentUser;
-
-    if (!user || !meal || user.uid !== meal.userId) {
-      Alert.alert("Error", "You don't have permission to delete this entry");
-      setLoading(false);
-      return;
-    }
-
-    // First, if there's a photo URL, delete the image from Firebase Storage
-    if (meal.photoUrl) {
-      try {
-        // Extract the file path from the URL
-        const storageRef = storage().refFromURL(meal.photoUrl);
-        await storageRef.delete();
-        console.log('Image deleted from storage');
-      } catch (storageError) {
-        console.error('Error deleting image:', storageError);
-        // Continue with deleting the record even if image deletion fails
-      }
-    }
-
-    // Delete the record from Firestore
-    await firestore().collection('mealEntries').doc(mealId).delete();
-    console.log('Meal entry deleted from Firestore');
-
-    // Navigate back to the Food Passport with a success message
+  const handleDeleteMeal = () => {
+    // Show confirmation dialog first
     Alert.alert(
-      "Deleted",
-      "The meal has been removed from your Food Passport",
+      "Delete Entry",
+      "Are you sure you want to delete this meal from your Food Passport?",
       [
         {
-          text: "OK",
-          onPress: () => navigation.goBack()
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: deleteMealEntry
         }
       ]
     );
+  };
+
+  // Handle delete meal
+  const deleteMealEntry = async () => {
+    try {
+      // Start loading state
+      setLoading(true);
+
+      // Check if user is owner of this meal entry
+      const auth = getAuth();
+      const user = auth.currentUser;
+
+      if (!user || !meal || user.uid !== meal.userId) {
+        Alert.alert("Error", "You don't have permission to delete this entry");
+        setLoading(false);
+        return;
+      }
+
+      // First, if there's a photo URL, delete the image from Firebase Storage
+      if (meal.photoUrl) {
+        try {
+          // Extract the file path from the URL
+          const storageRef = storage().refFromURL(meal.photoUrl);
+          await storageRef.delete();
+          console.log('Image deleted from storage');
+        } catch (storageError) {
+          console.error('Error deleting image:', storageError);
+          // Continue with deleting the record even if image deletion fails
+        }
+      }
+
+      // Delete the record from Firestore
+      await firestore().collection('mealEntries').doc(mealId).delete();
+      console.log('Meal entry deleted from Firestore');
+
+      // Navigate back to the Food Passport with a success message
+      Alert.alert(
+        "Deleted",
+        "The meal has been removed from your Food Passport",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.navigate('FoodPassport')
+          }
+        ]
+      );
     } catch (error) {
-    console.error('Error deleting meal:', error);
-    Alert.alert('Error', 'Failed to delete meal entry');
-    setLoading(false);
+      console.error('Error deleting meal:', error);
+      Alert.alert('Error', 'Failed to delete meal entry');
+      setLoading(false);
     }
-    };
+  };
   
   // Share the meal
   const handleShare = async () => {

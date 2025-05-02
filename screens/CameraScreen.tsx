@@ -1,12 +1,27 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, StatusBar, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  StatusBar,
+  Platform,
+  Dimensions
+} from 'react-native';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
+import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../App';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { RootStackParamList, TabParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-type CameraScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Camera'>;
+// Update the navigation prop type to use composite navigation
+type CameraScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'Camera'>,
+  StackNavigationProp<RootStackParamList>
+>;
 
 type Props = {
   navigation: CameraScreenNavigationProp;
@@ -18,6 +33,13 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPermission, setHasPermission] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
+  
+  // Get device dimensions
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
+  
+  // Size for square guide (80% of screen width)
+  const guideSize = screenWidth * 0.8;
   
   // Get all devices and manually find the back camera
   const devices = useCameraDevices();
@@ -31,6 +53,29 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   console.log('Camera devices object:', JSON.stringify(devices));
   console.log('Detected back cameras:', backCameras.length);
   console.log('Selected camera device:', device ? device.id : 'none');
+
+  // Reset component state when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Camera screen focused - resetting state');
+      // Reset any necessary state when screen is focused
+      setIsLoading(true);
+      setIsTakingPicture(false);
+      
+      // Get location again
+      getLocation();
+      
+      // Reset loading after a short delay to ensure devices are properly initialized
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+      
+      return () => {
+        // Cleanup when screen is unfocused (optional)
+        console.log('Camera screen blurred');
+      };
+    }, [])
+  );
 
   useEffect(() => {
     // Set status bar to translucent for better camera experience
@@ -53,6 +98,17 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     })();
 
     // Get location
+    getLocation();
+    
+    // Cleanup function to restore status bar
+    return () => {
+      StatusBar.setTranslucent(false);
+      StatusBar.setBackgroundColor('#ffffff');
+    };
+  }, []);
+
+  // Separate function to get location for reuse
+  const getLocation = () => {
     Geolocation.getCurrentPosition(
       position => {
         setLocation({
@@ -70,13 +126,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
-    
-    // Cleanup function to restore status bar
-    return () => {
-      StatusBar.setTranslucent(false);
-      StatusBar.setBackgroundColor('#ffffff');
-    };
-  }, []);
+  };
 
   const takePicture = async () => {
     if (camera.current) {
@@ -92,6 +142,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         const photo = await camera.current.takePhoto({
           qualityPrioritization: 'quality',
           flash: 'off',
+          enableAutoStabilization: true,
+          skipMetadata: false
         });
         
         // Verify we got a valid photo
@@ -114,7 +166,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         
         console.log("Normalized photo path:", normalizedPath);
         
-        // Navigate with the normalized path
+        // Navigate with the normalized path - updated to use tab navigator path
         navigation.navigate('EditPhoto', {
           photo: {
             uri: normalizedPath,
@@ -215,6 +267,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* Full screen camera */}
       <Camera
         ref={camera}
         style={styles.camera}
@@ -224,13 +277,30 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         enableZoomGesture
       />
       
-      <TouchableOpacity style={styles.closeButton} onPress={goBack}>
-        <Icon name="close" size={24} color="white" />
-      </TouchableOpacity>
+      {/* Square framing guide centered on screen */}
+      <View style={styles.guideCenterer}>
+        <View style={[styles.framingGuide, { width: guideSize, height: guideSize }]}>
+          {/* Top line */}
+          <View style={styles.dottedLine} />
+          
+          {/* Bottom line */}
+          <View style={[styles.dottedLine, styles.bottomLine]} />
+          
+          {/* Corner guides */}
+          <View style={[styles.cornerGuide, styles.topLeftCorner]} />
+          <View style={[styles.cornerGuide, styles.topRightCorner]} />
+          <View style={[styles.cornerGuide, styles.bottomLeftCorner]} />
+          <View style={[styles.cornerGuide, styles.bottomRightCorner]} />
+        </View>
+      </View>
       
       <View style={styles.overlay}>
         <Text style={styles.overlayText}>Position your meal in the frame</Text>
       </View>
+      
+      <TouchableOpacity style={styles.closeButton} onPress={goBack}>
+        <Icon name="close" size={24} color="white" />
+      </TouchableOpacity>
       
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -251,7 +321,68 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
   },
   camera: {
-    flex: 1,
+    flex: 1, // Make camera fill the entire screen
+  },
+  guideCenterer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  framingGuide: {
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderWidth: 1,
+    borderRadius: 8,
+    justifyContent: 'space-between', // For dashed lines at top and bottom
+    position: 'relative',
+  },
+  dottedLine: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    marginTop: 0,
+  },
+  bottomLine: {
+    marginTop: 'auto',
+    marginBottom: 0,
+  },
+  cornerGuide: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderColor: 'white',
+    borderWidth: 2,
+  },
+  topLeftCorner: {
+    top: 0,
+    left: 0,
+    borderBottomWidth: 0,
+    borderRightWidth: 0,
+    borderTopLeftRadius: 4,
+  },
+  topRightCorner: {
+    top: 0,
+    right: 0,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderTopRightRadius: 4,
+  },
+  bottomLeftCorner: {
+    bottom: 0,
+    left: 0,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderBottomLeftRadius: 4,
+  },
+  bottomRightCorner: {
+    bottom: 0,
+    right: 0,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderBottomRightRadius: 4,
   },
   overlay: {
     position: 'absolute',
