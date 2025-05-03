@@ -11,7 +11,6 @@ import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 
-// Update the navigation prop type to use composite navigation
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
   StackNavigationProp<RootStackParamList>
@@ -30,20 +29,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  
+  // Generate a unique instance key for this specific navigation
+  const instanceKey = `${photo?.uri || ''}`;
 
   useEffect(() => {
+    console.log("ResultScreen mounted with key:", instanceKey);
+    
     // Validate the photo object
     if (!photo || !photo.uri) {
       console.error("Invalid photo object in ResultScreen:", photo);
       Alert.alert(
         "Error",
         "Invalid photo data received. Please try again.",
-        [
-          {
-            text: "OK",
-            onPress: () => navigation.goBack()
-          }
-        ]
+        [{ text: "OK", onPress: () => navigation.goBack() }]
       );
       return;
     }
@@ -55,49 +54,26 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       hasHeight: !!photo.height
     });
     
+    // Reset states when a new instance is detected
+    setSaving(false);
+    setSaved(false);
+    setPhotoUrl(null);
+    
     // If user is logged in, save data automatically
     const auth = getAuth();
     const user = auth.currentUser;
     if (user) {
-      saveToFirebase();
+      // Small delay to ensure component renders first
+      setTimeout(() => {
+        console.log("Triggering save to Firebase");
+        saveToFirebase();
+      }, 100);
     }
     
-    // Test Firebase connection
-    checkFirebaseConnection();
-  }, []);
-  
-  // Debug function to check Firebase connection
-  const checkFirebaseConnection = async () => {
-    try {
-      // Test Firebase access
-      const auth = getAuth();
-      const user = auth.currentUser;
-      console.log("Current user:", user ? user.uid : "No user");
-      
-      // Test Storage access if user is logged in
-      if (user) {
-        try {
-          const testRef = storage().ref(`test_${Date.now()}.txt`);
-          const testString = "Testing Firebase Storage connection";
-          
-          await testRef.putString(testString);
-          console.log("Storage write test succeeded");
-          
-          // Try to read it back
-          const url = await testRef.getDownloadURL();
-          console.log("Storage read test succeeded, URL:", url);
-          
-          // Clean up
-          await testRef.delete();
-          console.log("Test file deleted");
-        } catch (storageError) {
-          console.error("Storage test failed:", storageError);
-        }
-      }
-    } catch (error) {
-      console.error("Firebase connection check failed:", error);
-    }
-  };
+    return () => {
+      console.log("ResultScreen with key unmounting:", instanceKey);
+    };
+  }, [instanceKey]); // Using instanceKey ensures this runs for each unique navigation
 
   const uploadImageToFirebase = async (): Promise<string> => {
     const auth = getAuth();
@@ -115,24 +91,39 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       let imageUri = photo.uri;
       console.log("Original image URI:", imageUri);
       
-      // Normalize URI based on platform
-      if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
-        imageUri = imageUri.replace('file://', '');
-      } else if (Platform.OS === 'android' && !imageUri.startsWith('file://')) {
-        imageUri = `file://${imageUri}`;
-      }
-      
-      console.log("Normalized image URI:", imageUri);
-
-      // Create a storage reference
+      // Create a storage reference with a unique filename
       const timestamp = new Date().getTime();
       const filename = `meal_${user.uid}_${timestamp}.jpg`;
       const storageRef = storage().ref(`meals/${user.uid}/${filename}`);
       
       let downloadUrl = '';
       
+      // First try the blob approach as it works more consistently
       try {
-        console.log("Starting direct upload");
+        console.log("Trying blob upload method");
+        
+        // For blob uploads, we need the full URI
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        await storageRef.put(blob);
+        console.log("Blob upload completed successfully");
+        
+        // Get the download URL
+        downloadUrl = await storageRef.getDownloadURL();
+      } catch (blobError) {
+        console.error("Blob upload failed:", blobError);
+        
+        // Fall back to direct upload if blob fails
+        // Try to normalize URI based on platform
+        if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
+          imageUri = imageUri.replace('file://', '');
+        } else if (Platform.OS === 'android' && !imageUri.startsWith('file://')) {
+          imageUri = `file://${imageUri}`;
+        }
+        
+        console.log("Normalized image URI for direct upload:", imageUri);
+        
         const task = storageRef.putFile(imageUri);
         
         // Add progress monitoring
@@ -149,19 +140,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         
         await task;
         console.log("Direct upload completed successfully");
-        
-        // Get the download URL
-        downloadUrl = await storageRef.getDownloadURL();
-      } catch (uploadError) {
-        console.error("Direct upload failed:", uploadError);
-        
-        // Try alternative approach with blob
-        console.log("Trying blob upload method");
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        
-        await storageRef.put(blob);
-        console.log("Blob upload completed successfully");
         
         // Get the download URL
         downloadUrl = await storageRef.getDownloadURL();
@@ -190,8 +168,19 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
+    // If already in the process of saving, don't attempt again
+    if (saving) {
+      console.log("Save already in progress, skipping");
+      return;
+    }
+
     try {
       setSaving(true);
+      console.log("Setting saving state to true");
+
+      // Generate a unique session ID for this upload
+      const sessionId = Math.random().toString(36).substring(2, 15);
+      console.log(`Starting new upload session: ${sessionId}`);
 
       // Upload image to Firebase Storage
       console.log("Starting image upload to Firebase Storage...");
@@ -207,7 +196,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         restaurant: restaurant || '',
         meal: meal || '',
         location,
-        createdAt: firestore.FieldValue.serverTimestamp()
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        sessionId
       };
 
       console.log("Attempting to save to Firestore with data:", JSON.stringify({
@@ -218,12 +208,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       const docRef = await firestore().collection('mealEntries').add(mealData);
       
       setSaved(true);
-      console.log('Meal saved with ID:', docRef.id);
+      console.log(`Meal saved with ID: ${docRef.id} (session: ${sessionId})`);
     } catch (error) {
       console.error('Error saving meal to Firebase:', error);
       Alert.alert('Error', `Failed to save your meal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setSaved(false);
     } finally {
       setSaving(false);
+      console.log("Setting saving state to false");
     }
   };
 
@@ -238,14 +230,21 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Updated navigation methods with clean reset
   const goHome = (): void => {
-    // Navigate to the Home tab
-    navigation.navigate('Home');
+    // Navigate to the Home tab with a reset to ensure clean state
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+    });
   };
 
   const viewPassport = (): void => {
-    // Navigate to the FoodPassport tab
-    navigation.navigate('FoodPassport');
+    // Navigate to the FoodPassport tab with a reset to ensure clean state
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs', params: { screen: 'FoodPassport' } }],
+    });
   };
 
   // Handle image load error

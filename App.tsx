@@ -18,6 +18,9 @@ import LoginScreen from './screens/LoginScreen';
 import MealDetailScreen from './screens/MealDetailScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
+import * as ImagePicker from 'react-native-image-picker';
+import Geolocation from '@react-native-community/geolocation';
+import { Alert } from 'react-native';
 
 // Define the types for our navigation parameters
 export type RootStackParamList = {
@@ -125,18 +128,125 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  // We'll only show these three tabs
+  // Updated Image Picker function
+    const openImagePicker = async () => {
+      // Force reset camera/photo state by navigating to home first to clear any cached state
+      const currentRoute = state.routes[state.index].name;
+      if (currentRoute !== 'Home') {
+        navigation.navigate('Home');
+        // Small delay to allow state to reset
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      const options = {
+        mediaType: 'photo',
+        includeBase64: false,
+        maxHeight: 2000,
+        maxWidth: 2000,
+        quality: 0.8,
+        // Force new selection
+        selectionLimit: 1,
+      };
+
+      try {
+        // Use the Promise API with fresh options
+        const result = await ImagePicker.launchImageLibrary({...options});
+        
+        if (result.didCancel) {
+          console.log('User cancelled image picker');
+          return;
+        }
+        
+        if (result.errorCode) {
+          console.log('Image picker error:', result.errorCode, result.errorMessage);
+          Alert.alert('Error', 'There was an error selecting the image.');
+          return;
+        }
+        
+        if (!result.assets || result.assets.length === 0) {
+          console.log('No assets returned from picker');
+          return;
+        }
+        
+        const selectedImage = result.assets[0];
+        
+        if (!selectedImage.uri) {
+          Alert.alert('Error', 'Could not get image data. Please try another image.');
+          return;
+        }
+        
+        // Get current location
+        Geolocation.getCurrentPosition(
+          position => {
+            const location = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
+            
+            // Add a timestamp to ensure uniqueness
+            const timestamp = new Date().getTime();
+            const uniqueUri = selectedImage.uri.includes('?')
+              ? `${selectedImage.uri}&t=${timestamp}`
+              : `${selectedImage.uri}?t=${timestamp}`;
+            
+            // Navigate to EditPhoto screen with the selected image
+            navigation.navigate('EditPhoto', {
+              photo: {
+                uri: uniqueUri, // Add timestamp to force reload
+                width: selectedImage.width || 1000,
+                height: selectedImage.height || 1000,
+              },
+              location: location,
+            });
+          },
+          error => {
+            console.log('Location error:', error);
+            // Even without location, still allow uploading
+            
+            // Add a timestamp to ensure uniqueness
+            const timestamp = new Date().getTime();
+            const uniqueUri = selectedImage.uri.includes('?')
+              ? `${selectedImage.uri}&t=${timestamp}`
+              : `${selectedImage.uri}?t=${timestamp}`;
+            
+            navigation.navigate('EditPhoto', {
+              photo: {
+                uri: uniqueUri, // Add timestamp to force reload
+                width: selectedImage.width || 1000,
+                height: selectedImage.height || 1000,
+              },
+              location: null,
+            });
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      } catch (error) {
+        console.error('Unexpected error in image picker:', error);
+        Alert.alert('Error', 'An unexpected error occurred while selecting an image.');
+      }
+    };
+
+  // We'll show these four tabs
   const mainTabs = [
     { name: 'Home', label: 'Nearby', icon: (focused: boolean) => (
       focused ?
         <Image source={require('./assets/icons/place-active.png')} style={{ width: 24, height: 24 }} /> :
         <Image source={require('./assets/icons/place-inactive.png')} style={{ width: 24, height: 24 }} />
     )},
-    { name: 'Camera', label: 'Capture Meal', icon: (focused: boolean) => (
+    { name: 'Camera', label: 'Take Photo', icon: (focused: boolean) => (
       focused ?
         <Image source={require('./assets/icons/camera-active.png')} style={{ width: 24, height: 24 }} /> :
         <Image source={require('./assets/icons/camera-inactive.png')} style={{ width: 24, height: 24 }} />
     )},
+    {
+      name: 'Upload',
+      label: 'Upload Photo',
+      icon: (focused: boolean) => (
+        <Icon name="photo-library" size={24} color={focused ? '#ff6b6b' : '#999'} />
+      ),
+      // This isn't a real screen, it triggers the image picker
+      customAction: true
+    },
     { name: 'FoodPassport', label: 'My Passport', icon: (focused: boolean) => (
       focused ?
         <Image source={require('./assets/icons/passport-active.png')} style={{ width: 24, height: 24 }} /> :
@@ -147,6 +257,23 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   return (
     <View style={styles.tabBarContainer}>
       {mainTabs.map((tab, index) => {
+        // For the Upload tab, we use a custom action instead of navigation
+        if (tab.customAction) {
+          return (
+            <TouchableOpacity
+              key={index}
+              onPress={openImagePicker}
+              style={styles.tabButton}
+              activeOpacity={0.7}
+            >
+              {tab.icon(false)} {/* Always use unfocused state for this button */}
+              <Text style={[styles.tabLabel, { color: '#999' }]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        }
+        
         // Find the corresponding route from the state
         const route = state.routes.find(r => r.name === tab.name);
         

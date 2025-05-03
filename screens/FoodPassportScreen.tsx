@@ -17,6 +17,8 @@ import { RootStackParamList } from '../App';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import * as ImagePicker from 'react-native-image-picker';
+import Geolocation from '@react-native-community/geolocation';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -143,6 +145,103 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
         console.log(`Image load error for meal: ${mealId}`);
         setImageErrors(prev => ({...prev, [mealId]: true}));
     };
+
+    // Updated Image Picker function
+
+    const openImagePicker = async () => {
+      // Create a unique session ID for this upload
+      const sessionId = Math.random().toString(36).substring(2, 15);
+      console.log(`Starting photo upload session: ${sessionId}`);
+      
+      const options = {
+        mediaType: 'photo',
+        includeBase64: false,
+        maxHeight: 2000,
+        maxWidth: 2000,
+        quality: 0.8,
+      };
+
+      try {
+        // Use the Promise API
+        const result = await ImagePicker.launchImageLibrary(options);
+        
+        if (result.didCancel) {
+          console.log('User cancelled image picker');
+          return;
+        }
+        
+        if (result.errorCode) {
+          console.log('Image picker error:', result.errorCode, result.errorMessage);
+          Alert.alert('Error', 'There was an error selecting the image.');
+          return;
+        }
+        
+        if (!result.assets || result.assets.length === 0) {
+          console.log('No assets returned from picker');
+          return;
+        }
+        
+        const selectedImage = result.assets[0];
+        
+        if (!selectedImage.uri) {
+          Alert.alert('Error', 'Could not get image data. Please try another image.');
+          return;
+        }
+        
+        // Add a session parameter to the URI to ensure uniqueness
+        const uniqueUri = selectedImage.uri.includes('?')
+          ? `${selectedImage.uri}&session=${sessionId}`
+          : `${selectedImage.uri}?session=${sessionId}`;
+          
+        console.log(`Selected image with URI: ${uniqueUri}`);
+        
+        // Get current location
+        Geolocation.getCurrentPosition(
+          position => {
+            const location = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
+            
+            // Create a complete photo object with the session ID
+            const photoObject = {
+              uri: uniqueUri,
+              width: selectedImage.width || 1000,
+              height: selectedImage.height || 1000,
+              sessionId: sessionId // Add session ID for tracking
+            };
+            
+            // Navigate to EditPhoto screen with the unique photo
+            console.log(`Navigating to EditPhoto with session ${sessionId}`);
+            navigation.navigate('EditPhoto', {
+              photo: photoObject,
+              location: location,
+              _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+            });
+          },
+          error => {
+            console.log('Location error:', error);
+            // Even without location, still allow uploading
+            const photoObject = {
+              uri: uniqueUri,
+              width: selectedImage.width || 1000,
+              height: selectedImage.height || 1000,
+              sessionId: sessionId // Add session ID for tracking
+            };
+            
+            navigation.navigate('EditPhoto', {
+              photo: photoObject,
+              location: null,
+              _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+            });
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      } catch (error) {
+        console.error('Unexpected error in image picker:', error);
+        Alert.alert('Error', 'An unexpected error occurred while selecting an image.');
+      }
+    };
     
     const signOut = async () => {
         try {
@@ -260,12 +359,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                     <View style={styles.emptyContainer}>
                         <Icon name="no-food" size={64} color="#ccc" />
                         <Text style={styles.emptyText}>No meal entries yet</Text>
-                        <TouchableOpacity
-                            style={styles.addMealButton}
-                            onPress={() => navigation.navigate('Camera')}
-                        >
-                            <Text style={styles.addMealButtonText}>Add Your First Meal</Text>
-                        </TouchableOpacity>
+                        <View style={styles.addMealButtonsContainer}>
+                            <TouchableOpacity
+                                style={styles.addMealButton}
+                                onPress={() => navigation.navigate('Camera')}
+                            >
+                                <Icon name="camera-alt" size={20} color="white" />
+                                <Text style={styles.addMealButtonText}>Take Photo</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[styles.addMealButton, styles.uploadButton]}
+                                onPress={openImagePicker}
+                            >
+                                <Icon name="photo-library" size={20} color="white" />
+                                <Text style={styles.addMealButtonText}>Upload Photo</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ) : (
                     <FlatList
@@ -304,6 +414,27 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                 onRefresh={handleRefresh}
                                 colors={['#ff6b6b']}
                             />
+                        }
+                        ListFooterComponent={
+                            <View style={styles.addButtonContainer}>
+                                <View style={styles.addMealButtonsContainer}>
+                                    <TouchableOpacity
+                                        style={styles.addMealButton}
+                                        onPress={() => navigation.navigate('Camera')}
+                                    >
+                                        <Icon name="camera-alt" size={20} color="white" />
+                                        <Text style={styles.addMealButtonText}>Take Photo</Text>
+                                    </TouchableOpacity>
+                                    
+                                    <TouchableOpacity
+                                        style={[styles.addMealButton, styles.uploadButton]}
+                                        onPress={openImagePicker}
+                                    >
+                                        <Icon name="photo-library" size={20} color="white" />
+                                        <Text style={styles.addMealButtonText}>Upload Photo</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
                         }
                     />
                 )}
@@ -462,16 +593,31 @@ const styles = StyleSheet.create({
     color: '#666',
     marginVertical: 10,
   },
+  addMealButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
   addMealButton: {
     backgroundColor: '#ff6b6b',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 25,
-    marginTop: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 6,
+  },
+  uploadButton: {
+    backgroundColor: '#4285F4',
   },
   addMealButtonText: {
     color: 'white',
     fontWeight: '600',
+    marginLeft: 8,
+  },
+  addButtonContainer: {
+    marginTop: 20,
+    paddingBottom: 20,
   },
 });
 

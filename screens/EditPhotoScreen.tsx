@@ -315,12 +315,32 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   const continueToRating = (): void => {
-    // Updated to use tab navigator directly
-    navigation.navigate('Rating', {
-      photo: imageSource,  // Use the possibly processed image
-      location: location,
-    });
-  };
+      // Generate a unique session ID for this rating flow
+      const sessionId = Math.random().toString(36).substring(2, 15);
+      console.log(`Starting new rating session: ${sessionId}`);
+
+      // Add a "fresh" query parameter to force the framework to treat this as a new navigation
+      const updatedImageUri = imageSource.uri.includes('?')
+        ? `${imageSource.uri}&session=${sessionId}`
+        : `${imageSource.uri}?session=${sessionId}`;
+      
+      // Create a fresh image source object to avoid any reference issues
+      const freshImageSource = {
+        uri: updatedImageUri,
+        width: photo.width,
+        height: photo.height,
+        sessionId: sessionId // Add a session ID to help with debugging
+      };
+      
+      console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
+      
+      // Use navigate with a unique key to force a new instance
+      navigation.navigate('Rating', {
+        photo: freshImageSource,
+        location: location,
+        _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+      });
+    };
   
   // Handle image load error
   const handleImageError = () => {

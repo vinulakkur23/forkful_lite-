@@ -140,15 +140,37 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   const saveRating = (): void => {
-    // Updated navigation to use tab navigation
-    navigation.navigate('Result', {
-      photo: photo,
-      location: location,
-      rating: rating,
-      restaurant: restaurant,
-      meal: mealName
-    });
-  };
+      // Generate a unique session ID for this result flow
+      const sessionId = route.params._uniqueKey || Math.random().toString(36).substring(2, 15);
+      console.log(`Continuing session ${sessionId} to ResultScreen`);
+      
+      // Add the session ID to the image URI to ensure uniqueness
+      const imageUri = photo.uri.includes('session=')
+        ? photo.uri // Already has a session parameter
+        : (photo.uri.includes('?')
+            ? `${photo.uri}&session=${sessionId}`
+            : `${photo.uri}?session=${sessionId}`);
+      
+      // Create a fresh photo object to avoid any reference issues
+      const freshPhoto = {
+        uri: imageUri,
+        width: photo.width,
+        height: photo.height,
+        sessionId: sessionId // Add session ID for tracking
+      };
+      
+      console.log(`Navigating to Result with fresh image: ${freshPhoto.uri}`);
+      
+      // Navigate to Result screen with the fresh photo and session ID
+      navigation.navigate('Result', {
+        photo: freshPhoto,
+        location: location,
+        rating: rating,
+        restaurant: restaurant,
+        meal: mealName,
+        _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+      });
+    };
   
   // Handle image load error
   const handleImageError = () => {

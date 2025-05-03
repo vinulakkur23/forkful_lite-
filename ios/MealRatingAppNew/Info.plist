@@ -66,5 +66,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>DishItOut needs access to your photo library to upload meal photos to your food passport.</string>
 </dict>
 </plist>
