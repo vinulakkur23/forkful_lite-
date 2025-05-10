@@ -1,5 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+  Dimensions,
+  PanResponder,
+  Animated,
+  Modal
+} from 'react-native';
 import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -8,6 +21,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList, TabParamList } from '../App';
 import API_CONFIG from '../config/api';
 import ImageResizer from 'react-native-image-resizer';
+import ImageCropPicker from 'react-native-image-crop-picker';
+import RNFS from 'react-native-fs';
+import { getMealSuggestions } from '../services/mealService';
 
 // Update the navigation prop type to use composite navigation
 type EditPhotoScreenNavigationProp = CompositeNavigationProp<
@@ -42,6 +58,18 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     { id: 'background', label: 'Remove Background Clutter', selected: false },
   ]);
   const [imageError, setImageError] = useState<boolean>(false);
+
+  // New state for the cropping functionality
+  const [showCropModal, setShowCropModal] = useState<boolean>(false);
+  const [croppedImage, setCroppedImage] = useState<string | null>(null);
+
+  // State for restaurant suggestions - prefetch while editing
+  const [fetchingSuggestions, setFetchingSuggestions] = useState<boolean>(false);
+  const [suggestionData, setSuggestionData] = useState<any>(null);
+  
+  // Get screen dimensions for cropping
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
   
   // Reset state when the screen comes into focus
   useFocusEffect(
@@ -62,6 +90,9 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       
       // Reset image error state
       setImageError(false);
+      
+      // Reset cropped image state
+      setCroppedImage(null);
       
       // Set image source from route params
       if (photo && photo.uri) {
@@ -98,16 +129,31 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     // Set image source if photo is valid
     setImageSource({ uri: photo.uri });
     
-    // Test basic API connectivity on component mount
-    const testApi = async () => {
+    // Prefetch restaurant suggestions
+    const fetchRestaurantSuggestions = async () => {
+      if (!photo || !photo.uri || fetchingSuggestions) return;
+
       try {
-        const response = await fetch('https://dishitout-imageinhancer.onrender.com/');
-        console.log('API reached with status:', response.status);
+        console.log('Prefetching restaurant suggestions while user edits photo');
+        setFetchingSuggestions(true);
+
+        const suggestions = await getMealSuggestions(photo.uri, location);
+
+        // Store the suggestion data for later use
+        setSuggestionData(suggestions);
+        console.log('Successfully prefetched restaurant suggestions:',
+          suggestions.restaurants?.length || 0, 'restaurants,',
+          suggestions.menu_items?.length || 0, 'menu items');
       } catch (error) {
-        console.log('API test failed:', error);
+        console.log('Error prefetching restaurant suggestions:', error);
+        // Don't show errors to the user - this is a background operation
+      } finally {
+        setFetchingSuggestions(false);
       }
     };
-    testApi();
+
+    // Start fetching suggestions in the background
+    fetchRestaurantSuggestions();
   }, []);
   
   const toggleEditOption = (id: string): void => {
@@ -119,6 +165,39 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       )
     );
   };
+  
+  // Handle opening the crop interface
+  const handleCrop = async () => {
+      try {
+        // Use the current image source
+        const currentImage = croppedImage || imageSource.uri;
+        
+        const result = await ImageCropPicker.openCropper({
+          path: currentImage,
+          width: 1000,
+          height: 1000,
+          cropperCircleOverlay: false,
+          freeStyleCropEnabled: true,
+          cropperToolbarTitle: 'Crop Photo',
+          showCropGuidelines: true,
+          showCropFrame: true,
+          enableRotationGesture: true,
+          aspectRatio: 1/1, // Force square (1:1) aspect ratio
+        });
+        
+        console.log('Cropped image result:', result);
+        
+        // Set the cropped image as the new image source
+        setCroppedImage(result.path);
+        setImageSource({ uri: result.path });
+      } catch (error) {
+        console.log('Cropping cancelled or failed:', error);
+        // User cancelled, no need to show error
+        if (error.message !== 'User cancelled image selection') {
+          Alert.alert('Error', 'Failed to crop image. Please try again.');
+        }
+      }
+    };
   
   // API configuration - hardcoded for testing
   const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
@@ -160,13 +239,16 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsProcessing(true);
       
       try {
-        // Verify photo.uri exists
-        if (!photo || !photo.uri) {
+        // Use cropped image if available, otherwise use original
+        const imageUri = croppedImage || (photo && photo.uri);
+        
+        // Verify image URI exists
+        if (!imageUri) {
           throw new Error('Invalid photo object');
         }
         
         // Resize the image first
-        const resizedImageUri = await resizeAndUploadImage(photo.uri);
+        const resizedImageUri = await resizeAndUploadImage(imageUri);
         
         // Create form data
         const formData = new FormData();
@@ -219,6 +301,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         if (result.processed_image) {
           // Update the image with the processed version
           setImageSource({ uri: result.processed_image });
+          setCroppedImage(result.processed_image);
           setImageError(false); // Reset any image error state
           
           // Log any message from the model (optional)
@@ -244,13 +327,16 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     setIsProcessing(true);
     
     try {
-      // Verify photo.uri exists
-      if (!photo || !photo.uri) {
+      // Use cropped image if available, otherwise use original
+      const imageUri = croppedImage || (photo && photo.uri);
+      
+      // Verify image URI exists
+      if (!imageUri) {
         throw new Error('Invalid photo object');
       }
       
       // Resize the image first
-      const resizedImageUri = await resizeAndUploadImage(photo.uri);
+      const resizedImageUri = await resizeAndUploadImage(imageUri);
       
       // Create form data
       const formData = new FormData();
@@ -297,6 +383,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       if (result.processed_image) {
         // Update the image with the processed version
         setImageSource({ uri: result.processed_image });
+        setCroppedImage(result.processed_image);
         setImageError(false); // Reset any image error state
         
         // Log any message from the model (optional)
@@ -314,32 +401,58 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
-  const continueToRating = (): void => {
-      // Generate a unique session ID for this rating flow
-      const sessionId = Math.random().toString(36).substring(2, 15);
-      console.log(`Starting new rating session: ${sessionId}`);
-
-      // Add a "fresh" query parameter to force the framework to treat this as a new navigation
-      const updatedImageUri = imageSource.uri.includes('?')
-        ? `${imageSource.uri}&session=${sessionId}`
-        : `${imageSource.uri}?session=${sessionId}`;
-      
-      // Create a fresh image source object to avoid any reference issues
-      const freshImageSource = {
-        uri: updatedImageUri,
-        width: photo.width,
-        height: photo.height,
-        sessionId: sessionId // Add a session ID to help with debugging
-      };
-      
-      console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
-      
-      // Use navigate with a unique key to force a new instance
-      navigation.navigate('Rating', {
-        photo: freshImageSource,
-        location: location,
-        _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
-      });
+  const continueToRating = async (): Promise<void> => {
+        try {
+          // Show loading indication if needed
+          setIsProcessing(true);
+          
+          // Use the cropped image if available, otherwise use the original
+          const sourceImageUri = croppedImage || imageSource.uri;
+          
+          // Create a clean copy of the image without query parameters for passing to next screen
+          const timestamp = new Date().getTime();
+          const sessionId = Math.random().toString(36).substring(2, 15);
+          const fileExt = 'jpg'; // Default to jpg
+          
+          // Create a path for the new clean image file
+          const newFilename = `rating_image_${timestamp}.${fileExt}`;
+          
+          // Determine the temp directory path based on platform
+          const dirPath = Platform.OS === 'ios'
+            ? `${RNFS.TemporaryDirectoryPath}/`
+            : `${RNFS.CachesDirectoryPath}/`;
+          
+          const newFilePath = `${dirPath}${newFilename}`;
+          console.log('Creating clean image for Rating screen at:', newFilePath);
+          
+          // Copy the current image file to new location
+          await RNFS.copyFile(sourceImageUri, newFilePath);
+          console.log('File copied successfully for Rating screen');
+          
+          // Create a fresh image object for the Rating screen
+          const freshImageSource = {
+            uri: newFilePath,
+            width: photo.width,
+            height: photo.height,
+            sessionId: sessionId // Add session ID for tracking
+          };
+          
+          console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
+          
+          // Use navigate with a unique key to force a new instance
+          navigation.navigate('Rating', {
+            photo: freshImageSource,
+            location: location,
+            // Pass the prefetched suggestion data if available
+            suggestionData: suggestionData,
+            _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+          });
+        } catch (error) {
+          console.error('Error preparing image for Rating screen:', error);
+          Alert.alert('Error', 'Failed to prepare image for rating. Please try again.');
+        } finally {
+          setIsProcessing(false);
+        }
     };
   
   // Handle image load error
@@ -354,7 +467,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.imageContainer}>
         {!imageError ? (
           <Image
-            source={imageSource}
+            source={{ uri: croppedImage || imageSource.uri }}
             style={styles.image}
             resizeMode="cover"
             onError={handleImageError}
@@ -378,6 +491,15 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       
       {/* Action buttons */}
       <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.cropButton]}
+          onPress={handleCrop}
+          disabled={isProcessing}
+        >
+          <Icon name="crop" size={20} color="white" />
+          <Text style={styles.actionButtonText}>Crop</Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity
           style={[styles.actionButton, styles.editButton]}
           onPress={processPhoto}
@@ -492,6 +614,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     borderRadius: 8,
   },
+  cropButton: {
+    backgroundColor: '#FF9800',  // Orange color for the crop button
+  },
   editButton: {
     backgroundColor: '#4CAF50',
   },
@@ -542,6 +667,32 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
+  // Crop modal styles
+  cropContainer: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  cropImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cropControlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    height: 80,
+    backgroundColor: 'black',
+  },
+  cropButton: {
+    padding: 12,
+    borderRadius: 25,
+  },
+  cropButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  }
 });
 
 export default EditPhotoScreen;

@@ -11,7 +11,9 @@ export const API_CONFIG = {
   ENDPOINTS: {
     EDIT_PHOTO: '/edit-photo',
     GO_BIG: '/go-big',
-    HEALTH: '/health'
+    HEALTH: '/health',
+    SUGGEST_MEAL: '/suggest-meal',
+    SUGGEST_MEAL_FOR_RESTAURANT: '/suggest-meal-for-restaurant'
   },
   
   // Timeout for API requests in milliseconds

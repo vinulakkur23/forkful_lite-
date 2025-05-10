@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
 import { RootStackParamList } from '../App';
-import { getAuth, GoogleAuthProvider, signInWithCredential } from '@react-native-firebase/auth';
+// Import Firebase from our central config
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
+// Import GoogleAuthProvider
+import { GoogleAuthProvider } from '@react-native-firebase/auth';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -57,8 +59,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   // Use the original setup from GitHub
   useEffect(() => {
-    const auth = getAuth();
-    const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
+    // Use the auth method directly
+    const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
     return subscriber; // unsubscribe on unmount
   }, []);
 
@@ -93,8 +95,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             
             // Sign in with Firebase
             console.log("5. Attempting Firebase authentication...");
-            const auth = getAuth();
-            await signInWithCredential(auth, googleCredential);
+            // Use auth directly - and note that signInWithCredential is a method on auth()
+            await auth().signInWithCredential(googleCredential);
             console.log("6. Firebase auth completed successfully!");
             
             // Add manual navigation to MainTabs here
@@ -117,8 +119,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         
         // Sign in with Firebase
         console.log("5. Attempting Firebase authentication...");
-        const auth = getAuth();
-        await signInWithCredential(auth, googleCredential);
+        // Use auth directly with signInWithCredential method
+        await auth().signInWithCredential(googleCredential);
         console.log("6. Firebase auth completed successfully!");
         
         // Add manual navigation to MainTabs here

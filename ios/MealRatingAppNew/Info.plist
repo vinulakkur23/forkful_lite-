@@ -68,5 +68,7 @@
 	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>DishItOut needs access to your photo library to upload meal photos to your food passport.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DishItOut needs microphone access to create content</string>
 </dict>
 </plist>

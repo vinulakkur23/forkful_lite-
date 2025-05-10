@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBw89gPw8CjF__uelKgPbvxB-JrK91tOvw",
   authDomain: "mealratingapp.firebaseapp.com",
   projectId: "mealratingapp",
-  storageBucket: "mealratingapp.firebasestorage.app",
+  storageBucket: "mealratingapp.appspot.com",
   messagingSenderId: "476812977799",
   appId: "1:476812977799:web:7f1c18d1be5b424706fa22",
   measurementId: "G-1D131XEPV1"

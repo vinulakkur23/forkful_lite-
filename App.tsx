@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+// Icon import was duplicated, removed one. MaterialIcons is conventional.
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { getAuth } from '@react-native-firebase/auth';
+import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+// Import Firebase from our config file to ensure consistent initialization
+import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import CameraScreen from './screens/CameraScreen';
+import CropScreen from './screens/CropScreen'; // Import the new Crop Screen
 import EditPhotoScreen from './screens/EditPhotoScreen';
 import RatingScreen from './screens/RatingScreen';
 import ResultScreen from './screens/ResultScreen';
@@ -25,9 +28,22 @@ import { Alert } from 'react-native';
 // Define the types for our navigation parameters
 export type RootStackParamList = {
   Login: undefined;
-  MainTabs: { screen?: string; params?: any };
-  Home: undefined;
-  Camera: undefined;
+  MainTabs: { screen?: string; params?: any }; // Added params for deep linking to tabs
+  Home: undefined; // Kept for potential direct stack navigation, though usually via MainTabs
+  Camera: undefined; // Kept for potential direct stack navigation
+  Crop: {
+    photo: {
+      uri: string;
+      base64?: string;
+      width?: number;
+      height?: number;
+    };
+    location: {
+      latitude: number;
+      longitude: number;
+    } | null;
+    _navigationKey?: string; // For forcing screen refresh
+  };
   EditPhoto: {
     photo: {
       uri: string;
@@ -39,6 +55,7 @@ export type RootStackParamList = {
       latitude: number;
       longitude: number;
     } | null;
+    _navigationKey?: string;
   };
   Rating: {
     photo: {
@@ -46,11 +63,13 @@ export type RootStackParamList = {
       base64?: string;
       width?: number;
       height?: number;
+      sessionId?: string; // For tracking session
     };
     location: {
       latitude: number;
       longitude: number;
     } | null;
+    _uniqueKey?: string; // Ensure Rating screen reloads with new data
   };
   Result: {
     photo: {
@@ -58,6 +77,7 @@ export type RootStackParamList = {
       base64?: string;
       width?: number;
       height?: number;
+      sessionId?: string;
     };
     location: {
       latitude: number;
@@ -66,60 +86,27 @@ export type RootStackParamList = {
     rating: number;
     restaurant?: string;
     meal?: string;
+    _uniqueKey?: string; // Ensure Result screen reloads
   };
-  FoodPassport: undefined;
+  FoodPassport: undefined; // Kept for potential direct stack navigation
   MealDetail: {
     mealId: string;
   };
 };
 
-// Define separate types for tab navigation
+// Define separate types for tab navigation (screens directly in Tab.Navigator)
 export type TabParamList = {
   Home: undefined;
-  Camera: undefined;
-  FoodPassport: undefined;
-  EditPhoto: {
-    photo: {
-      uri: string;
-      base64?: string;
-      width?: number;
-      height?: number;
-    };
-    location: {
-      latitude: number;
-      longitude: number;
-    } | null;
-  };
-  Rating: {
-    photo: {
-      uri: string;
-      base64?: string;
-      width?: number;
-      height?: number;
-    };
-    location: {
-      latitude: number;
-      longitude: number;
-    } | null;
-  };
-  Result: {
-    photo: {
-      uri: string;
-      base64?: string;
-      width?: number;
-      height?: number;
-    };
-    location: {
-      latitude: number;
-      longitude: number;
-    } | null;
-    rating: number;
-    restaurant?: string;
-    meal?: string;
-  };
-  MealDetail: {
-    mealId: string;
-  };
+  Camera: undefined; // This is a tab that navigates to CameraScreen
+  FoodPassport: undefined; // This is a tab that navigates to FoodPassportWrapper
+  
+  // Screens that are part of flows, not "tabs" themselves, but defined in Tab.Navigator
+  // They will be hidden from the tab bar using tabBarButton: () => null
+  Crop: RootStackParamList['Crop']; // Use RootStackParamList type
+  EditPhoto: RootStackParamList['EditPhoto'];
+  Rating: RootStackParamList['Rating'];
+  Result: RootStackParamList['Result'];
+  MealDetail: RootStackParamList['MealDetail'];
 };
 
 // Create stack and tab navigators
@@ -130,27 +117,20 @@ const Tab = createBottomTabNavigator<TabParamList>();
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   // Updated Image Picker function
     const openImagePicker = async () => {
-      // Force reset camera/photo state by navigating to home first to clear any cached state
-      const currentRoute = state.routes[state.index].name;
-      if (currentRoute !== 'Home') {
-        navigation.navigate('Home');
-        // Small delay to allow state to reset
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // Removed workaround of navigating to Home first.
+      // The fix should be in CropScreen's ability to handle new props.
 
-      const options = {
+      const options: ImagePicker.ImageLibraryOptions = { // Explicitly type options
         mediaType: 'photo',
         includeBase64: false,
         maxHeight: 2000,
         maxWidth: 2000,
         quality: 0.8,
-        // Force new selection
         selectionLimit: 1,
       };
 
       try {
-        // Use the Promise API with fresh options
-        const result = await ImagePicker.launchImageLibrary({...options});
+        const result = await ImagePicker.launchImageLibrary(options); // Use typed options
         
         if (result.didCancel) {
           console.log('User cancelled image picker');
@@ -159,23 +139,26 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         
         if (result.errorCode) {
           console.log('Image picker error:', result.errorCode, result.errorMessage);
-          Alert.alert('Error', 'There was an error selecting the image.');
+          Alert.alert('Error', 'There was an error selecting the image: ' + result.errorMessage);
           return;
         }
         
-        if (!result.assets || result.assets.length === 0) {
-          console.log('No assets returned from picker');
+        if (!result.assets || result.assets.length === 0 || !result.assets[0].uri) {
+          console.log('No assets or URI returned from picker');
+          Alert.alert('Error', 'Could not get image data. Please try another image.');
           return;
         }
         
         const selectedImage = result.assets[0];
         
-        if (!selectedImage.uri) {
-          Alert.alert('Error', 'Could not get image data. Please try another image.');
-          return;
-        }
+        // Add a timestamp and unique key to ensure CropScreen refreshes
+        const timestamp = new Date().getTime();
+        const navigationKey = `crop_upload_${timestamp}`;
+        // Ensure URI is unique to bust any caching by Image component itself if needed
+        const uniqueImageUri = selectedImage.uri!.includes('?')
+          ? `${selectedImage.uri}&t=${timestamp}`
+          : `${selectedImage.uri}?t=${timestamp}`;
         
-        // Get current location
         Geolocation.getCurrentPosition(
           position => {
             const location = {
@@ -183,81 +166,67 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               longitude: position.coords.longitude,
             };
             
-            // Add a timestamp to ensure uniqueness
-            const timestamp = new Date().getTime();
-            const uniqueUri = selectedImage.uri.includes('?')
-              ? `${selectedImage.uri}&t=${timestamp}`
-              : `${selectedImage.uri}?t=${timestamp}`;
-            
-            // Navigate to EditPhoto screen with the selected image
-            navigation.navigate('EditPhoto', {
+            navigation.navigate('Crop', {
               photo: {
-                uri: uniqueUri, // Add timestamp to force reload
+                uri: uniqueImageUri,
                 width: selectedImage.width || 1000,
                 height: selectedImage.height || 1000,
               },
               location: location,
+              _navigationKey: navigationKey,
             });
           },
           error => {
             console.log('Location error:', error);
-            // Even without location, still allow uploading
-            
-            // Add a timestamp to ensure uniqueness
-            const timestamp = new Date().getTime();
-            const uniqueUri = selectedImage.uri.includes('?')
-              ? `${selectedImage.uri}&t=${timestamp}`
-              : `${selectedImage.uri}?t=${timestamp}`;
-            
-            navigation.navigate('EditPhoto', {
+            navigation.navigate('Crop', {
               photo: {
-                uri: uniqueUri, // Add timestamp to force reload
+                uri: uniqueImageUri,
                 width: selectedImage.width || 1000,
                 height: selectedImage.height || 1000,
               },
               location: null,
+              _navigationKey: navigationKey,
             });
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
         );
-      } catch (error) {
+      } catch (error: any) { // Catch any error
         console.error('Unexpected error in image picker:', error);
-        Alert.alert('Error', 'An unexpected error occurred while selecting an image.');
+        Alert.alert('Error', `An unexpected error occurred: ${error.message || 'Unknown error'}`);
       }
     };
 
-  // We'll show these four tabs
-  const mainTabs = [
-    { name: 'Home', label: 'Nearby', icon: (focused: boolean) => (
-      focused ?
-        <Image source={require('./assets/icons/place-active.png')} style={{ width: 24, height: 24 }} /> :
-        <Image source={require('./assets/icons/place-inactive.png')} style={{ width: 24, height: 24 }} />
-    )},
-    { name: 'Camera', label: 'Take Photo', icon: (focused: boolean) => (
-      focused ?
-        <Image source={require('./assets/icons/camera-active.png')} style={{ width: 24, height: 24 }} /> :
-        <Image source={require('./assets/icons/camera-inactive.png')} style={{ width: 24, height: 24 }} />
-    )},
-    {
-      name: 'Upload',
-      label: 'Upload Photo',
-      icon: (focused: boolean) => (
-        <Icon name="photo-library" size={24} color={focused ? '#ff6b6b' : '#999'} />
-      ),
-      // This isn't a real screen, it triggers the image picker
-      customAction: true
-    },
-    { name: 'FoodPassport', label: 'My Passport', icon: (focused: boolean) => (
-      focused ?
-        <Image source={require('./assets/icons/passport-active.png')} style={{ width: 24, height: 24 }} /> :
-        <Image source={require('./assets/icons/passport-inactive.png')} style={{ width: 24, height: 24 }} />
-    )}
-  ];
+    const mainTabs = [
+      { name: 'Home', label: 'Nearby', icon: (focused: boolean) => (
+        focused ?
+          <Image source={require('./assets/icons/place-active.png')} style={{ width: 24, height: 24 }} /> :
+          <Image source={require('./assets/icons/place-inactive.png')} style={{ width: 24, height: 24 }} />
+      )},
+      { name: 'Camera', label: 'Take Photo', icon: (focused: boolean) => (
+        focused ?
+          <Image source={require('./assets/icons/camera-active.png')} style={{ width: 24, height: 24 }} /> :
+          <Image source={require('./assets/icons/camera-inactive.png')} style={{ width: 24, height: 24 }} />
+      )},
+      {
+        name: 'Upload', // This is a virtual tab
+        label: 'Upload Photo',
+        icon: (focused: boolean) => ( // focused will always be false for this button
+          focused ? // This case won't be hit, but kept for structure
+            <Image source={require('./assets/icons/upload-active.png')} style={{ width: 24, height: 24 }} /> :
+            <Image source={require('./assets/icons/upload-inactive.png')} style={{ width: 24, height: 24 }} />
+        ),
+        customAction: true
+      },
+      { name: 'FoodPassport', label: 'My Passport', icon: (focused: boolean) => (
+        focused ?
+          <Image source={require('./assets/icons/passport-active.png')} style={{ width: 24, height: 24 }} /> :
+          <Image source={require('./assets/icons/passport-inactive.png')} style={{ width: 24, height: 24 }} />
+      )}
+    ];
 
   return (
     <View style={styles.tabBarContainer}>
       {mainTabs.map((tab, index) => {
-        // For the Upload tab, we use a custom action instead of navigation
         if (tab.customAction) {
           return (
             <TouchableOpacity
@@ -266,7 +235,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={styles.tabButton}
               activeOpacity={0.7}
             >
-              {tab.icon(false)} {/* Always use unfocused state for this button */}
+              {tab.icon(false)}
               <Text style={[styles.tabLabel, { color: '#999' }]}>
                 {tab.label}
               </Text>
@@ -274,15 +243,13 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           );
         }
         
-        // Find the corresponding route from the state
         const route = state.routes.find(r => r.name === tab.name);
-        
         if (!route) return null;
         
         const { options } = descriptors[route.key];
-        const label = options.tabBarLabel || options.title || route.name;
+        // Use tab.label for consistency, fallback to route info
+        const labelToDisplay = tab.label || options.tabBarLabel || options.title || route.name;
         
-        // Check if this tab is focused
         const isFocused = state.index === state.routes.findIndex(r => r.name === tab.name);
         
         const onPress = () => {
@@ -293,7 +260,9 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           });
           
           if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
+            // For tabs, navigate to the tab's initial screen or itself.
+            // If it's a stack navigator, it will go to its initial route.
+            navigation.navigate(route.name as any, (route as any).params);
           }
         };
         
@@ -309,7 +278,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               styles.tabLabel,
               { color: isFocused ? '#ff6b6b' : '#999' }
             ]}>
-              {label as string}
+              {labelToDisplay as string}
             </Text>
           </TouchableOpacity>
         );
@@ -324,7 +293,7 @@ function TabNavigator() {
     <Tab.Navigator
       tabBar={props => <CustomTabBar {...props} />}
       screenOptions={{
-        headerShown: true,
+        // headerShown is set per screen
       }}
     >
       <Tab.Screen
@@ -332,7 +301,7 @@ function TabNavigator() {
         component={HomeScreen}
         options={{
           title: 'Nearby',
-          headerShown: false, // Hide header as we have a custom header
+          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -345,47 +314,58 @@ function TabNavigator() {
       />
       <Tab.Screen
         name="FoodPassport"
-        component={FoodPassportWrapper}
+        component={FoodPassportWrapper} // This wrapper handles FoodPassportScreen
         options={{
           title: 'My Passport',
-          headerTitle: 'My Food Passport',
+          headerTitle: 'My Food Passport', // This will be shown if headerShown: true
+          headerShown: true, // FoodPassportWrapper might need its own header logic or this can be true
         }}
       />
       
-      {/* Add new screens to the tab navigator */}
+      {/* Screens part of flows, hidden from tab bar */}
+      <Tab.Screen
+        name="Crop"
+        component={CropScreen}
+        options={{
+          title: 'Crop Photo',
+          headerShown: false,
+          tabBarButton: () => null, // Hide from tab bar
+        }}
+      />
       <Tab.Screen
         name="EditPhoto"
         component={EditPhotoScreen}
         options={{
           title: 'Edit Photo',
-          headerShown: true,
+          headerShown: true, // EditPhotoScreen seems to expect a header
+          tabBarButton: () => null, // Hide from tab bar
         }}
       />
-      
       <Tab.Screen
         name="Rating"
         component={RatingScreen}
         options={{
           title: 'Rate Your Meal',
-          headerShown: true,
+          headerShown: true, // RatingScreen expects a header
+          tabBarButton: () => null, // Hide from tab bar
         }}
       />
-      
       <Tab.Screen
         name="Result"
         component={ResultScreen}
         options={{
           title: 'Rating Result',
-          headerShown: true,
+          headerShown: true, // ResultScreen expects a header
+          tabBarButton: () => null, // Hide from tab bar
         }}
       />
-      
       <Tab.Screen
         name="MealDetail"
         component={MealDetailScreen}
         options={{
           title: 'Meal Details',
-          headerShown: true,
+          headerShown: true, // MealDetailScreen expects a header
+          tabBarButton: () => null, // Hide from tab bar
         }}
       />
     </Tab.Navigator>
@@ -396,7 +376,6 @@ const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
 
-  // Initialize GoogleSignin on app start
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '476812977799-7dmlpm8g3plslrsftesst7op6ipm71a4.apps.googleusercontent.com',
@@ -406,7 +385,6 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Handle user state changes
   function onAuthStateChanged(user: any) {
     console.log("[App.tsx] Auth state changed:", user ? "User logged in" : "No user");
     setUser(user);
@@ -414,13 +392,12 @@ const App: React.FC = () => {
   }
 
   useEffect(() => {
-    const auth = getAuth();
-    const subscriber = auth.onAuthStateChanged(onAuthStateChanged);
-    return subscriber; // unsubscribe on unmount
+    // Use the auth instance imported from firebaseConfig
+    const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
+    return subscriber;
   }, []);
 
   if (initializing) {
-    // Show a loading screen
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff6b6b" />
@@ -435,12 +412,10 @@ const App: React.FC = () => {
         <Stack.Screen
           name="Login"
           component={LoginScreen}
-          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="MainTabs"
           component={TabNavigator}
-          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>
@@ -464,8 +439,8 @@ const styles = StyleSheet.create({
   tabBarContainer: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    height: 80,
-    paddingBottom: 25,
+    height: Platform.OS === 'ios' ? 90 : 80, // Adjusted for SafeAreaView on iOS
+    paddingBottom: Platform.OS === 'ios' ? 30 : 25, // More padding for home indicator
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#ddd',
@@ -479,7 +454,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    width: width / 3, // Explicitly divide the width by 3 for even spacing
+    // Removed width: width / 3 as mainTabs.length is 4. Flexbox handles distribution.
   },
   tabLabel: {
     fontSize: 12,

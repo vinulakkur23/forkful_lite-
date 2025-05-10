@@ -1,0 +1,17 @@
+{
+  "api_endpoints": {
+    "base_url": "https://dishitout-imageinhancer.onrender.com",
+    "available_endpoints": [
+      "/suggest-meal",
+      "/edit-photo",
+      "/go-big",
+      "/health"
+    ],
+    "suggest_meal": {
+      "required_params": ["latitude", "longitude"],
+      "optional_params": ["image", "restaurant"],
+      "description": "Gets restaurant suggestions near a location and suggests menu items"
+    }
+  },
+  "notes": "Based on Python script analysis, the API has the capability to look up restaurant menus using Gemini AI, but this needs to be implemented as a dedicated endpoint in the REST API. The current endpoint uses the same code path regardless of whether a restaurant is specified."
+}

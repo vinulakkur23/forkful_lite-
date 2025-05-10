@@ -1,12 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, FlatList, Modal, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  Modal,
+  ActivityIndicator,
+  SafeAreaView,
+  Alert,
+  Platform
+} from 'react-native';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
+import RNFS from 'react-native-fs';
+import { getMealSuggestions, getMealSuggestionsForRestaurant } from '../services/mealService';
+import StarRating from '../components/StarRating';
 
 // Update the navigation prop type to use composite navigation
 type RatingScreenNavigationProp = CompositeNavigationProp<
@@ -43,6 +58,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // API configuration - hardcoded for testing
   const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
@@ -71,6 +87,53 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
   };
+
+  // Function to update meal suggestions when restaurant changes
+  const updateMealSuggestionsForRestaurant = async (restaurantName: string): Promise<void> => {
+    if (!restaurantName) return;
+
+    try {
+      setIsLoadingSuggestions(true);
+
+      // Show visual indicator in UI
+      const loadingIndicator = (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#ff6b6b" />
+          <Text style={styles.loadingText}>Finding menu for {restaurantName}...</Text>
+        </View>
+      );
+
+      console.log(`Fetching meal suggestions for restaurant: ${restaurantName}`);
+
+      // Make the API call
+      const result = await getMealSuggestionsForRestaurant(restaurantName, photo?.uri, location);
+
+      // Update only menu items and suggested meal, not restaurants
+      setMenuItems(result.menu_items || []);
+
+      // Update suggested meal if available
+      if (result.suggested_meal) {
+        setMealName(result.suggested_meal);
+      } else if (result.menu_items && result.menu_items.length > 0) {
+        // If no specific meal is suggested but we have menu items, select the first one
+        setMealName(result.menu_items[0]);
+      }
+
+      // Log success (only in console, not to user)
+      console.log(`Got ${result.menu_items?.length || 0} menu items for ${restaurantName}`);
+    } catch (error) {
+      console.error(`Error getting meal suggestions for ${restaurantName}:`, error);
+
+      // Show user-friendly error
+      Alert.alert(
+        "Menu Lookup Failed",
+        `We couldn't find the menu for "${restaurantName}". Please try a different restaurant or enter the meal name manually.`,
+        [{ text: "OK" }]
+      );
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
   
   // Function to get restaurant and meal suggestions
   const getSuggestions = async () => {
@@ -78,51 +141,67 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsLoadingSuggestions(false);
       return;
     }
-    
+
     setIsLoadingSuggestions(true);
-    
+
     try {
-      // Create form data
-      const formData = new FormData();
-      
-      // Add the image
-      const fileExtension = photo.uri.split('.').pop() || 'jpg';
-      const fileName = `photo.${fileExtension}`;
-      const fileType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
-      
-      formData.append('image', {
-        uri: photo.uri,
-        name: fileName,
-        type: fileType,
-      } as any);
-      
-      // Add location data
-      formData.append('latitude', location.latitude.toString());
-      formData.append('longitude', location.longitude.toString());
-      
-      console.log('Requesting meal suggestions from API');
-      
-      // Send to your API
-      const response = await fetch(`${HARDCODED_URL}/suggest-meal`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Network response error ${response.status}: ${errorText}`);
+      // Check if we have prefetched suggestion data from the previous screen
+      if (route.params.suggestionData) {
+        console.log('Using prefetched suggestion data from route params');
+
+        const prefetchedData = route.params.suggestionData;
+
+        // Update restaurant and meal suggestions from prefetched data
+        setSuggestedRestaurants(prefetchedData.restaurants || []);
+        setMenuItems(prefetchedData.menu_items || []);
+
+        // Auto-select first suggestion if available
+        if (prefetchedData.restaurants?.length > 0) {
+          setRestaurant(prefetchedData.restaurants[0].name);
+        }
+        if (prefetchedData.suggested_meal) {
+          setMealName(prefetchedData.suggested_meal);
+        }
+
+        setIsLoadingSuggestions(false);
+        return;
       }
-      
-      const result = await response.json();
+
+      // Then check if we have suggestions from global cache (early fetch from camera)
+      if ((global as any).prefetchedSuggestions) {
+        console.log('Using prefetched suggestion data from global cache');
+
+        const cachedData = (global as any).prefetchedSuggestions;
+
+        // Update restaurant and meal suggestions from prefetched data
+        setSuggestedRestaurants(cachedData.restaurants || []);
+        setMenuItems(cachedData.menu_items || []);
+
+        // Auto-select first suggestion if available
+        if (cachedData.restaurants?.length > 0) {
+          setRestaurant(cachedData.restaurants[0].name);
+        }
+        if (cachedData.suggested_meal) {
+          setMealName(cachedData.suggested_meal);
+        }
+
+        // Clear the global cache to avoid stale data
+        (global as any).prefetchedSuggestions = null;
+
+        setIsLoadingSuggestions(false);
+        return;
+      }
+
+      console.log('No prefetched data available, fetching suggestions now');
+
+      // Fetch new suggestions using our service
+      const result = await getMealSuggestions(photo.uri, location);
       console.log('Received suggestion response');
-      
+
       // Update restaurant and meal suggestions
       setSuggestedRestaurants(result.restaurants || []);
       setMenuItems(result.menu_items || []);
-      
+
       // Auto-select first suggestion if available
       if (result.restaurants?.length > 0) {
         setRestaurant(result.restaurants[0].name);
@@ -130,7 +209,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       if (result.suggested_meal) {
         setMealName(result.suggested_meal);
       }
-      
+
     } catch (error) {
       console.error('Error getting suggestions:', error);
       // Don't show an alert, just silently fail and let user enter data manually
@@ -139,21 +218,37 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
-  const saveRating = (): void => {
+  const saveRating = async (): Promise<void> => {
+    try {
+      // Show loading indication
+      setIsProcessing(true);
+      
       // Generate a unique session ID for this result flow
       const sessionId = route.params._uniqueKey || Math.random().toString(36).substring(2, 15);
       console.log(`Continuing session ${sessionId} to ResultScreen`);
       
-      // Add the session ID to the image URI to ensure uniqueness
-      const imageUri = photo.uri.includes('session=')
-        ? photo.uri // Already has a session parameter
-        : (photo.uri.includes('?')
-            ? `${photo.uri}&session=${sessionId}`
-            : `${photo.uri}?session=${sessionId}`);
+      // Create a clean copy of the image without query parameters for passing to next screen
+      const timestamp = new Date().getTime();
+      const fileExt = 'jpg'; // Default to jpg
+      
+      // Create a path for the new clean image file
+      const newFilename = `result_image_${timestamp}.${fileExt}`;
+      
+      // Determine the temp directory path based on platform
+      const dirPath = Platform.OS === 'ios'
+        ? `${RNFS.TemporaryDirectoryPath}/`
+        : `${RNFS.CachesDirectoryPath}/`;
+      
+      const newFilePath = `${dirPath}${newFilename}`;
+      console.log('Creating clean image for Result screen at:', newFilePath);
+      
+      // Copy the current image file to new location
+      await RNFS.copyFile(photo.uri, newFilePath);
+      console.log('File copied successfully for Result screen');
       
       // Create a fresh photo object to avoid any reference issues
       const freshPhoto = {
-        uri: imageUri,
+        uri: newFilePath,
         width: photo.width,
         height: photo.height,
         sessionId: sessionId // Add session ID for tracking
@@ -170,7 +265,13 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
         meal: mealName,
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
-    };
+    } catch (error) {
+      console.error('Error preparing image for Result screen:', error);
+      Alert.alert('Error', 'Failed to save rating. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
   
   // Handle image load error
   const handleImageError = () => {
@@ -196,6 +297,14 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.errorImageText}>Failed to load image</Text>
             </View>
           )}
+          
+          {/* Processing overlay */}
+          {isProcessing && (
+            <View style={styles.processingOverlay}>
+              <ActivityIndicator size="large" color="white" />
+              <Text style={styles.processingText}>Preparing image...</Text>
+            </View>
+          )}
         </View>
         
         {/* Restaurant and Meal Information */}
@@ -205,7 +314,17 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
             <TextInput
               style={styles.infoInput}
               value={restaurant}
-              onChangeText={setRestaurant}
+              onChangeText={(text) => {
+                setRestaurant(text);
+                // If user has typed at least 3 characters, update meal suggestions
+                if (text.length >= 3 && text !== restaurant) {
+                  // Delay the API call slightly to avoid too many requests while typing
+                  clearTimeout((window as any).restaurantInputTimer);
+                  (window as any).restaurantInputTimer = setTimeout(() => {
+                    updateMealSuggestionsForRestaurant(text);
+                  }, 500);
+                }
+              }}
               placeholder="Enter restaurant name"
             />
             <TouchableOpacity
@@ -254,12 +373,14 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
               <TouchableOpacity
                 key={star}
                 onPress={() => handleRating(star)}
+                style={styles.starTouchable}
               >
-                <FontAwesome
-                  name={star <= rating ? 'star' : 'star-o'}
-                  size={40}
-                  color={star <= rating ? '#FFD700' : '#BDC3C7'}
+                <Image
+                  source={star <= rating
+                    ? require('../assets/stars/star-filled.png')
+                    : require('../assets/stars/star-empty.png')}
                   style={styles.star}
+                  resizeMode="contain"
                 />
               </TouchableOpacity>
             ))}
@@ -276,9 +397,13 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
             { backgroundColor: rating > 0 ? '#ff6b6b' : '#cccccc' }
           ]}
           onPress={saveRating}
-          disabled={rating === 0}
+          disabled={rating === 0 || isProcessing}
         >
-          <Text style={styles.saveButtonText}>Save Rating</Text>
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save Rating</Text>
+          )}
         </TouchableOpacity>
       </View>
       
@@ -300,7 +425,12 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
                   <TouchableOpacity
                     style={styles.restaurantItem}
                     onPress={() => {
-                      setRestaurant(item.name);
+                      // If this is a different restaurant than currently selected
+                      if (restaurant !== item.name) {
+                        setRestaurant(item.name);
+                        // Fetch meal suggestions for this restaurant
+                        updateMealSuggestionsForRestaurant(item.name);
+                      }
                       setShowRestaurantModal(false);
                     }}
                   >
@@ -383,6 +513,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#eee',
     marginBottom: 20,
+    position: 'relative',
   },
   image: {
     width: '100%',
@@ -398,6 +529,21 @@ const styles = StyleSheet.create({
   errorImageText: {
     marginTop: 10,
     color: '#999',
+    fontSize: 16,
+  },
+  processingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingText: {
+    color: 'white',
+    marginTop: 10,
     fontSize: 16,
   },
   // Restaurant and meal info styles
@@ -460,8 +606,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 15,
   },
+  starTouchable: {
+    padding: 5,
+    marginHorizontal: 5,
+  },
   star: {
-    marginHorizontal: 10,
+    width: 40,
+    height: 40,
   },
   ratingText: {
     fontSize: 18,

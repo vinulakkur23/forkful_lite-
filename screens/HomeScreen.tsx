@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
+// Import our custom StarRating component instead of FontAwesome
+import StarRating from '../components/StarRating';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
@@ -38,6 +39,7 @@ interface MealEntry {
   location: {
     latitude: number;
     longitude: number;
+    source?: string; // 'device', 'exif', etc.
   } | null;
   createdAt: any;
   distance?: number; // Distance in meters from user's current location
@@ -195,28 +197,28 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderStars = (rating: number) => {
     return (
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <FontAwesome
-            key={star}
-            name={star <= rating ? 'star' : 'star-o'}
-            size={14}
-            color={star <= rating ? '#FFD700' : '#BDC3C7'}
-          />
-        ))}
-      </View>
+      <StarRating rating={rating} starSize={14} />
     );
   };
 
-  const formatDistance = (distance: number | undefined): string => {
-    if (!distance) return "Unknown distance";
-    
+  const formatDistance = (distance: number | undefined, meal: MealEntry): string => {
+    // Check if location is null
+    if (!meal.location) return "No location";
+
+    // Check if location was from EXIF data
+    if (meal.location.source === 'exif') {
+      return "📍 At photo location";
+    }
+
+    // If no distance available
+    if (!distance) return "📍 Unknown distance";
+
     if (distance < 1) {
       // Convert to meters
-      return `${Math.round(distance * 1000)}m away`;
+      return `📍 ${Math.round(distance * 1000)}m away`;
     } else {
       // In kilometers with one decimal
-      return `${distance.toFixed(1)}km away`;
+      return `📍 ${distance.toFixed(1)}km away`;
     }
   };
 
@@ -276,7 +278,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.distanceContainer}>
               <Icon name="place" size={12} color="#666" />
               <Text style={styles.distanceText}>
-                {formatDistance(item.distance)}
+                {formatDistance(item.distance, item)}
               </Text>
             </View>
           )}

@@ -5,11 +5,10 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import StarRating from '../components/StarRating';
 import { RootStackParamList, TabParamList } from '../App';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import { getAuth } from '@react-native-firebase/auth';
+// Import Firebase from our central config
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -108,8 +107,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setLoading(true);
 
       // Check if user is owner of this meal entry
-      const auth = getAuth();
-      const user = auth.currentUser;
+      // Use the imported auth function
+      const user = auth().currentUser;
 
       if (!user || !meal || user.uid !== meal.userId) {
         Alert.alert("Error", "You don't have permission to delete this entry");
@@ -246,25 +245,22 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         
         <View style={styles.ratingContainer}>
           <Text style={styles.ratingLabel}>Rating:</Text>
-          <View style={styles.starsContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <FontAwesome
-                key={star}
-                name={star <= meal.rating ? 'star' : 'star-o'}
-                size={18}
-                color={star <= meal.rating ? '#FFD700' : '#BDC3C7'}
-                style={styles.star}
-              />
-            ))}
-          </View>
+          <StarRating rating={meal.rating} starSize={18} />
         </View>
         
         {meal.location && (
           <View style={styles.locationContainer}>
             <Icon name="place" size={18} color="#666" />
-            <Text style={styles.locationText}>
-              {`${meal.location.latitude.toFixed(4)}, ${meal.location.longitude.toFixed(4)}`}
-            </Text>
+            <View style={styles.locationTextContainer}>
+              <Text style={styles.locationText}>
+                {`${meal.location.latitude.toFixed(4)}, ${meal.location.longitude.toFixed(4)}`}
+              </Text>
+              {meal.location.source && (
+                <Text style={styles.locationSource}>
+                  {meal.location.source === 'exif' ? 'From photo metadata' : 'From device location'}
+                </Text>
+              )}
+            </View>
           </View>
         )}
         
@@ -284,7 +280,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         </TouchableOpacity>
         
         {/* Only show delete button if the user is the owner */}
-        {meal.userId === getAuth().currentUser?.uid && (
+        {meal.userId === auth().currentUser?.uid && (
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={handleDeleteMeal}
@@ -416,13 +412,22 @@ const styles = StyleSheet.create({
   },
   locationContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 15,
+  },
+  locationTextContainer: {
+    marginLeft: 8,
+    flex: 1,
   },
   locationText: {
     fontSize: 14,
     color: '#666',
-    marginLeft: 8,
+  },
+  locationSource: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   dateText: {
     fontSize: 14,

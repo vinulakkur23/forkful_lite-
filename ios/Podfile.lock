@@ -2677,6 +2677,8 @@ PODS:
     - React-jsiexecutor
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
+  - react-native-exif (0.5.0):
+    - React
   - react-native-geolocation (3.4.0):
     - DoubleConversion
     - glog
@@ -3090,6 +3092,8 @@ PODS:
     - Firebase/Storage (= 11.10.0)
     - React-Core
     - RNFBApp
+  - RNFS (2.20.0):
+    - React-Core
   - RNGestureHandler (2.24.0):
     - DoubleConversion
     - glog
@@ -3134,6 +3138,15 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNImageCropPicker (0.40.3):
+    - React-Core
+    - React-RCTImage
+    - RNImageCropPicker/QBImagePickerController (= 0.40.3)
+    - TOCropViewController
+  - RNImageCropPicker/QBImagePickerController (0.40.3):
+    - React-Core
+    - React-RCTImage
+    - TOCropViewController
   - RNScreens (4.9.2):
     - DoubleConversion
     - glog
@@ -3201,6 +3214,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - SocketRocket (0.7.1)
+  - TOCropViewController (2.7.4)
   - VisionCamera (4.6.4):
     - VisionCamera/Core (= 4.6.4)
     - VisionCamera/React (= 4.6.4)
@@ -3254,6 +3268,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-exif (from `../node_modules/react-native-exif`)
   - "react-native-geolocation (from `../node_modules/@react-native-community/geolocation`)"
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-image-resizer (from `../node_modules/react-native-image-resizer`)
@@ -3290,8 +3305,10 @@ DEPENDENCIES:
   - "RNFBAuth (from `../node_modules/@react-native-firebase/auth`)"
   - "RNFBFirestore (from `../node_modules/@react-native-firebase/firestore`)"
   - "RNFBStorage (from `../node_modules/@react-native-firebase/storage`)"
+  - RNFS (from `../node_modules/react-native-fs`)
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - "RNGoogleSignin (from `../node_modules/@react-native-google-signin/google-signin`)"
+  - RNImageCropPicker (from `../node_modules/react-native-image-crop-picker`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - VisionCamera (from `../node_modules/react-native-vision-camera`)
@@ -3327,6 +3344,7 @@ SPEC REPOS:
     - PromisesObjC
     - RecaptchaInterop
     - SocketRocket
+    - TOCropViewController
 
 EXTERNAL SOURCES:
   boost:
@@ -3404,6 +3422,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
+  react-native-exif:
+    :path: "../node_modules/react-native-exif"
   react-native-geolocation:
     :path: "../node_modules/@react-native-community/geolocation"
   react-native-image-picker:
@@ -3476,10 +3496,14 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-firebase/firestore"
   RNFBStorage:
     :path: "../node_modules/@react-native-firebase/storage"
+  RNFS:
+    :path: "../node_modules/react-native-fs"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
   RNGoogleSignin:
     :path: "../node_modules/@react-native-google-signin/google-signin"
+  RNImageCropPicker:
+    :path: "../node_modules/react-native-image-crop-picker"
   RNScreens:
     :path: "../node_modules/react-native-screens"
   RNVectorIcons:
@@ -3553,6 +3577,7 @@ SPEC CHECKSUMS:
   React-logger: 018826bfd51b9f18e87f67db1590bc510ad20664
   React-Mapbuffer: 9fbb496e7d6f7c34d5e617365ee778bf96d14eae
   React-microtasksnativemodule: 36adde22631838680d1be62776e8ccb83186c06a
+  react-native-exif: 920a3f36bff72631a5ce8f416b657e12f67e42c8
   react-native-geolocation: 57a4a35c149d8613f81b89ff155e6ae28e76aea0
   react-native-image-picker: 4c10603e9b253c7f48f296034c04a09fe9c8d427
   react-native-image-resizer: 17b2d73c030975b6543395c7e7368bc8774c5efa
@@ -3590,11 +3615,14 @@ SPEC CHECKSUMS:
   RNFBAuth: 6293803f7c8c6df475d6cc38e0bb2d3ef7fd8739
   RNFBFirestore: cdb31ee092168f3e6535e80db18145b856118dea
   RNFBStorage: 91224868977cc8914f31f9e762951a94e589b33d
+  RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNGestureHandler: f7b3a72c099e1e29b5b81688678bc9108d44057c
   RNGoogleSignin: 1a215139c537bb0430abdb9ff9a8e437578e515d
+  RNImageCropPicker: 2c53b596a1af85eacba1048e996f916933021bbb
   RNScreens: 2e4870e8f9cb4a77e5a51530729f2762868316df
   RNVectorIcons: 1743deffb9c4b70f253704075dbac432cc802e74
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  TOCropViewController: 80b8985ad794298fb69d3341de183f33d1853654
   VisionCamera: f56eaedde0d3fa095143b78374d29e89e71735f9
   Yoga: be02ca501b03c79d7027a6bbbd0a8db985034f11
 

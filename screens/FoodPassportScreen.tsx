@@ -9,16 +9,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList } from '../App';
-import { getAuth } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+// Import Firebase from our central config
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as ImagePicker from 'react-native-image-picker';
 import Geolocation from '@react-native-community/geolocation';
+// Re-enable EXIF for extracting location data from images
+import Exif from 'react-native-exif';
+import StarRating from '../components/StarRating';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -60,8 +64,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
         
         // Get current user
         try {
-            const auth = getAuth();
-            const user = auth.currentUser;
+            const user = auth().currentUser;
             
             if (user) {
                 setUserInfo({
@@ -88,8 +91,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const fetchMealEntries = async () => {
         try {
             setLoading(true);
-            const auth = getAuth();
-            const userId = auth.currentUser?.uid;
+            const userId = auth().currentUser?.uid;
             
             if (!userId) {
                 setError('User not authenticated');
@@ -146,13 +148,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
         setImageErrors(prev => ({...prev, [mealId]: true}));
     };
 
-    // Updated Image Picker function
+    // Simplified Image Picker function for debugging
 
     const openImagePicker = async () => {
-      // Create a unique session ID for this upload
-      const sessionId = Math.random().toString(36).substring(2, 15);
-      console.log(`Starting photo upload session: ${sessionId}`);
-      
+      console.log('Opening image picker with EXIF data extraction');
+
       const options = {
         mediaType: 'photo',
         includeBase64: false,
@@ -164,75 +164,102 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
       try {
         // Use the Promise API
         const result = await ImagePicker.launchImageLibrary(options);
-        
+
         if (result.didCancel) {
           console.log('User cancelled image picker');
           return;
         }
-        
+
         if (result.errorCode) {
           console.log('Image picker error:', result.errorCode, result.errorMessage);
           Alert.alert('Error', 'There was an error selecting the image.');
           return;
         }
-        
+
         if (!result.assets || result.assets.length === 0) {
           console.log('No assets returned from picker');
           return;
         }
-        
+
         const selectedImage = result.assets[0];
-        
+
         if (!selectedImage.uri) {
           Alert.alert('Error', 'Could not get image data. Please try another image.');
           return;
         }
-        
-        // Add a session parameter to the URI to ensure uniqueness
-        const uniqueUri = selectedImage.uri.includes('?')
-          ? `${selectedImage.uri}&session=${sessionId}`
-          : `${selectedImage.uri}?session=${sessionId}`;
-          
-        console.log(`Selected image with URI: ${uniqueUri}`);
-        
-        // Get current location
+
+        // Use the clean URI directly without any modifications
+        const imageUri = selectedImage.uri;
+        console.log(`Selected image with URI: ${imageUri}`);
+
+        // Create a simple photo object for the crop screen
+        const photoObject = {
+          uri: imageUri,
+          width: selectedImage.width || 1000,
+          height: selectedImage.height || 1000
+        };
+
+        // Try to extract EXIF data including location
+        try {
+          console.log("Attempting to extract EXIF data from image");
+          const exifData = await Exif.getExif(imageUri);
+          console.log("EXIF data retrieved:", JSON.stringify(exifData));
+
+          // Check if GPS data is available in the EXIF
+          if (exifData && exifData.GPSLatitude && exifData.GPSLongitude) {
+            console.log("EXIF GPS data found:", {
+              lat: exifData.GPSLatitude,
+              lng: exifData.GPSLongitude
+            });
+
+            // Create a location object from EXIF data
+            const location = {
+              latitude: parseFloat(exifData.GPSLatitude),
+              longitude: parseFloat(exifData.GPSLongitude),
+              source: 'exif'
+            };
+
+            // Navigate with EXIF location data
+            navigation.navigate('Crop', {
+              photo: photoObject,
+              location: location,
+              exifData: exifData, // Pass the full EXIF data for potential future use
+              _navigationKey: `image_${Date.now()}`
+            });
+            return;
+          } else {
+            console.log("No EXIF GPS data found in the image, falling back to device location");
+          }
+        } catch (exifError) {
+          console.log("Error extracting EXIF data:", exifError);
+          console.log("Falling back to device location");
+        }
+
+        // Fallback to device location if EXIF extraction fails or no GPS data
         Geolocation.getCurrentPosition(
           position => {
             const location = {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
+              source: 'device'
             };
-            
-            // Create a complete photo object with the session ID
-            const photoObject = {
-              uri: uniqueUri,
-              width: selectedImage.width || 1000,
-              height: selectedImage.height || 1000,
-              sessionId: sessionId // Add session ID for tracking
-            };
-            
-            // Navigate to EditPhoto screen with the unique photo
-            console.log(`Navigating to EditPhoto with session ${sessionId}`);
-            navigation.navigate('EditPhoto', {
+
+            // Navigate with device location as fallback
+            navigation.navigate('Crop', {
               photo: photoObject,
               location: location,
-              _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+              // Generate a unique navigation key
+              _navigationKey: `image_${Date.now()}`
             });
           },
           error => {
             console.log('Location error:', error);
-            // Even without location, still allow uploading
-            const photoObject = {
-              uri: uniqueUri,
-              width: selectedImage.width || 1000,
-              height: selectedImage.height || 1000,
-              sessionId: sessionId // Add session ID for tracking
-            };
-            
-            navigation.navigate('EditPhoto', {
+
+            // Navigate without location info
+            navigation.navigate('Crop', {
               photo: photoObject,
               location: null,
-              _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+              _navigationKey: `image_${Date.now()}`
             });
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
@@ -246,168 +273,97 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const signOut = async () => {
         try {
             console.log("Starting sign out process");
-            
-            // First sign out from Google
-            try {
-                await GoogleSignin.signOut();
-                console.log("Google sign out successful");
-            } catch (googleError) {
-                console.error('Google Sign out error:', googleError);
-                // Continue with Firebase sign out even if Google fails
-            }
-            
-            // Then sign out from Firebase
-            const auth = getAuth();
-            await auth.signOut();
-            console.log("Firebase sign out successful");
-            
-            // Navigate to Login screen
+
+            // No need to call getAuth again, use the imported auth directly
+
+            // Debug authentication state
+            console.log("Auth state before sign out:", {
+                currentUser: auth().currentUser ? {
+                    uid: auth().currentUser.uid,
+                    email: auth().currentUser.email
+                } : null
+            });
+
+            // Sign out of Google first
+            await GoogleSignin.signOut();
+
+            // Then sign out of Firebase
+            await auth().signOut();
+
+            console.log("Sign out successful");
+
+            // Navigate to login screen
             navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
             });
-            console.log("Navigation to Login complete");
-        } catch (err: any) {
-            console.error('Sign out error:', err);
-            Alert.alert('Error', `Failed to sign out: ${err.message}`);
+        } catch (error) {
+            console.error('Error signing out:', error);
+            Alert.alert('Error', `Failed to sign out: ${error.message || 'Unknown error'}`);
         }
     };
     
-    const confirmSignOut = () => {
-        Alert.alert(
-            'Sign Out',
-            'Are you sure you want to sign out?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Sign Out', onPress: signOut }
-            ],
-            { cancelable: true }
-        );
-    };
-    
-    // Error state
-    if (error) {
-        return (
-            <View style={[styles.container, styles.centerContent]}>
-                <Icon name="error" size={64} color="#ff6b6b" />
-                <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity
-                    style={styles.retryButton}
-                    onPress={() => {
-                        setError(null);
-                        setLoading(true);
-                        fetchMealEntries();
-                    }}
-                >
-                    <Text style={styles.retryButtonText}>Retry</Text>
-                </TouchableOpacity>
+    // Function to render each meal item
+    const renderMealItem = ({ item }: { item: MealEntry }) => (
+        <TouchableOpacity 
+            style={styles.mealCard}
+            onPress={() => viewMealDetails(item)}
+        >
+            {item.photoUrl && !imageErrors[item.id] ? (
+                <Image 
+                    source={{ uri: item.photoUrl }} 
+                    style={styles.mealImage}
+                    onError={() => handleImageError(item.id)}
+                />
+            ) : (
+                <View style={styles.imagePlaceholder}>
+                    <Icon name="image" size={24} color="#ddd" />
+                </View>
+            )}
+            <View style={styles.mealCardContent}>
+                <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Untitled meal'}</Text>
+                <View style={styles.ratingContainer}>
+                    <StarRating rating={item.rating} starSize={16} spacing={2} />
+                </View>
+                {item.restaurant && (
+                    <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
+                )}
             </View>
-        );
-    }
+        </TouchableOpacity>
+    );
     
-    // Loading state
-    if (loading && !refreshing) {
-        return (
-            <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color="#ff6b6b" />
-            </View>
-        );
-    }
-    
+    // Render the main screen
     return (
         <View style={styles.container}>
-            {/* User Profile Section */}
-            <View style={styles.profileContainer}>
-                {userInfo?.photoURL && !imageErrors['profile'] ? (
-                    <Image
-                        source={{ uri: userInfo.photoURL }}
-                        style={styles.profileImage}
-                        onError={() => setImageErrors(prev => ({...prev, profile: true}))}
-                    />
-                ) : (
-                    <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
-                        <Icon name="person" size={32} color="#fff" />
-                    </View>
-                )}
-                
-                <View style={styles.profileInfo}>
-                    <Text style={styles.profileName}>{userInfo?.displayName || 'Food Lover'}</Text>
-                    <Text style={styles.profileEmail}>{userInfo?.email}</Text>
-                    <View style={styles.statsContainer}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{meals.length}</Text>
-                            <Text style={styles.statLabel}>Meals</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>
-                                {meals.length > 0 ? (meals.reduce((sum, meal) => sum + meal.rating, 0) / meals.length).toFixed(1) : '0.0'}
-                            </Text>
-                            <Text style={styles.statLabel}>Avg Rating</Text>
-                        </View>
-                    </View>
-                </View>
-                <TouchableOpacity style={styles.logoutButton} onPress={confirmSignOut}>
-                    <Icon name="logout" size={24} color="#666" />
+            <View style={styles.header}>
+                <Text style={styles.title}>Food Passport</Text>
+                <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
+                    <Icon name="exit-to-app" size={22} color="#fff" />
                 </TouchableOpacity>
             </View>
             
-            {/* Meals Gallery Section */}
-            <View style={styles.galleryContainer}>
-                <Text style={styles.galleryTitle}>My Food Passport</Text>
-                
-                {meals.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Icon name="no-food" size={64} color="#ccc" />
-                        <Text style={styles.emptyText}>No meal entries yet</Text>
-                        <View style={styles.addMealButtonsContainer}>
-                            <TouchableOpacity
-                                style={styles.addMealButton}
-                                onPress={() => navigation.navigate('Camera')}
-                            >
-                                <Icon name="camera-alt" size={20} color="white" />
-                                <Text style={styles.addMealButtonText}>Take Photo</Text>
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity
-                                style={[styles.addMealButton, styles.uploadButton]}
-                                onPress={openImagePicker}
-                            >
-                                <Icon name="photo-library" size={20} color="white" />
-                                <Text style={styles.addMealButtonText}>Upload Photo</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ) : (
+            {loading && !refreshing ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#ff6b6b" />
+                    <Text style={styles.loadingText}>Loading your food passport...</Text>
+                </View>
+            ) : (
+                <>
+                    <TouchableOpacity 
+                        style={styles.addButton}
+                        onPress={openImagePicker}
+                    >
+                        <Icon name="add" size={24} color="#fff" />
+                        <Text style={styles.addButtonText}>Add New Entry</Text>
+                    </TouchableOpacity>
+                    
                     <FlatList
                         data={meals}
+                        renderItem={renderMealItem}
                         keyExtractor={(item) => item.id}
                         numColumns={2}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                style={styles.mealItem}
-                                onPress={() => viewMealDetails(item)}
-                            >
-                                {item.photoUrl && !imageErrors[item.id] ? (
-                                    <Image
-                                        source={{ uri: item.photoUrl }}
-                                        style={styles.mealImage}
-                                        onError={() => handleImageError(item.id)}
-                                    />
-                                ) : (
-                                    <View style={[styles.mealImage, styles.noImageContainer]}>
-                                        <Icon name="no-food" size={24} color="#ccc" />
-                                    </View>
-                                )}
-                                <View style={styles.mealInfo}>
-                                    <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Unknown Meal'}</Text>
-                                    <View style={styles.mealRating}>
-                                        <Text style={styles.mealRatingText}>{item.rating}</Text>
-                                        <Icon name="star" size={12} color="#FFD700" />
-                                    </View>
-                                </View>
-                            </TouchableOpacity>
-                        )}
-                        contentContainerStyle={styles.gallery}
+                        columnWrapperStyle={styles.row}
+                        contentContainerStyle={styles.list}
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}
@@ -415,210 +371,130 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                 colors={['#ff6b6b']}
                             />
                         }
-                        ListFooterComponent={
-                            <View style={styles.addButtonContainer}>
-                                <View style={styles.addMealButtonsContainer}>
-                                    <TouchableOpacity
-                                        style={styles.addMealButton}
-                                        onPress={() => navigation.navigate('Camera')}
-                                    >
-                                        <Icon name="camera-alt" size={20} color="white" />
-                                        <Text style={styles.addMealButtonText}>Take Photo</Text>
-                                    </TouchableOpacity>
-                                    
-                                    <TouchableOpacity
-                                        style={[styles.addMealButton, styles.uploadButton]}
-                                        onPress={openImagePicker}
-                                    >
-                                        <Icon name="photo-library" size={20} color="white" />
-                                        <Text style={styles.addMealButtonText}>Upload Photo</Text>
-                                    </TouchableOpacity>
-                                </View>
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <Icon name="book" size={64} color="#ddd" />
+                                <Text style={styles.emptyText}>No meals in your passport yet</Text>
+                                <Text style={styles.emptySubtext}>
+                                    Tap the button above to add your first meal!
+                                </Text>
                             </View>
                         }
                     />
-                )}
-            </View>
+                </>
+            )}
         </View>
     );
 };
-  
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f8f8',
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 25,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  profileContainer: {
-    flexDirection: 'row',
-    padding: 20,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    alignItems: 'center',
-  },
-  profileImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#eee',
-  },
-  profileImagePlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ccc',
-  },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    marginTop: 5,
-  },
-  statItem: {
-    marginRight: 20,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ff6b6b',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  logoutButton: {
-    padding: 8,
-  },
-  galleryContainer: {
-    flex: 1,
-    padding: 15,
-  },
-  galleryTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  gallery: {
-    paddingBottom: 20,
-  },
-  mealItem: {
-    width: itemWidth,
-    margin: 5,
-    borderRadius: 10,
-    backgroundColor: 'white',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  mealImage: {
-    width: '100%',
-    height: itemWidth,
-  },
-  noImageContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f2f2f2',
-  },
-  mealInfo: {
-    padding: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  mealName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  mealRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f2f2f2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  mealRatingText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginRight: 3,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-    marginVertical: 10,
-  },
-  addMealButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 15,
-  },
-  addMealButton: {
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 6,
-  },
-  uploadButton: {
-    backgroundColor: '#4285F4',
-  },
-  addMealButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  addButtonContainer: {
-    marginTop: 20,
-    paddingBottom: 20,
-  },
+    container: {
+        flex: 1,
+        backgroundColor: '#f8f8f8',
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 15,
+        backgroundColor: '#ff6b6b',
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    signOutButton: {
+        padding: 5,
+    },
+    addButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ff6b6b',
+        padding: 12,
+        margin: 10,
+        borderRadius: 8,
+        justifyContent: 'center',
+    },
+    addButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+    },
+    list: {
+        padding: 10,
+        paddingBottom: 30,
+    },
+    row: {
+        justifyContent: 'space-between',
+    },
+    mealCard: {
+        width: itemWidth,
+        marginBottom: 20,
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        overflow: 'hidden',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    mealImage: {
+        width: '100%',
+        height: itemWidth,
+        backgroundColor: '#f0f0f0',
+    },
+    imagePlaceholder: {
+        width: '100%',
+        height: itemWidth,
+        backgroundColor: '#f0f0f0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    mealCardContent: {
+        padding: 10,
+    },
+    mealName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 5,
+    },
+    ratingContainer: {
+        flexDirection: 'row',
+        marginBottom: 5,
+    },
+    restaurantName: {
+        fontSize: 14,
+        color: '#666',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 50,
+    },
+    emptyText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#555',
+        marginTop: 15,
+    },
+    emptySubtext: {
+        fontSize: 14,
+        color: '#888',
+        textAlign: 'center',
+        marginTop: 5,
+    },
 });
 
 export default FoodPassportScreen;

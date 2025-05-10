@@ -7,9 +7,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
-import { getAuth } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import StarRating from '../components/StarRating';
+// Import Firebase from our central config
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -60,8 +60,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setPhotoUrl(null);
     
     // If user is logged in, save data automatically
-    const auth = getAuth();
-    const user = auth.currentUser;
+    const user = auth().currentUser;
     if (user) {
       // Small delay to ensure component renders first
       setTimeout(() => {
@@ -76,9 +75,22 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [instanceKey]); // Using instanceKey ensures this runs for each unique navigation
 
   const uploadImageToFirebase = async (): Promise<string> => {
-    const auth = getAuth();
-    const user = auth.currentUser;
+    // Get current user directly from auth module
+    const user = auth().currentUser;
     if (!user) throw new Error('User not logged in');
+
+    // Force user token refresh to ensure we have the latest authentication token
+    const idToken = await user.getIdToken(true); // true forces a refresh
+    console.log("Refreshed ID token obtained:", idToken ? "Success" : "Failed");
+
+    // Debug authentication state
+    console.log("Current auth user:", {
+      uid: user.uid,
+      email: user.email,
+      isAnonymous: user.isAnonymous,
+      emailVerified: user.emailVerified,
+      providerData: user.providerData?.length || 0
+    });
 
     try {
       // Check if photo is defined and has a uri property
@@ -88,44 +100,65 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }
 
       // Extract and normalize the image uri
-      let imageUri = photo.uri;
-      console.log("Original image URI:", imageUri);
-      
+      // Remove any query parameters that might have been added (like session ID)
+      let imageUri = photo.uri.split('?')[0];
+      console.log("Original image URI:", photo.uri);
+      console.log("Cleaned image URI (no query params):", imageUri);
+
       // Create a storage reference with a unique filename
       const timestamp = new Date().getTime();
       const filename = `meal_${user.uid}_${timestamp}.jpg`;
+
+      // Debug Firebase Storage configuration
+      const storageBucket = storage().app.options.storageBucket;
+      console.log("Firebase Storage config:", {
+        bucket: storageBucket,
+        app: storage().app.name
+      });
+
+      // Verify the storage bucket is correctly formatted (should be projectId.appspot.com)
+      if (!storageBucket || !storageBucket.includes('appspot.com')) {
+        console.warn("Storage bucket appears to be misconfigured:", storageBucket);
+      }
+
+      // Create storage reference with explicit app reference to ensure correct initialization
       const storageRef = storage().ref(`meals/${user.uid}/${filename}`);
-      
+      console.log("Storage reference path:", `meals/${user.uid}/${filename}`);
+
       let downloadUrl = '';
-      
-      // First try the blob approach as it works more consistently
-      try {
-        console.log("Trying blob upload method");
-        
-        // For blob uploads, we need the full URI
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        
-        await storageRef.put(blob);
-        console.log("Blob upload completed successfully");
-        
-        // Get the download URL
-        downloadUrl = await storageRef.getDownloadURL();
-      } catch (blobError) {
-        console.error("Blob upload failed:", blobError);
-        
-        // Fall back to direct upload if blob fails
-        // Try to normalize URI based on platform
-        if (Platform.OS === 'ios' && imageUri.startsWith('file://')) {
-          imageUri = imageUri.replace('file://', '');
-        } else if (Platform.OS === 'android' && !imageUri.startsWith('file://')) {
+
+      // Skip blob approach and directly use putFile which is more reliable
+      console.log("Using direct file upload method");
+
+      // Try to normalize URI based on platform
+      if (Platform.OS === 'ios') {
+        // Make sure we have file:// prefix for iOS
+        if (!imageUri.startsWith('file://')) {
           imageUri = `file://${imageUri}`;
         }
-        
-        console.log("Normalized image URI for direct upload:", imageUri);
-        
-        const task = storageRef.putFile(imageUri);
-        
+      } else if (Platform.OS === 'android') {
+        // Android sometimes needs file:// removed
+        if (imageUri.startsWith('file://')) {
+          imageUri = imageUri.replace('file://', '');
+        }
+      }
+
+      console.log("Normalized image URI for upload:", imageUri);
+
+      try {
+        // Add additional metadata to help with debugging
+        const metadata = {
+          contentType: 'image/jpeg',
+          customMetadata: {
+            userId: user.uid,
+            timestamp: timestamp.toString(),
+            platform: Platform.OS
+          }
+        };
+
+        // Try direct upload with metadata
+        const task = storageRef.putFile(imageUri, metadata);
+
         // Add progress monitoring
         task.on('state_changed',
           taskSnapshot => {
@@ -137,14 +170,21 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             throw error;
           }
         );
-        
+
         await task;
         console.log("Direct upload completed successfully");
-        
+
         // Get the download URL
         downloadUrl = await storageRef.getDownloadURL();
+      } catch (uploadError) {
+        console.error("Direct upload failed:", uploadError);
+        // More detailed error information
+        if (uploadError.code === 'storage/unauthorized') {
+          console.error("Firebase Storage Rules may be restricting access. Check your Firebase Console > Storage > Rules");
+        }
+        throw uploadError;
       }
-      
+
       console.log("Download URL obtained:", downloadUrl);
       return downloadUrl;
     } catch (error) {
@@ -154,9 +194,32 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const saveToFirebase = async (): Promise<void> => {
-    const auth = getAuth();
-    const user = auth.currentUser;
+    // Get current user from the imported auth function
+    const user = auth().currentUser;
+
+    try {
+      // If user exists, force token refresh to ensure we have the latest credentials
+      if (user) {
+        await user.getIdToken(true);  // Force token refresh
+      }
+    } catch (tokenError) {
+      console.error("Failed to refresh token:", tokenError);
+      // Continue anyway, the upload will likely fail but with more specific error
+    }
+
+    // Debug authentication state
+    console.log("Authentication state in saveToFirebase:", {
+      currentUser: user ? {
+        uid: user.uid,
+        email: user.email,
+        isAnonymous: user.isAnonymous,
+        emailVerified: user.emailVerified,
+        providerCount: user.providerData?.length || 0
+      } : null
+    });
+
     if (!user) {
+      console.log("No authenticated user found");
       Alert.alert(
         'Not Logged In',
         'Would you like to log in to save this meal to your food passport?',
@@ -182,33 +245,84 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       const sessionId = Math.random().toString(36).substring(2, 15);
       console.log(`Starting new upload session: ${sessionId}`);
 
-      // Upload image to Firebase Storage
-      console.log("Starting image upload to Firebase Storage...");
-      const imageUrl = await uploadImageToFirebase();
-      console.log("Image uploaded successfully:", imageUrl);
-      setPhotoUrl(imageUrl);
+      // Log critical Firebase config info for debugging
+      console.log("Firebase config:", {
+        storageBucket: storage().app.options.storageBucket,
+        appId: storage().app.options.appId,
+        projectId: storage().app.options.projectId
+      });
 
-      // Save meal data to Firestore
-      const mealData = {
-        userId: user.uid,
-        photoUrl: imageUrl,
-        rating,
-        restaurant: restaurant || '',
-        meal: meal || '',
-        location,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        sessionId
-      };
+      try {
+        // Upload image to Firebase Storage
+        console.log("Starting image upload to Firebase Storage...");
+        const imageUrl = await uploadImageToFirebase();
+        console.log("Image uploaded successfully:", imageUrl);
+        setPhotoUrl(imageUrl);
 
-      console.log("Attempting to save to Firestore with data:", JSON.stringify({
-        ...mealData,
-        createdAt: 'Timestamp object'
-      }));
-      
-      const docRef = await firestore().collection('mealEntries').add(mealData);
-      
-      setSaved(true);
-      console.log(`Meal saved with ID: ${docRef.id} (session: ${sessionId})`);
+        // Save meal data to Firestore, ensuring location data is preserved
+        const mealData = {
+          userId: user.uid,
+          photoUrl: imageUrl,
+          rating,
+          restaurant: restaurant || '',
+          meal: meal || '',
+          // Preserve the location source if available
+          location: location ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            // Keep the source if it exists ('exif', 'device', etc.)
+            ...(location.source && { source: location.source })
+          } : null,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          sessionId,
+          platform: Platform.OS,
+          appVersion: '1.0.0' // Add app version for debugging
+        };
+
+        console.log("Attempting to save to Firestore with data:", JSON.stringify({
+          ...mealData,
+          createdAt: 'Timestamp object'
+        }));
+
+        const docRef = await firestore().collection('mealEntries').add(mealData);
+
+        setSaved(true);
+        console.log(`Meal saved with ID: ${docRef.id} (session: ${sessionId})`);
+      } catch (storageError) {
+        console.error("Storage or Firestore error:", storageError);
+
+        // More detailed error handling based on the error code
+        if (storageError.code === 'storage/unauthorized') {
+          console.error("Firebase Storage Rules are preventing the upload. Please check your Firebase Console > Storage > Rules");
+          Alert.alert(
+            'Authorization Error',
+            'You don\'t have permission to upload images. This may be due to Firebase Storage security rules.',
+            [
+              {
+                text: 'Try Again',
+                onPress: () => {
+                  // Force fresh login to get new tokens
+                  auth().signOut().then(() => {
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: 'Login' }],
+                    });
+                  });
+                }
+              }
+            ]
+          );
+        } else if (storageError.code === 'storage/quota-exceeded') {
+          Alert.alert('Storage Limit', 'Your Firebase Storage quota has been exceeded.');
+        } else if (storageError.code === 'storage/invalid-argument') {
+          Alert.alert('Invalid File', 'The selected image is invalid or corrupted.');
+        } else {
+          // Generic error
+          Alert.alert('Error', `Failed to save your meal: ${storageError.message || 'Unknown error'}`);
+        }
+
+        throw storageError; // Re-throw to be caught by the outer catch
+      }
     } catch (error) {
       console.error('Error saving meal to Firebase:', error);
       Alert.alert('Error', `Failed to save your meal: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -283,17 +397,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.infoContainer}>
           <View style={styles.ratingContainer}>
             <Text style={styles.ratingLabel}>Your Rating:</Text>
-            <View style={styles.starsContainer}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <FontAwesome
-                  key={star}
-                  name={star <= rating ? 'star' : 'star-o'}
-                  size={20}
-                  color={star <= rating ? '#FFD700' : '#BDC3C7'}
-                  style={styles.star}
-                />
-              ))}
-            </View>
+            <StarRating rating={rating} starSize={20} />
           </View>
 
           {restaurant && (
@@ -314,9 +418,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.locationContainer}>
             <Text style={styles.locationLabel}>Location:</Text>
             <Text style={styles.locationText}>
-              {location ?
-                `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` :
-                'Location data not available'}
+              {location ? (
+                <>
+                  {`${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
+                  {location.source && (
+                    <Text style={styles.locationSource}>
+                      {" "}({location.source === 'exif' ? 'from photo metadata' : 'current device location'})
+                    </Text>
+                  )}
+                </>
+              ) : (
+                'Location data not available'
+              )}
             </Text>
           </View>
         </View>
@@ -328,7 +441,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
 
-        {getAuth().currentUser ? (
+        {auth().currentUser ? (
           <TouchableOpacity style={styles.passportButton} onPress={viewPassport}>
             <MaterialIcon name="menu-book" size={20} color="white" />
             <Text style={styles.buttonText}>Food Passport</Text>
@@ -465,6 +578,11 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: '#666',
+  },
+  locationSource: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
   },
   buttonsContainer: {
     flexDirection: 'row',

@@ -16,6 +16,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, TabParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import ImageCropPicker from 'react-native-image-crop-picker';
+import Exif from 'react-native-exif';
+import { getMealSuggestions } from '../services/mealService';
 
 // Update the navigation prop type to use composite navigation
 type CameraScreenNavigationProp = CompositeNavigationProp<
@@ -129,64 +132,146 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const takePicture = async () => {
-    if (camera.current) {
-      try {
-        // Prevent multiple taps
-        if (isTakingPicture) {
-          return;
-        }
-        
-        setIsTakingPicture(true);
-        console.log("Taking photo...");
-        
-        const photo = await camera.current.takePhoto({
-          qualityPrioritization: 'quality',
-          flash: 'off',
-          enableAutoStabilization: true,
-          skipMetadata: false
-        });
-        
-        // Verify we got a valid photo
-        if (!photo || !photo.path) {
-          console.error("No photo path returned from camera");
-          Alert.alert('Error', 'Failed to capture photo');
+      if (camera.current) {
+        try {
+          // Prevent multiple taps
+          if (isTakingPicture) {
+            return;
+          }
+
+          setIsTakingPicture(true);
+          console.log("Taking photo...");
+
+          const photo = await camera.current.takePhoto({
+            qualityPrioritization: 'quality',
+            flash: 'off',
+            enableAutoStabilization: true,
+            skipMetadata: false
+          });
+
+          // Verify we got a valid photo
+          if (!photo || !photo.path) {
+            console.error("No photo path returned from camera");
+            Alert.alert('Error', 'Failed to capture photo');
+            setIsTakingPicture(false);
+            return;
+          }
+
+          console.log("Photo taken:", photo.path);
+
+          // Normalize the file path based on platform
+          let normalizedPath = photo.path;
+          if (Platform.OS === 'ios' && !normalizedPath.startsWith('file://')) {
+            normalizedPath = `file://${normalizedPath}`;
+          } else if (Platform.OS === 'android' && !normalizedPath.startsWith('file://')) {
+            normalizedPath = `file://${normalizedPath}`;
+          }
+
+          console.log("Normalized photo path:", normalizedPath);
+
+          // Add a timestamp to create a unique navigation key
+          const timestamp = new Date().getTime();
+          const navigationKey = `camera_photo_${timestamp}`;
+
+          // Reset any existing cropper state by cleaning up
+          ImageCropPicker.clean().catch(e => {
+            console.log('ImageCropPicker cleanup error:', e);
+          });
+
+          // Try to extract EXIF data including location from the captured photo
+          try {
+            console.log("Attempting to extract EXIF data from captured photo");
+            const exifData = await Exif.getExif(normalizedPath);
+            console.log("EXIF data retrieved:", JSON.stringify(exifData));
+
+            // Check if GPS data is available in the EXIF
+            if (exifData && exifData.GPSLatitude && exifData.GPSLongitude) {
+              console.log("EXIF GPS data found in captured photo:", {
+                lat: exifData.GPSLatitude,
+                lng: exifData.GPSLongitude
+              });
+
+              // Create a location object from EXIF data
+              const exifLocation = {
+                latitude: parseFloat(exifData.GPSLatitude),
+                longitude: parseFloat(exifData.GPSLongitude),
+                source: 'exif'
+              };
+
+              // Start fetching restaurant suggestions as early as possible
+              console.log("Starting early fetch of restaurant suggestions after taking photo (EXIF location)");
+              setTimeout(() => {
+                getMealSuggestions(normalizedPath, exifLocation)
+                  .then(suggestions => {
+                    console.log("Early restaurant suggestions fetched successfully:",
+                      suggestions.restaurants?.length || 0, "restaurants");
+                    // Store in global app cache for later screens to use
+                    (global as any).prefetchedSuggestions = suggestions;
+                  })
+                  .catch(err => {
+                    console.log("Early restaurant suggestions fetch failed:", err);
+                  });
+              }, 0);
+
+              // Navigate with EXIF location data
+              navigation.navigate('Crop', {
+                photo: {
+                  uri: normalizedPath,
+                  width: photo.width,
+                  height: photo.height,
+                },
+                location: exifLocation,
+                exifData: exifData, // Pass the full EXIF data for potential future use
+                _navigationKey: navigationKey,
+              });
+              return;
+            } else {
+              console.log("No EXIF GPS data found in the captured photo, using device location");
+            }
+          } catch (exifError) {
+            console.log("Error extracting EXIF data from captured photo:", exifError);
+            console.log("Falling back to device location");
+          }
+
+          // Start fetching restaurant suggestions as early as possible
+          console.log("Starting early fetch of restaurant suggestions after taking photo (device location)");
+          if (location) {
+            setTimeout(() => {
+              getMealSuggestions(normalizedPath, location)
+                .then(suggestions => {
+                  console.log("Early restaurant suggestions fetched successfully:",
+                    suggestions.restaurants?.length || 0, "restaurants");
+                  // Store in global app cache for later screens to use
+                  (global as any).prefetchedSuggestions = suggestions;
+                })
+                .catch(err => {
+                  console.log("Early restaurant suggestions fetch failed:", err);
+                });
+            }, 0);
+          }
+
+          // Use device location as fallback if EXIF extraction fails or no GPS data available
+          navigation.navigate('Crop', {
+            photo: {
+              uri: normalizedPath,
+              width: photo.width,
+              height: photo.height,
+            },
+            location: location, // Use the device location as fallback
+            _navigationKey: navigationKey, // Add navigation key for component refresh
+          });
+          
+        } catch (error) {
+          console.error('Error taking photo:', error);
+          Alert.alert('Error', 'Failed to take photo');
+        } finally {
           setIsTakingPicture(false);
-          return;
         }
-        
-        console.log("Photo taken:", photo.path);
-        
-        // Normalize the file path based on platform
-        let normalizedPath = photo.path;
-        if (Platform.OS === 'ios' && !normalizedPath.startsWith('file://')) {
-          normalizedPath = `file://${normalizedPath}`;
-        } else if (Platform.OS === 'android' && !normalizedPath.startsWith('file://')) {
-          normalizedPath = `file://${normalizedPath}`;
-        }
-        
-        console.log("Normalized photo path:", normalizedPath);
-        
-        // Navigate with the normalized path - updated to use tab navigator path
-        navigation.navigate('EditPhoto', {
-          photo: {
-            uri: normalizedPath,
-            width: photo.width,
-            height: photo.height,
-          },
-          location: location,
-        });
-        
-      } catch (error) {
-        console.error('Error taking photo:', error);
-        Alert.alert('Error', 'Failed to take photo');
-      } finally {
-        setIsTakingPicture(false);
+      } else {
+        console.log("Camera ref is null");
+        Alert.alert('Error', 'Camera is not ready');
       }
-    } else {
-      console.log("Camera ref is null");
-      Alert.alert('Error', 'Camera is not ready');
-    }
-  };
+    };
   
   const goBack = () => {
     navigation.navigate('Home');
