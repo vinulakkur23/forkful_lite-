@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,10 @@ import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
 import StarRating from '../components/StarRating';
+// Import components for tab view
+import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+// Import map component
+import MapView, { Marker, Callout } from 'react-native-maps';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -39,12 +43,25 @@ interface MealEntry {
   location: {
     latitude: number;
     longitude: number;
+    source?: string;
   } | null;
   createdAt: number;
+  // Add any other fields that might be in your database
+  mealType?: string;
+  comments?: {
+    liked: string;
+    disliked: string;
+  };
 }
 
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 40) / 2; // 2 items per row with 10px spacing
+
+// Define the tab routes
+type TabRoutes = {
+  key: string;
+  title: string;
+};
 
 const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
@@ -53,12 +70,22 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const [userInfo, setUserInfo] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
-    
+
     // State for profile stats
     const [profileStats, setProfileStats] = useState({
         totalMeals: 0,
         averageRating: 0
     });
+
+    // Tab view state
+    const [tabIndex, setTabIndex] = useState(0);
+    const [tabRoutes] = useState<TabRoutes[]>([
+      { key: 'list', title: 'List' },
+      { key: 'map', title: 'Map' },
+    ]);
+
+    // Map view reference
+    const mapRef = useRef<MapView | null>(null);
 
     useEffect(() => {
         // Initialize GoogleSignin

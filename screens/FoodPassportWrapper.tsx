@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
-import FoodPassportScreen from './FoodPassportScreen';
+import FoodPassportMapScreen from './FoodPassportMapScreen';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 type FoodPassportWrapperProps = {
@@ -83,7 +83,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   return (
     <SafeAreaView style={styles.container}>
       <ErrorBoundary navigation={props.navigation}>
-        <FoodPassportScreen {...props} />
+        <FoodPassportMapScreen {...props} />
       </ErrorBoundary>
     </SafeAreaView>
   );
