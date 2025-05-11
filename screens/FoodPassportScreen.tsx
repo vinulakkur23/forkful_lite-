@@ -429,15 +429,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                                 </Text>
                                                 <Text style={styles.statLabel}>Avg. Rating</Text>
                                             </View>
+                                            <View style={styles.statDivider} />
+                                            <TouchableOpacity
+                                                style={styles.statItemButton}
+                                                onPress={openImagePicker}
+                                            >
+                                                <Icon name="add-circle" size={18} color="#ff6b6b" />
+                                                <Text style={styles.statValue}>
+                                                    +
+                                                </Text>
+                                                <Text style={styles.statLabel}>New Entry</Text>
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
-                                    <TouchableOpacity
-                                        style={styles.addButton}
-                                        onPress={openImagePicker}
-                                    >
-                                        <Icon name="add-circle" size={24} color="#fff" />
-                                        <Text style={styles.addButtonText}>Add New Entry</Text>
-                                    </TouchableOpacity>
                                 </View>
                             ) : null
                         }
@@ -446,7 +450,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                 <Icon name="book" size={64} color="#ddd" />
                                 <Text style={styles.emptyText}>No meals in your passport yet</Text>
                                 <Text style={styles.emptySubtext}>
-                                    Tap the button above to add your first meal!
+                                    Tap "New Entry" to add your first meal!
                                 </Text>
                             </View>
                         }
@@ -540,6 +544,10 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
     },
+    statItemButton: {
+        flex: 1,
+        alignItems: 'center',
+    },
     starIcon: {
         width: 18,
         height: 18,
@@ -560,20 +568,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#666',
     },
-    addButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#ff6b6b',
-        padding: 12,
-        margin: 10,
-        borderRadius: 8,
-        justifyContent: 'center',
-    },
-    addButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        marginLeft: 8,
-    },
+    // Styles for the standalone button removed and integrated into profile stats
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',

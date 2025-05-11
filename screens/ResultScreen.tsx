@@ -27,7 +27,16 @@ type Props = {
 type MealType = "Restaurant" | "Homemade";
 
 const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, location, rating, restaurant, meal, mealType = "Restaurant" } = route.params;
+  const {
+    photo,
+    location,
+    rating,
+    restaurant,
+    meal,
+    mealType = "Restaurant",
+    likedComment = '',
+    dislikedComment = ''
+  } = route.params;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -277,6 +286,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           restaurant: restaurant || '',
           meal: meal || '',
           mealType: mealType || 'Restaurant', // Include the meal type
+          // Include user comments about what they liked and didn't like
+          // Save comments with proper formatting
+          comments: {
+            liked: likedComment || '',
+            disliked: dislikedComment || ''
+          },
           // Preserve the location source if available
           location: location ? {
             latitude: location.latitude,
@@ -436,8 +451,24 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           {mealType === "Restaurant" && restaurant && (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Restaurant:</Text>
-              <Text style={styles.infoValue}>{restaurant}</Text>
-              <MaterialIcon name="restaurant" size={16} color="#666" style={{marginLeft: 5}} />
+              <View style={styles.restaurantInfoContainer}>
+                <Text style={styles.infoValue}>{restaurant}</Text>
+                <MaterialIcon name="restaurant" size={16} color="#666" style={{marginLeft: 5}} />
+
+                {/* Show additional restaurants if multiple were selected */}
+                {location && location.selectedRestaurants && location.selectedRestaurants.length > 1 && (
+                  <View style={styles.additionalRestaurants}>
+                    <Text style={styles.additionalRestaurantsLabel}>
+                      +{location.selectedRestaurants.length - 1} more options
+                    </Text>
+                    <View style={styles.additionalRestaurantsList}>
+                      {location.selectedRestaurants.slice(1).map((name, index) => (
+                        <Text key={index} style={styles.additionalRestaurantName}>• {name}</Text>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
             </View>
           )}
 
@@ -453,10 +484,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.locationText}>
               {location ? (
                 <>
-                  {location.source === 'exif'
-                    ? 'Location from photo metadata'
-                    : location.source === 'restaurant_selection'
-                      ? 'Location from restaurant selection'
+                  {location.source === 'restaurant_selection'
+                    ? `Location from restaurant: ${restaurant}`
+                    : location.source === 'exif'
+                      ? 'Location from photo metadata (EXIF)'
                       : 'Using your current location'}
                 </>
               ) : (
@@ -464,6 +495,29 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               )}
             </Text>
           </View>
+
+          {/* Show user comments if provided */}
+          {(likedComment || dislikedComment) && (
+            <View style={styles.commentsContainer}>
+              {likedComment && (
+                <View style={styles.commentSection}>
+                  <Text style={styles.commentSectionTitle}>What you liked:</Text>
+                  <View style={styles.commentItem}>
+                    <Text style={styles.commentText}>{likedComment.trim()}</Text>
+                  </View>
+                </View>
+              )}
+
+              {dislikedComment && (
+                <View style={styles.commentSection}>
+                  <Text style={styles.commentSectionTitle}>What you didn't like:</Text>
+                  <View style={styles.commentItem}>
+                    <Text style={styles.commentText}>{dislikedComment.trim()}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </View>
 
@@ -599,6 +653,30 @@ const styles = StyleSheet.create({
   infoValue: {
     flex: 1,
   },
+  restaurantInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  additionalRestaurants: {
+    width: '100%',
+    marginTop: 5,
+  },
+  additionalRestaurantsLabel: {
+    fontSize: 13,
+    color: '#ff6b6b',
+    fontWeight: '500',
+  },
+  additionalRestaurantsList: {
+    marginTop: 2,
+    paddingLeft: 5,
+  },
+  additionalRestaurantName: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
   locationContainer: {
     marginBottom: 10,
   },
@@ -615,6 +693,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888',
     fontStyle: 'italic',
+  },
+  // Comments display styles
+  commentsContainer: {
+    width: '100%',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  commentSection: {
+    marginBottom: 12,
+  },
+  commentSectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#444',
+    marginBottom: 6,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    marginBottom: 5,
+    paddingHorizontal: 5,
+  },
+  commentBullet: {
+    fontSize: 16,
+    marginRight: 8,
+    color: '#666',
+  },
+  commentText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 18,
   },
   buttonsContainer: {
     flexDirection: 'row',

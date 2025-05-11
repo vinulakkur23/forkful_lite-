@@ -239,7 +239,7 @@ export const getMealSuggestionsForRestaurant = async (
  */
 export const searchRestaurants = async (
   searchText: string,
-  location?: { latitude: number; longitude: number } | null
+  location?: { latitude: number; longitude: number; source?: string } | null
 ): Promise<Restaurant[]> => {
   try {
     console.log(`Searching for restaurants with query: ${searchText}`);

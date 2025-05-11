@@ -11,8 +11,10 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Alert,
-  Platform
+  Platform,
+  PermissionsAndroid
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -22,6 +24,7 @@ import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 import { getMealSuggestions, getMealSuggestionsForRestaurant, searchRestaurants, Restaurant } from '../services/mealService';
 import StarRating from '../components/StarRating';
+import Geolocation from '@react-native-community/geolocation';
 
 // Update the navigation prop type to use composite navigation
 type RatingScreenNavigationProp = CompositeNavigationProp<
@@ -47,8 +50,29 @@ interface Restaurant {
 
 const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const { photo } = route.params;
+
+  // Initialize location with priority information
+  const initializeLocation = () => {
+    if (!route.params.location) return null;
+
+    // Add priority based on source
+    const loc = {...route.params.location};
+
+    // Set priority based on source (lower number = higher priority)
+    if (loc.source === 'restaurant_selection') {
+      loc.priority = 1; // Highest priority
+    } else if (loc.source === 'exif') {
+      loc.priority = 2; // Second priority
+    } else {
+      loc.priority = 3; // Lowest priority (device location)
+    }
+
+    console.log(`Initialized location with source ${loc.source}, priority ${loc.priority}`);
+    return loc;
+  };
+
   // Use state to manage location so we can update it when restaurant is selected
-  const [location, setLocation] = useState(route.params.location);
+  const [location, setLocation] = useState(initializeLocation());
   const [rating, setRating] = useState<number>(0);
 
   // Restaurant and meal state
@@ -65,12 +89,68 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Limit number of results in the autocomplete dropdown
+  const MAX_AUTOCOMPLETE_RESULTS = 3; // Show at most 3 restaurant options in the dropdown
+
+  // Track device location for restaurant search
+  const [deviceLocation, setDeviceLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [isLoadingDeviceLocation, setIsLoadingDeviceLocation] = useState(false);
+
+  // Comment sections with multiple text fields per section
+  const [likedComment1, setLikedComment1] = useState<string>('');
+  const [likedComment2, setLikedComment2] = useState<string>('');
+  const [dislikedComment1, setDislikedComment1] = useState<string>('');
+  const [dislikedComment2, setDislikedComment2] = useState<string>('');
+
   // Add meal type selector state - default to "Restaurant"
   const [mealType, setMealType] = useState<"Restaurant" | "Homemade">("Restaurant");
   
   // API configuration - hardcoded for testing
   const HARDCODED_URL = 'https://dishitout-imageinhancer.onrender.com';
   
+  // Get current device location
+  const getCurrentLocation = async () => {
+    setIsLoadingDeviceLocation(true);
+    try {
+      // Request location permission on Android
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message: "To find nearby restaurants, we need your current location.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.log("Location permission denied");
+          setIsLoadingDeviceLocation(false);
+          return;
+        }
+      }
+
+      // Get current position using Geolocation API
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log("Got device location:", latitude, longitude);
+          setDeviceLocation({ latitude, longitude });
+          setIsLoadingDeviceLocation(false);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          setIsLoadingDeviceLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
+      setIsLoadingDeviceLocation(false);
+    }
+  };
+
   // Add validation on component mount
   useEffect(() => {
     if (!photo || !photo.uri) {
@@ -91,6 +171,9 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
     // Log location data for debugging
     console.log("Initial location data in RatingScreen:", location);
 
+    // Get current device location for restaurant searches
+    getCurrentLocation();
+
     // Get suggestions when the screen loads if photo is valid
     getSuggestions();
   }, []);
@@ -103,6 +186,20 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
   };
+
+  // Handle return key press in text inputs
+  const handleSubmitEditing = (): void => {
+    // Dismiss keyboard/focus
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      const currentlyFocusedInput = TextInput.State?.currentlyFocusedInput?.();
+      if (currentlyFocusedInput) {
+        currentlyFocusedInput.blur();
+      }
+    }
+  };
+
+  // Helper function to maintain bullet points in comments and capitalize sentences
+  // Function removed to allow free typing
 
   // Function to update meal suggestions when restaurant changes
   const updateMealSuggestionsForRestaurant = async (restaurantName: string): Promise<void> => {
@@ -121,8 +218,11 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
       console.log(`Fetching meal suggestions for restaurant: ${restaurantName}`);
 
+      // Use device location when available
+      const searchLocation = deviceLocation || location;
+
       // Make the API call
-      const result = await getMealSuggestionsForRestaurant(restaurantName, photo?.uri, location);
+      const result = await getMealSuggestionsForRestaurant(restaurantName, photo?.uri, searchLocation);
 
       // Update only menu items and suggested meal, not restaurants
       setMenuItems(result.menu_items || []);
@@ -210,8 +310,13 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
       console.log('No prefetched data available, fetching suggestions now');
 
+      // Use device location when available for restaurant suggestions
+      const searchLocation = deviceLocation || location;
+      console.log('Using location for restaurant suggestions:',
+        searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude}` : 'No location available');
+
       // Fetch new suggestions using our service
-      const result = await getMealSuggestions(photo.uri, location);
+      const result = await getMealSuggestions(photo.uri, searchLocation);
       console.log('Received suggestion response');
 
       // Update restaurant and meal suggestions
@@ -273,6 +378,29 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log(`Navigating to Result with fresh image: ${freshPhoto.uri}`);
 
       // Navigate to Result screen with the fresh photo and session ID
+      // Combine and format comments from the separate fields
+      const formatComments = (comment1: string, comment2: string): string => {
+        let result = '';
+
+        // Add first comment if it's not empty
+        if (comment1.trim()) {
+          result += '• ' + comment1.trim();
+        }
+
+        // Add second comment if it's not empty
+        if (comment2.trim()) {
+          // Add a line break if we already have content
+          if (result) result += '\n';
+          result += '• ' + comment2.trim();
+        }
+
+        return result;
+      };
+
+      // Format and combine the comments from each section
+      const formattedLikedComment = formatComments(likedComment1, likedComment2);
+      const formattedDislikedComment = formatComments(dislikedComment1, dislikedComment2);
+
       navigation.navigate('Result', {
         photo: freshPhoto,
         location: location,
@@ -280,6 +408,8 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
         restaurant: mealType === "Restaurant" ? restaurant : "", // Only include restaurant for Restaurant type
         meal: mealName,
         mealType: mealType, // Include the meal type in the data for Firebase
+        likedComment: formattedLikedComment, // Include what the user liked
+        dislikedComment: formattedDislikedComment, // Include what the user didn't like
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
     } catch (error) {
@@ -298,230 +428,332 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.contentContainer}>
-        {/* Increased image size */}
-        <View style={styles.imageContainer}>
-          {!imageError && photo && photo.uri ? (
-            <Image
-              source={{ uri: photo.uri }}
-              style={styles.image}
-              resizeMode="contain"
-              onError={handleImageError}
-            />
-          ) : (
-            <View style={styles.errorImageContainer}>
-              <MaterialIcon name="broken-image" size={64} color="#ccc" />
-              <Text style={styles.errorImageText}>Failed to load image</Text>
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={100}
+        extraHeight={120}
+      >
+        <View style={styles.contentContainer}>
+          {/* Moved meal type selector to the top */}
+          <View style={styles.infoSection}>
+            <View style={styles.mealTypeContainer}>
+              <TouchableOpacity
+                style={[styles.mealTypeButton, mealType === "Restaurant" && styles.mealTypeButtonActive]}
+                onPress={() => {
+                  if (mealType !== "Restaurant") {
+                    setMealType("Restaurant");
+                    // Re-fetch restaurant suggestions if switching back to Restaurant type
+                    getSuggestions();
+                  }
+                }}
+              >
+                <Text style={[styles.mealTypeText, mealType === "Restaurant" && styles.mealTypeTextActive]}>Restaurant</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mealTypeButton, mealType === "Homemade" && styles.mealTypeButtonActive]}
+                onPress={() => setMealType("Homemade")}
+              >
+                <Text style={[styles.mealTypeText, mealType === "Homemade" && styles.mealTypeTextActive]}>Homemade</Text>
+              </TouchableOpacity>
             </View>
-          )}
-          
-          {/* Processing overlay */}
-          {isProcessing && (
-            <View style={styles.processingOverlay}>
-              <ActivityIndicator size="large" color="white" />
-              <Text style={styles.processingText}>Preparing image...</Text>
-            </View>
-          )}
-        </View>
-        
-        {/* Meal Type Selector */}
-        <View style={styles.infoSection}>
-          <View style={styles.mealTypeContainer}>
-            <TouchableOpacity
-              style={[styles.mealTypeButton, mealType === "Restaurant" && styles.mealTypeButtonActive]}
-              onPress={() => {
-                if (mealType !== "Restaurant") {
-                  setMealType("Restaurant");
-                  // Re-fetch restaurant suggestions if switching back to Restaurant type
-                  getSuggestions();
-                }
-              }}
-            >
-              <Text style={[styles.mealTypeText, mealType === "Restaurant" && styles.mealTypeTextActive]}>Restaurant</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.mealTypeButton, mealType === "Homemade" && styles.mealTypeButtonActive]}
-              onPress={() => setMealType("Homemade")}
-            >
-              <Text style={[styles.mealTypeText, mealType === "Homemade" && styles.mealTypeTextActive]}>Homemade</Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* Restaurant Input - Only shown for Restaurant meal type */}
-          {mealType === "Restaurant" && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Restaurant:</Text>
-              <View style={styles.autocompleteContainer}>
-                <TextInput
-                  style={styles.infoInput}
-                  value={restaurant}
-                  onChangeText={(text) => {
-                    setRestaurant(text);
+            {/* Restaurant Input - Only shown for Restaurant meal type */}
+            {mealType === "Restaurant" && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Restaurant:</Text>
+                <View style={styles.autocompleteContainer}>
+                  <TextInput
+                    style={styles.infoInput}
+                    value={restaurant}
+                    onChangeText={(text) => {
+                      setRestaurant(text);
 
-                    // Show autocomplete dropdown when typing
-                    if (text.length >= 2) {
-                      setShowAutocomplete(true);
+                      // Show autocomplete dropdown when typing
+                      if (text.length >= 2) {
+                        setShowAutocomplete(true);
 
-                      // Delay the API call slightly to avoid too many requests while typing
-                      clearTimeout((window as any).restaurantInputTimer);
-                      (window as any).restaurantInputTimer = setTimeout(async () => {
-                        setIsSearchingRestaurants(true);
-                        try {
-                          // Search for restaurants matching the text
-                          const results = await searchRestaurants(text, location);
-                          setAutocompleteRestaurants(results);
-                        } catch (error) {
-                          console.error('Restaurant search error:', error);
-                        } finally {
-                          setIsSearchingRestaurants(false);
-                        }
-                      }, 500);
-                    } else {
-                      setShowAutocomplete(false);
-                      setAutocompleteRestaurants([]);
-                    }
-                  }}
-                  onFocus={() => {
-                    // Show autocomplete when input is focused if text length is sufficient
-                    if (restaurant.length >= 2) {
-                      setShowAutocomplete(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    // Delay hiding autocomplete to allow for selection
-                    setTimeout(() => setShowAutocomplete(false), 200);
-                  }}
-                  placeholder="Enter restaurant name"
-                />
+                        // Delay the API call slightly to avoid too many requests while typing
+                        clearTimeout((window as any).restaurantInputTimer);
+                        (window as any).restaurantInputTimer = setTimeout(async () => {
+                          setIsSearchingRestaurants(true);
+                          try {
+                            // Always use current device location for restaurant search
+                            const searchLocation = deviceLocation || location;
+                            console.log("Using location for restaurant search:",
+                              searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude}` : "No location available");
 
-                {/* Autocomplete dropdown */}
-                {showAutocomplete && autocompleteRestaurants.length > 0 && (
-                  <View style={styles.autocompleteDropdown}>
-                    {isSearchingRestaurants && (
-                      <ActivityIndicator size="small" color="#ff6b6b" style={styles.autocompleteLoading} />
-                    )}
-                    <FlatList
-                      data={autocompleteRestaurants}
-                      keyExtractor={(item) => item.id || item.name}
-                      keyboardShouldPersistTaps="handled"
-                      style={styles.autocompleteList}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={styles.autocompleteItem}
-                          onPress={() => {
-                            setRestaurant(item.name);
-                            setShowAutocomplete(false);
+                            // Search for restaurants matching the text
+                            const results = await searchRestaurants(text, searchLocation);
+                            // Limit to MAX_AUTOCOMPLETE_RESULTS (top 3)
+                            setAutocompleteRestaurants(results.slice(0, MAX_AUTOCOMPLETE_RESULTS));
+                          } catch (error) {
+                            console.error('Restaurant search error:', error);
+                          } finally {
+                            setIsSearchingRestaurants(false);
+                          }
+                        }, 500);
+                      } else {
+                        setShowAutocomplete(false);
+                        setAutocompleteRestaurants([]);
+                      }
+                    }}
+                    onFocus={() => {
+                      // Show autocomplete when input is focused if text length is sufficient
+                      if (restaurant.length >= 2) {
+                        setShowAutocomplete(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay hiding autocomplete to allow for selection
+                      setTimeout(() => setShowAutocomplete(false), 200);
+                    }}
+                    placeholder="Enter restaurant name"
+                  />
 
-                            // If restaurant has location (from Places API), update the location data
-                            // We always prefer restaurant location if available for better accuracy
-                            if (item.geometry && item.geometry.location) {
-                              const restaurantLocation = {
-                                latitude: item.geometry.location.lat,
-                                longitude: item.geometry.location.lng,
-                                source: 'restaurant_selection' // Mark the source of this location data
-                              };
-
-                              console.log(`Updating location from restaurant selection: ${JSON.stringify(restaurantLocation)}`);
-
-                              // Update both local state and route params
-                              setLocation(restaurantLocation);
-
-                              // Also update location in route params to make it available for the next screen
-                              if (route.params) {
-                                route.params.location = restaurantLocation;
-                              }
-                            }
-
-                            // Update meal suggestions for this restaurant
-                            updateMealSuggestionsForRestaurant(item.name);
-                          }}
-                        >
-                          <MaterialIcon name="restaurant" size={16} color="#666" style={styles.autocompleteIcon} />
-                          <View style={styles.autocompleteTextContainer}>
-                            <Text style={styles.autocompleteItemName}>{item.name}</Text>
-                            <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>
-                          </View>
-                        </TouchableOpacity>
+                  {/* Autocomplete dropdown */}
+                  {showAutocomplete && autocompleteRestaurants.length > 0 && (
+                    <View style={styles.autocompleteDropdown}>
+                      {isSearchingRestaurants && (
+                        <ActivityIndicator size="small" color="#ff6b6b" style={styles.autocompleteLoading} />
                       )}
-                    />
-                  </View>
-                )}
-              </View>
+                      <FlatList
+                        data={autocompleteRestaurants}
+                        keyExtractor={(item) => item.id || item.name}
+                        keyboardShouldPersistTaps="handled"
+                        style={styles.autocompleteList}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={styles.autocompleteItem}
+                            onPress={() => {
+                              setRestaurant(item.name);
+                              setShowAutocomplete(false);
 
-              <TouchableOpacity
-                style={[
-                  styles.suggestButton,
-                  suggestedRestaurants.length === 0 ? styles.suggestButtonDisabled : {}
-                ]}
-                onPress={() => setShowRestaurantModal(true)}
-                disabled={suggestedRestaurants.length === 0}
-              >
-                <MaterialIcon name="restaurant" size={16} color="white" />
-              </TouchableOpacity>
+                              // If restaurant has location (from Places API), update the location data
+                              // We always prefer restaurant location if available for better accuracy
+                              if (item.geometry && item.geometry.location) {
+                                const restaurantLocation = {
+                                  latitude: item.geometry.location.lat,
+                                  longitude: item.geometry.location.lng,
+                                  source: 'restaurant_selection', // Mark the source of this location data
+                                  priority: 1 // Highest priority (1 = restaurant, 2 = exif, 3 = user location)
+                                };
+
+                                console.log(`Updating location from restaurant selection: ${JSON.stringify(restaurantLocation)}`);
+
+                                // Update both local state and route params
+                                setLocation(restaurantLocation);
+
+                                // Also update location in route params to make it available for the next screen
+                                if (route.params) {
+                                  route.params.location = restaurantLocation;
+                                }
+                              }
+
+                              // Update meal suggestions for this restaurant
+                              updateMealSuggestionsForRestaurant(item.name);
+                            }}
+                          >
+                            <MaterialIcon name="restaurant" size={16} color="#666" style={styles.autocompleteIcon} />
+                            <View style={styles.autocompleteTextContainer}>
+                              <Text style={styles.autocompleteItemName}>{item.name}</Text>
+                              <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>
+
+                              {/* Show location badge if available */}
+                              {item.geometry && item.geometry.location && (
+                                <View style={styles.locationBadgeSmall}>
+                                  <MaterialIcon name="place" size={10} color="#fff" />
+                                  <Text style={styles.locationBadgeTextSmall}>Location available</Text>
+                                </View>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.suggestButton,
+                    suggestedRestaurants.length === 0 ? styles.suggestButtonDisabled : {}
+                  ]}
+                  onPress={() => setShowRestaurantModal(true)}
+                  disabled={suggestedRestaurants.length === 0}
+                >
+                  <MaterialIcon name="restaurant" size={16} color="white" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Meal:</Text>
+              <TextInput
+                style={styles.infoInput}
+                value={mealName}
+                onChangeText={setMealName}
+                placeholder="Enter meal name"
+              />
+              {menuItems.length > 0 && (
+                <TouchableOpacity
+                  style={styles.suggestButton}
+                  onPress={() => setShowMenuModal(true)}
+                >
+                  <MaterialIcon name="restaurant-menu" size={16} color="white" />
+                </TouchableOpacity>
+              )}
             </View>
-          )}
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Meal:</Text>
-            <TextInput
-              style={styles.infoInput}
-              value={mealName}
-              onChangeText={setMealName}
-              placeholder="Enter meal name"
-            />
-            {menuItems.length > 0 && (
-              <TouchableOpacity
-                style={styles.suggestButton}
-                onPress={() => setShowMenuModal(true)}
-              >
-                <MaterialIcon name="restaurant-menu" size={16} color="white" />
-              </TouchableOpacity>
+
+            {isLoadingSuggestions && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#ff6b6b" />
+                <Text style={styles.loadingText}>Getting suggestions...</Text>
+              </View>
             )}
           </View>
-          
-          {isLoadingSuggestions && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#ff6b6b" />
-              <Text style={styles.loadingText}>Getting suggestions...</Text>
+
+          {/* Rating Section - Moved above comment section */}
+          <View style={styles.ratingSection}>
+            <View style={styles.ratingContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => handleRating(star)}
+                  style={styles.starTouchable}
+                >
+                  <Image
+                    source={star <= rating
+                      ? require('../assets/stars/star-filled.png')
+                      : require('../assets/stars/star-empty.png')}
+                    style={styles.star}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              ))}
             </View>
-          )}
-        </View>
-        
-        <View style={styles.ratingSection}>
-          <View style={styles.ratingContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
-                key={star}
-                onPress={() => handleRating(star)}
-                style={styles.starTouchable}
-              >
-                <Image
-                  source={star <= rating
-                    ? require('../assets/stars/star-filled.png')
-                    : require('../assets/stars/star-empty.png')}
-                  style={styles.star}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            ))}
           </View>
+
+          {/* Comments Section */}
+          <View style={styles.commentsContainer}>
+            {/* Liked Comments Section */}
+            <View style={styles.commentSection}>
+              <Text style={styles.commentTitle}>What did you like about this dish?</Text>
+              <Text style={styles.commentSubtitle}>(This will help us give you better meal recommendations)</Text>
+              <View style={styles.bulletContainer}>
+                <Text style={styles.bullet}>•</Text>
+                <TextInput
+                  style={styles.bulletInput}
+                  placeholder="First thing you liked..."
+                  placeholderTextColor="#999"
+                  multiline={true}
+                  blurOnSubmit={true}
+                  returnKeyType="done"
+                  autoCapitalize="sentences"
+                  onSubmitEditing={handleSubmitEditing}
+                  onChangeText={setLikedComment1}
+                  value={likedComment1}
+                  maxLength={150}
+                />
+              </View>
+              <View style={styles.bulletContainer}>
+                <Text style={styles.bullet}>•</Text>
+                <TextInput
+                  style={styles.bulletInput}
+                  placeholder="Second thing you liked..."
+                  placeholderTextColor="#999"
+                  multiline={true}
+                  blurOnSubmit={true}
+                  returnKeyType="done"
+                  autoCapitalize="sentences"
+                  onSubmitEditing={handleSubmitEditing}
+                  onChangeText={setLikedComment2}
+                  value={likedComment2}
+                  maxLength={150}
+                />
+              </View>
+            </View>
+
+            {/* Disliked Comments Section */}
+            <View style={styles.commentSection}>
+              <Text style={styles.commentTitle}>What did you not like?</Text>
+              <View style={styles.bulletContainer}>
+                <Text style={styles.bullet}>•</Text>
+                <TextInput
+                  style={styles.bulletInput}
+                  placeholder="First thing you didn't like..."
+                  placeholderTextColor="#999"
+                  multiline={true}
+                  blurOnSubmit={true}
+                  returnKeyType="done"
+                  autoCapitalize="sentences"
+                  onSubmitEditing={handleSubmitEditing}
+                  onChangeText={setDislikedComment1}
+                  value={dislikedComment1}
+                  maxLength={150}
+                />
+              </View>
+              <View style={styles.bulletContainer}>
+                <Text style={styles.bullet}>•</Text>
+                <TextInput
+                  style={styles.bulletInput}
+                  placeholder="Second thing you didn't like..."
+                  placeholderTextColor="#999"
+                  multiline={true}
+                  blurOnSubmit={true}
+                  returnKeyType="done"
+                  autoCapitalize="sentences"
+                  onSubmitEditing={handleSubmitEditing}
+                  onChangeText={setDislikedComment2}
+                  value={dislikedComment2}
+                  maxLength={150}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Image Container - Now at the bottom */}
+          <View style={styles.imageContainer}>
+            {!imageError && photo && photo.uri ? (
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.image}
+                resizeMode="contain"
+                onError={handleImageError}
+              />
+            ) : (
+              <View style={styles.errorImageContainer}>
+                <MaterialIcon name="broken-image" size={64} color="#ccc" />
+                <Text style={styles.errorImageText}>Failed to load image</Text>
+              </View>
+            )}
+
+            {/* Processing overlay */}
+            {isProcessing && (
+              <View style={styles.processingOverlay}>
+                <ActivityIndicator size="large" color="white" />
+                <Text style={styles.processingText}>Preparing image...</Text>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              { backgroundColor: rating > 0 ? '#ff6b6b' : '#cccccc' }
+            ]}
+            onPress={saveRating}
+            disabled={rating === 0 || isProcessing}
+          >
+            {isProcessing ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save Rating</Text>
+            )}
+          </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity
-          style={[
-            styles.saveButton,
-            { backgroundColor: rating > 0 ? '#ff6b6b' : '#cccccc' }
-          ]}
-          onPress={saveRating}
-          disabled={rating === 0 || isProcessing}
-        >
-          {isProcessing ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save Rating</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      </KeyboardAwareScrollView>
       
       {/* Restaurant Selection Modal */}
       <Modal
@@ -544,6 +776,25 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
                       // If this is a different restaurant than currently selected
                       if (restaurant !== item.name) {
                         setRestaurant(item.name);
+
+                        // Update location if the restaurant has location data
+                        if (item.geometry && item.geometry.location) {
+                          const restaurantLocation = {
+                            latitude: item.geometry.location.lat,
+                            longitude: item.geometry.location.lng,
+                            source: 'restaurant_selection',
+                            priority: 1 // Restaurant location has highest priority
+                          };
+
+                          console.log(`Updating location from restaurant modal selection: ${item.name}`);
+
+                          // Update location in state and route params
+                          setLocation(restaurantLocation);
+                          if (route.params) {
+                            route.params.location = restaurantLocation;
+                          }
+                        }
+
                         // Fetch meal suggestions for this restaurant
                         updateMealSuggestionsForRestaurant(item.name);
                       }
@@ -615,7 +866,7 @@ const styles = StyleSheet.create({
   mealTypeContainer: {
     flexDirection: 'row',
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 15, // Reduced margin
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
@@ -650,19 +901,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    borderRadius: 5,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
     zIndex: 1000,
-    elevation: 5,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    maxHeight: 200,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    maxHeight: 300, // More height for the dropdown
   },
   autocompleteList: {
-    maxHeight: 200,
+    maxHeight: 300, // Increased to match dropdown
   },
   autocompleteItem: {
     flexDirection: 'row',
@@ -686,6 +937,22 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  locationBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff6b6b',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  locationBadgeTextSmall: {
+    color: 'white',
+    fontSize: 10,
+    marginLeft: 2,
+    fontWeight: '500',
+  },
   autocompleteLoading: {
     position: 'absolute',
     top: 5,
@@ -696,20 +963,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f8f8',
   },
+  scrollContainer: {
+    flexGrow: 1, // Important for ensuring scroll works properly
+    paddingBottom: 40, // Add padding at bottom for better scrolling
+  },
   contentContainer: {
-    flex: 1,
-    padding: 20,
+    padding: 15, // Slightly reduced padding
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 40,
   },
   imageContainer: {
     width: '100%',
-    height: '35%', // Increased height
+    height: 180, // Fixed height instead of percentage
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#eee',
-    marginBottom: 20,
+    marginVertical: 10, // Reduced margin
     position: 'relative',
   },
   image: {
@@ -746,12 +1014,12 @@ const styles = StyleSheet.create({
   // Restaurant and meal info styles
   infoSection: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 10, // Reduced margin
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10, // Reduced margin
   },
   infoLabel: {
     width: 100,
@@ -790,7 +1058,64 @@ const styles = StyleSheet.create({
   ratingSection: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 30,
+    marginVertical: 5, // Reduced margin
+  },
+  // Comment section styles
+  commentsContainer: {
+    width: '100%',
+    marginVertical: 5, // Less margin
+  },
+  commentSection: {
+    width: '100%',
+    marginBottom: 15, // Reduced margin
+  },
+  commentTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  commentSubtitle: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  bulletContainer: {
+    flexDirection: 'row',
+    marginBottom: 5, // Reduced spacing between bullet points
+    alignItems: 'flex-start',
+  },
+  bullet: {
+    fontSize: 18,
+    marginRight: 8,
+    color: '#666',
+    lineHeight: 35, // Increased to align with input
+    width: 15, // Fixed width
+  },
+  bulletInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 8,
+    minHeight: 40,
+    fontSize: 14,
+    backgroundColor: 'white',
+    color: '#333',
+    textAlignVertical: 'top', // Better position for cursor in Android
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 8,
+    minHeight: 80, // Increased for two bullet points
+    fontSize: 14,
+    backgroundColor: 'white',
+    color: '#333',
+    textAlignVertical: 'top', // Better position for cursor in Android
   },
   title: {
     fontSize: 22,
@@ -801,7 +1126,7 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 15,
+    marginVertical: 10, // Reduced margin
   },
   starTouchable: {
     padding: 5,
@@ -814,7 +1139,7 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 18,
     color: '#666',
-    marginVertical: 10,
+    marginVertical: 5, // Reduced margin
   },
   saveButton: {
     width: '100%',
@@ -822,7 +1147,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 'auto', // Push to the bottom of the container
+    marginTop: 20, // Fixed margin instead of auto
   },
   saveButtonText: {
     color: 'white',
@@ -886,7 +1211,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 20,
     color: '#666',
-  },
+  }
 });
 
 export default RatingScreen;
