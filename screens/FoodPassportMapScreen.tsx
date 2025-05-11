@@ -10,7 +10,10 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
-  Platform
+  Platform,
+  Linking,
+  Clipboard,
+  Share
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
@@ -86,7 +89,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
   // Tab view state
   const [index, setIndex] = useState(0);
   const [routes] = useState<Route[]>([
-    { key: 'list', title: 'List' },
+    { key: 'list', title: 'Passport' },
     { key: 'map', title: 'Map' },
   ]);
   
@@ -385,8 +388,8 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  // ListView Component for the first tab
-  const ListView = () => {
+  // PassportTabView component
+  const PassportTabView = () => {
     if (loading && !refreshing) {
       return (
         <View style={styles.loadingContainer}>
@@ -411,176 +414,9 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
             colors={['#ff6b6b']}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Icon name="book" size={64} color="#ddd" />
-            <Text style={styles.emptyText}>No meals in your passport yet</Text>
-            <Text style={styles.emptySubtext}>
-              Tap "New Entry" to add your first meal!
-            </Text>
-          </View>
-        }
-      />
-    );
-  };
-  
-  // MapView Component for the second tab
-  const MapViewComponent = () => {
-    // Filter meals that have location data
-    const mealsWithLocation = meals.filter(meal => meal.location !== null);
-    
-    // Calculate initial region based on meals with location
-    const initialRegion = useMemo<Region>(() => {
-      if (mealsWithLocation.length === 0) {
-        // Default to a sensible location if no meals with locations
-        return {
-          latitude: 37.78825,
-          longitude: -122.4324,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        };
-      }
-      
-      // Calculate bounds for all meal locations
-      let minLat = Number.MAX_VALUE;
-      let maxLat = Number.MIN_VALUE;
-      let minLng = Number.MAX_VALUE;
-      let maxLng = Number.MIN_VALUE;
-      
-      mealsWithLocation.forEach(meal => {
-        if (meal.location) {
-          minLat = Math.min(minLat, meal.location.latitude);
-          maxLat = Math.max(maxLat, meal.location.latitude);
-          minLng = Math.min(minLng, meal.location.longitude);
-          maxLng = Math.max(maxLng, meal.location.longitude);
-        }
-      });
-      
-      const centerLat = (minLat + maxLat) / 2;
-      const centerLng = (minLng + maxLng) / 2;
-      
-      // Calculate appropriate deltas to include all points with padding
-      const latDelta = (maxLat - minLat) * 1.5; // 1.5 for padding
-      const lngDelta = (maxLng - minLng) * 1.5; // 1.5 for padding
-      
-      return {
-        latitude: centerLat,
-        longitude: centerLng,
-        latitudeDelta: Math.max(0.01, latDelta), // Minimum zoom level
-        longitudeDelta: Math.max(0.01, lngDelta),
-      };
-    }, [mealsWithLocation]);
-    
-    if (loading && !refreshing) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your food passport...</Text>
-        </View>
-      );
-    }
-    
-    if (mealsWithLocation.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Icon name="place" size={64} color="#ddd" />
-          <Text style={styles.emptyText}>No meals with location data</Text>
-          <Text style={styles.emptySubtext}>
-            Add meals with location information to see them on the map
-          </Text>
-        </View>
-      );
-    }
-    
-    return (
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={initialRegion}
-        >
-          {mealsWithLocation.map(meal => (
-            <Marker
-              key={meal.id}
-              coordinate={{
-                latitude: meal.location?.latitude || 0,
-                longitude: meal.location?.longitude || 0
-              }}
-              title={meal.meal || 'Untitled meal'}
-              description={meal.restaurant || ''}
-              pinColor="#ff6b6b"
-            >
-              <Callout 
-                tooltip
-                onPress={() => viewMealDetails(meal)}
-                style={styles.callout}
-              >
-                <View style={styles.calloutContent}>
-                  {meal.photoUrl && !imageErrors[meal.id] ? (
-                    <Image 
-                      source={{ uri: meal.photoUrl }} 
-                      style={styles.calloutImage}
-                      onError={() => handleImageError(meal.id)}
-                    />
-                  ) : (
-                    <View style={styles.calloutImagePlaceholder}>
-                      <Icon name="image" size={24} color="#ddd" />
-                    </View>
-                  )}
-                  <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
-                  {meal.restaurant && (
-                    <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
-                  )}
-                  <View style={styles.calloutRating}>
-                    <StarRating rating={meal.rating} starSize={12} spacing={1} />
-                  </View>
-                  <Text style={styles.calloutTapText}>Tap to view details</Text>
-                </View>
-              </Callout>
-            </Marker>
-          ))}
-        </MapView>
-      </View>
-    );
-  };
-  
-  // Scene map for tab view
-  const renderScene = SceneMap({
-    list: ListView,
-    map: MapViewComponent
-  });
-  
-  // Custom tab bar
-  const renderTabBar = (props: any) => (
-    <TabBar
-      {...props}
-      indicatorStyle={{ backgroundColor: '#ff6b6b' }}
-      style={{ backgroundColor: 'white', elevation: 0, shadowOpacity: 0 }}
-      labelStyle={{ color: '#333', fontWeight: 'bold' }}
-      activeColor="#ff6b6b"
-      inactiveColor="#999"
-    />
-  );
-  
-  // Render the main screen
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Food Passport</Text>
-        <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your food passport...</Text>
-        </View>
-      ) : (
-        <>
-          {/* Profile Card - Always shown above tabs */}
-          {userInfo && (
+        ListHeaderComponent={
+          /* Profile Card as Header - Will scroll with the content */
+          userInfo ? (
             <View style={styles.profileCard}>
               <View style={styles.profileHeader}>
                 {userInfo.photoURL ? (
@@ -633,18 +469,265 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
             </View>
-          )}
-          
-          {/* Tab View for List and Map */}
-          <TabView
-            navigationState={{ index, routes }}
-            renderScene={renderScene}
-            onIndexChange={setIndex}
-            initialLayout={{ width }}
-            renderTabBar={renderTabBar}
-            style={styles.tabView}
-          />
-        </>
+          ) : null
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Icon name="book" size={64} color="#ddd" />
+            <Text style={styles.emptyText}>No meals in your passport yet</Text>
+            <Text style={styles.emptySubtext}>
+              Tap "New Entry" to add your first meal!
+            </Text>
+          </View>
+        }
+      />
+    );
+  };
+
+  // MapView Component for the second tab - simplified for stability
+  const MapViewComponent = () => {
+    // Filter meals that have location data
+    const mealsWithLocation = meals.filter(meal => meal.location !== null);
+    
+    // Calculate initial region based on meals only - no user location yet
+    const initialRegion = useMemo<Region>(() => {
+      // Default fallback if no meals with location
+      if (mealsWithLocation.length === 0) {
+        return {
+          latitude: 37.78825,
+          longitude: -122.4324,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        };
+      }
+      
+      // Calculate bounds for all meal locations
+      let minLat = Number.MAX_VALUE;
+      let maxLat = Number.MIN_VALUE;
+      let minLng = Number.MAX_VALUE;
+      let maxLng = Number.MIN_VALUE;
+      
+      mealsWithLocation.forEach(meal => {
+        if (meal.location) {
+          minLat = Math.min(minLat, meal.location.latitude);
+          maxLat = Math.max(maxLat, meal.location.latitude);
+          minLng = Math.min(minLng, meal.location.longitude);
+          maxLng = Math.max(maxLng, meal.location.longitude);
+        }
+      });
+      
+      const centerLat = (minLat + maxLat) / 2;
+      const centerLng = (minLng + maxLng) / 2;
+      
+      // Calculate appropriate deltas to include all points with padding
+      const latDelta = (maxLat - minLat) * 1.2; 
+      const lngDelta = (maxLng - minLng) * 1.2;
+      
+      return {
+        latitude: centerLat,
+        longitude: centerLng,
+        latitudeDelta: Math.max(0.01, latDelta), // Minimum zoom level
+        longitudeDelta: Math.max(0.01, lngDelta),
+      };
+    }, [mealsWithLocation]);
+    
+    if (loading && !refreshing) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ff6b6b" />
+          <Text style={styles.loadingText}>Loading your food passport...</Text>
+        </View>
+      );
+    }
+    
+    if (mealsWithLocation.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Icon name="place" size={64} color="#ddd" />
+          <Text style={styles.emptyText}>No meals with location data</Text>
+          <Text style={styles.emptySubtext}>
+            Add meals with location information to see them on the map
+          </Text>
+        </View>
+      );
+    }
+    
+    // Function to share map locations via Google Maps
+  const shareMapToGoogleMaps = async () => {
+    try {
+      if (mealsWithLocation.length === 0) {
+        Alert.alert("Nothing to Share", "Add meals with location to share your food map.");
+        return;
+      }
+
+      // Build a Google Maps URL with multiple markers
+      // Format: https://www.google.com/maps/dir/?api=1&destination=lat,lng&waypoints=lat,lng|lat,lng
+
+      // Use first meal as destination
+      const firstMeal = mealsWithLocation[0];
+      let mapUrl = `https://www.google.com/maps/search/?api=1&query=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
+
+      // If there are multiple meals, create a custom map link instead
+      if (mealsWithLocation.length > 1) {
+        // Start a custom map link - this opens Google Maps with pins for all locations
+        mapUrl = 'https://www.google.com/maps/dir/?api=1';
+
+        // Add destination (first meal)
+        mapUrl += `&destination=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
+
+        // Add waypoints (other meals) - limited to 10 due to URL length limits
+        const waypoints = mealsWithLocation.slice(1, 10).map(meal =>
+          `${meal.location?.latitude},${meal.location?.longitude}`
+        ).join('|');
+
+        if (waypoints) {
+          mapUrl += `&waypoints=${waypoints}`;
+        }
+      }
+
+      // Create a shareable text with location names
+      const shareText = `Check out my Food Passport with ${mealsWithLocation.length} dining experiences! 🍽️\n\n`;
+      const locationNames = mealsWithLocation.slice(0, 5).map(meal =>
+        meal.restaurant || meal.meal || 'Untitled meal'
+      ).join(', ');
+
+      const shareMessage = `${shareText}Featuring: ${locationNames}${mealsWithLocation.length > 5 ? ' and more...' : ''}`;
+
+      try {
+        // Use React Native's Share API
+        await Share.share({
+          message: shareMessage + '\n\n' + mapUrl,
+          url: mapUrl // Note: this may only work on iOS
+        }, {
+          // Set dialog title (Android only)
+          dialogTitle: 'Share Your Food Passport Map'
+        });
+      } catch (error) {
+        console.log('Error sharing:', error);
+        // Fallback - copy to clipboard and offer to open maps directly
+        Clipboard.setString(shareMessage + '\n\n' + mapUrl);
+        Alert.alert(
+          'Link Copied',
+          'Map link copied to clipboard. Would you like to open the map?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Open Map',
+              onPress: () => Linking.openURL(mapUrl)
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error creating share link:', error);
+      Alert.alert('Error', 'Could not create share link');
+    }
+  };
+
+  return (
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={initialRegion}
+          showsUserLocation={true}
+        >
+          {mealsWithLocation.map(meal => (
+            <Marker
+              key={meal.id}
+              coordinate={{
+                latitude: meal.location?.latitude || 0,
+                longitude: meal.location?.longitude || 0
+              }}
+              title={meal.meal || 'Untitled meal'}
+              description={meal.restaurant || ''}
+              pinColor="#ff6b6b"
+            >
+              <Callout
+                tooltip
+                onPress={() => viewMealDetails(meal)}
+                style={styles.callout}
+              >
+                <View style={styles.calloutContent}>
+                  {meal.photoUrl && !imageErrors[meal.id] ? (
+                    <Image
+                      source={{ uri: meal.photoUrl }}
+                      style={styles.calloutImage}
+                      onError={() => handleImageError(meal.id)}
+                    />
+                  ) : (
+                    <View style={styles.calloutImagePlaceholder}>
+                      <Icon name="image" size={24} color="#ddd" />
+                    </View>
+                  )}
+                  <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
+                  {meal.restaurant && (
+                    <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
+                  )}
+                  <View style={styles.calloutRating}>
+                    <StarRating rating={meal.rating} starSize={12} spacing={1} />
+                  </View>
+                  <Text style={styles.calloutTapText}>Tap to view details</Text>
+                </View>
+              </Callout>
+            </Marker>
+          ))}
+        </MapView>
+
+        {/* Floating share button */}
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={shareMapToGoogleMaps}
+        >
+          <Icon name="share" size={20} color="#fff" />
+          <Text style={styles.shareText}>Share</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+  
+  // Custom tab bar
+  const renderTabBar = (props: any) => (
+    <TabBar
+      {...props}
+      indicatorStyle={{ backgroundColor: '#ff6b6b' }}
+      style={{ backgroundColor: 'white', elevation: 0, shadowOpacity: 0 }}
+      labelStyle={{ color: '#333', fontWeight: 'bold' }}
+      activeColor="#ff6b6b"
+      inactiveColor="#999"
+    />
+  );
+  
+  // Render the main screen
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Food Passport</Text>
+        <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ff6b6b" />
+          <Text style={styles.loadingText}>Loading your food passport...</Text>
+        </View>
+      ) : (
+        <TabView
+          navigationState={{ index, routes }}
+          renderScene={SceneMap({
+            list: PassportTabView,
+            map: MapViewComponent
+          })}
+          onIndexChange={setIndex}
+          initialLayout={{ width }}
+          renderTabBar={renderTabBar}
+          style={styles.tabView}
+        />
       )}
     </View>
   );
@@ -676,6 +759,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500',
     fontSize: 14,
+  },
+  shareButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 30,
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 16,
+    height: 48,
+    borderRadius: 24,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  shareText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
   },
   // Profile Card Styles
   profileCard: {
@@ -771,6 +877,7 @@ const styles = StyleSheet.create({
   list: {
     padding: 10,
     paddingBottom: 30,
+    paddingTop: 5, // Reduced top padding since we have the profile card
   },
   row: {
     justifyContent: 'space-between',
