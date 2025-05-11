@@ -303,10 +303,15 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
           setImageSource({ uri: result.processed_image });
           setCroppedImage(result.processed_image);
           setImageError(false); // Reset any image error state
-          
+
           // Log any message from the model (optional)
           if (result.model_response) {
             console.log('Model response:', result.model_response);
+          }
+
+          // Log that we're receiving a base64 data URL if that's the case
+          if (result.processed_image.startsWith('data:image')) {
+            console.log('Received image as base64 data URL - will be converted to file when needed');
           }
         } else {
           throw new Error('API response did not contain a processed image');
@@ -385,10 +390,15 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         setImageSource({ uri: result.processed_image });
         setCroppedImage(result.processed_image);
         setImageError(false); // Reset any image error state
-        
+
         // Log any message from the model (optional)
         if (result.model_response) {
           console.log('Model response:', result.model_response);
+        }
+
+        // Log that we're receiving a base64 data URL if that's the case
+        if (result.processed_image.startsWith('data:image')) {
+          console.log('Received image as base64 data URL - will be converted to file when needed');
         }
       } else {
         throw new Error('API response did not contain a processed image');
@@ -405,30 +415,43 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         try {
           // Show loading indication if needed
           setIsProcessing(true);
-          
+
           // Use the cropped image if available, otherwise use the original
           const sourceImageUri = croppedImage || imageSource.uri;
-          
+
           // Create a clean copy of the image without query parameters for passing to next screen
           const timestamp = new Date().getTime();
           const sessionId = Math.random().toString(36).substring(2, 15);
           const fileExt = 'jpg'; // Default to jpg
-          
+
           // Create a path for the new clean image file
           const newFilename = `rating_image_${timestamp}.${fileExt}`;
-          
+
           // Determine the temp directory path based on platform
           const dirPath = Platform.OS === 'ios'
             ? `${RNFS.TemporaryDirectoryPath}/`
             : `${RNFS.CachesDirectoryPath}/`;
-          
+
           const newFilePath = `${dirPath}${newFilename}`;
           console.log('Creating clean image for Rating screen at:', newFilePath);
-          
-          // Copy the current image file to new location
-          await RNFS.copyFile(sourceImageUri, newFilePath);
-          console.log('File copied successfully for Rating screen');
-          
+
+          // Check if the source image is a base64 data URL
+          if (sourceImageUri.startsWith('data:image')) {
+            console.log('Converting base64 data URL to file');
+
+            // Extract the base64 content from the data URL
+            const base64Data = sourceImageUri.split(',')[1];
+
+            // Write the base64 data directly to a file
+            await RNFS.writeFile(newFilePath, base64Data, 'base64');
+            console.log('Base64 image data written to file successfully');
+          } else {
+            // It's a regular file URI, copy it
+            console.log('Copying image file from regular URI');
+            await RNFS.copyFile(sourceImageUri, newFilePath);
+            console.log('File copied successfully for Rating screen');
+          }
+
           // Create a fresh image object for the Rating screen
           const freshImageSource = {
             uri: newFilePath,
@@ -436,9 +459,9 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
             height: photo.height,
             sessionId: sessionId // Add session ID for tracking
           };
-          
+
           console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
-          
+
           // Use navigate with a unique key to force a new instance
           navigation.navigate('Rating', {
             photo: freshImageSource,
@@ -492,34 +515,16 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* Action buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.cropButton]}
-          onPress={handleCrop}
-          disabled={isProcessing}
-        >
-          <Icon name="crop" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Crop</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
+          style={[styles.actionButton, styles.editButton, { flex: 1 }]}
           onPress={processPhoto}
           disabled={isProcessing}
         >
           <Icon name="edit" size={20} color="white" />
           <Text style={styles.actionButtonText}>Edit</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
-          style={[styles.actionButton, styles.goBigButton]}
-          onPress={processGoBig}
-          disabled={isProcessing}
-        >
-          <Icon name="photo_size_select_large" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Go Big</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.doneButton]}
+          style={[styles.actionButton, styles.doneButton, { flex: 1 }]}
           onPress={continueToRating}
         >
           <Icon name="check" size={20} color="white" />
@@ -546,12 +551,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
         ))}
       </ScrollView>
       
-      {/* Location info at bottom */}
-      <Text style={styles.locationText}>
-        {location ?
-          `📍 ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` :
-          'Location data not available'}
-      </Text>
+      {/* No location information displayed */}
     </View>
   );
 };
@@ -614,17 +614,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     borderRadius: 8,
   },
-  cropButton: {
-    backgroundColor: '#FF9800',  // Orange color for the crop button
-  },
   editButton: {
     backgroundColor: '#4CAF50',
-  },
-  goBigButton: {
-    backgroundColor: '#2196F3',
+    marginRight: 5,
   },
   doneButton: {
     backgroundColor: '#ff6b6b',
+    marginLeft: 5,
   },
   actionButtonText: {
     color: 'white',
@@ -659,14 +655,7 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
   },
-  locationText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
+  // Location text removed
   // Crop modal styles
   cropContainer: {
     flex: 1,

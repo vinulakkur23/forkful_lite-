@@ -54,6 +54,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const [error, setError] = useState<string | null>(null);
     const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
     
+    // State for profile stats
+    const [profileStats, setProfileStats] = useState({
+        totalMeals: 0,
+        averageRating: 0
+    });
+
     useEffect(() => {
         // Initialize GoogleSignin
         GoogleSignin.configure({
@@ -61,11 +67,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
             iosClientId: '476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4.apps.googleusercontent.com',
             offlineAccess: true,
         });
-        
+
         // Get current user
         try {
             const user = auth().currentUser;
-            
+
             if (user) {
                 setUserInfo({
                     displayName: user.displayName,
@@ -119,8 +125,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                     createdAt: data.createdAt?.toDate?.() || Date.now()
                 });
             });
-            
+
             setMeals(fetchedMeals);
+
+            // Calculate profile stats
+            const totalMeals = fetchedMeals.length;
+            let averageRating = 0;
+
+            if (totalMeals > 0) {
+                const totalRating = fetchedMeals.reduce((sum, meal) => sum + (meal.rating || 0), 0);
+                averageRating = totalRating / totalMeals;
+            }
+
+            setProfileStats({
+                totalMeals,
+                averageRating
+            });
+
             // Reset image errors when fetching new data
             setImageErrors({});
         } catch (err: any) {
@@ -338,10 +359,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.header}>
                 <Text style={styles.title}>Food Passport</Text>
                 <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-                    <Icon name="exit-to-app" size={22} color="#fff" />
+                    <Text style={styles.signOutText}>Sign Out</Text>
                 </TouchableOpacity>
             </View>
-            
+
             {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#ff6b6b" />
@@ -349,14 +370,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
             ) : (
                 <>
-                    <TouchableOpacity 
-                        style={styles.addButton}
-                        onPress={openImagePicker}
-                    >
-                        <Icon name="add" size={24} color="#fff" />
-                        <Text style={styles.addButtonText}>Add New Entry</Text>
-                    </TouchableOpacity>
-                    
+
+
                     <FlatList
                         data={meals}
                         renderItem={renderMealItem}
@@ -370,6 +385,61 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                 onRefresh={handleRefresh}
                                 colors={['#ff6b6b']}
                             />
+                        }
+                        ListHeaderComponent={
+                            userInfo ? (
+                                <View>
+                                    {/* User Profile Card (moved inside FlatList) */}
+                                    <View style={styles.profileCard}>
+                                        <View style={styles.profileHeader}>
+                                            {userInfo.photoURL ? (
+                                                <Image
+                                                    source={{ uri: userInfo.photoURL }}
+                                                    style={styles.profilePhoto}
+                                                    onError={() => console.log("Failed to load profile image")}
+                                                />
+                                            ) : (
+                                                <View style={styles.profilePhotoPlaceholder}>
+                                                    <Icon name="person" size={30} color="#fff" />
+                                                </View>
+                                            )}
+                                            <View style={styles.profileInfo}>
+                                                <Text style={styles.profileName}>
+                                                    {userInfo.displayName || "Food Enthusiast"}
+                                                </Text>
+                                                <Text style={styles.profileEmail} numberOfLines={1}>
+                                                    {userInfo.email || ""}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <View style={styles.profileStats}>
+                                            <View style={styles.statItem}>
+                                                <Icon name="file-upload" size={18} color="#666" />
+                                                <Text style={styles.statValue}>{profileStats.totalMeals}</Text>
+                                                <Text style={styles.statLabel}>Uploads</Text>
+                                            </View>
+                                            <View style={styles.statDivider} />
+                                            <View style={styles.statItem}>
+                                                <Image
+                                                    source={require('../assets/stars/star-filled.png')}
+                                                    style={styles.starIcon}
+                                                />
+                                                <Text style={styles.statValue}>
+                                                    {profileStats.averageRating.toFixed(1)}
+                                                </Text>
+                                                <Text style={styles.statLabel}>Avg. Rating</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.addButton}
+                                        onPress={openImagePicker}
+                                    >
+                                        <Icon name="add-circle" size={24} color="#fff" />
+                                        <Text style={styles.addButtonText}>Add New Entry</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
@@ -405,7 +475,90 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     signOutButton: {
-        padding: 5,
+        padding: 8,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 5,
+    },
+    signOutText: {
+        color: '#fff',
+        fontWeight: '500',
+        fontSize: 14,
+    },
+    // Profile Card Styles
+    profileCard: {
+        backgroundColor: 'white',
+        margin: 10,
+        marginTop: 15,
+        borderRadius: 10,
+        padding: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    profileHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    profilePhoto: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        marginRight: 15,
+    },
+    profilePhotoPlaceholder: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#ddd',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    profileInfo: {
+        flex: 1,
+    },
+    profileName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 4,
+    },
+    profileEmail: {
+        fontSize: 14,
+        color: '#666',
+    },
+    profileStats: {
+        flexDirection: 'row',
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+        paddingTop: 15,
+    },
+    statItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    starIcon: {
+        width: 18,
+        height: 18,
+        marginBottom: 2,
+    },
+    statDivider: {
+        width: 1,
+        backgroundColor: '#f0f0f0',
+        marginHorizontal: 10,
+    },
+    statValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+        marginVertical: 4,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: '#666',
     },
     addButton: {
         flexDirection: 'row',

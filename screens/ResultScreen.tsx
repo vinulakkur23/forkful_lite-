@@ -23,8 +23,11 @@ type Props = {
   route: ResultScreenRouteProp;
 };
 
+// Define possible meal types
+type MealType = "Restaurant" | "Homemade";
+
 const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, location, rating, restaurant, meal } = route.params;
+  const { photo, location, rating, restaurant, meal, mealType = "Restaurant" } = route.params;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -35,7 +38,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useEffect(() => {
     console.log("ResultScreen mounted with key:", instanceKey);
-    
+
     // Validate the photo object
     if (!photo || !photo.uri) {
       console.error("Invalid photo object in ResultScreen:", photo);
@@ -46,13 +49,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       );
       return;
     }
-    
+
     // Log photo information for debugging
     console.log("Photo received in ResultScreen:", {
       uri: photo.uri,
       hasWidth: !!photo.width,
       hasHeight: !!photo.height
     });
+
+    // Log location information for debugging
+    console.log("Location received in ResultScreen:", location ? {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      source: location.source || 'unknown'
+    } : 'No location data');
     
     // Reset states when a new instance is detected
     setSaving(false);
@@ -266,12 +276,19 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           rating,
           restaurant: restaurant || '',
           meal: meal || '',
+          mealType: mealType || 'Restaurant', // Include the meal type
           // Preserve the location source if available
           location: location ? {
             latitude: location.latitude,
             longitude: location.longitude,
-            // Keep the source if it exists ('exif', 'device', etc.)
-            ...(location.source && { source: location.source })
+            // Keep the source if it exists ('exif', 'device', 'restaurant_selection', etc.)
+            source: location.source || 'unknown',
+            // Add a human-readable description of the location source for debugging
+            sourceDescription: location.source === 'exif'
+              ? 'Photo metadata (EXIF)'
+              : location.source === 'restaurant_selection'
+                ? `Selected restaurant: ${restaurant}`
+                : 'Device location'
           } : null,
           createdAt: firestore.FieldValue.serverTimestamp(),
           sessionId,
@@ -335,8 +352,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleShare = async (): Promise<void> => {
     try {
+      // Create share message based on meal type
+      const shareMessage = mealType === "Homemade"
+        ? `I rated my homemade ${meal || 'meal'} ${rating} stars!`
+        : `I rated my ${meal || 'meal'} ${rating} stars${restaurant ? ` at ${restaurant}` : ''}!`;
+
       await Share.share({
-        message: `I rated my ${meal || 'meal'} ${rating} stars${restaurant ? ` at ${restaurant}` : ''}!`,
+        message: shareMessage,
         url: photoUrl || photo.uri
       });
     } catch (error) {
@@ -400,7 +422,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             <StarRating rating={rating} starSize={20} />
           </View>
 
-          {restaurant && (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Type:</Text>
+            <Text style={styles.infoValue}>{mealType || "Restaurant"}</Text>
+            <MaterialIcon
+              name={mealType === "Homemade" ? "home" : "restaurant"}
+              size={16}
+              color="#666"
+              style={{marginLeft: 5}}
+            />
+          </View>
+
+          {mealType === "Restaurant" && restaurant && (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Restaurant:</Text>
               <Text style={styles.infoValue}>{restaurant}</Text>
@@ -420,12 +453,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.locationText}>
               {location ? (
                 <>
-                  {`${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
-                  {location.source && (
-                    <Text style={styles.locationSource}>
-                      {" "}({location.source === 'exif' ? 'from photo metadata' : 'current device location'})
-                    </Text>
-                  )}
+                  {location.source === 'exif'
+                    ? 'Location from photo metadata'
+                    : location.source === 'restaurant_selection'
+                      ? 'Location from restaurant selection'
+                      : 'Using your current location'}
                 </>
               ) : (
                 'Location data not available'

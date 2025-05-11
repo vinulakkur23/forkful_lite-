@@ -14,6 +14,22 @@ interface SuggestionResponse {
   suggested_meal?: string;
 }
 
+// Interface for restaurant search response
+export interface Restaurant {
+  id: string;
+  name: string;
+  vicinity: string;
+  rating?: number;
+  user_ratings_total?: number;
+  formatted_address?: string;
+  geometry?: {
+    location: {
+      lat: number;
+      lng: number;
+    }
+  };
+}
+
 /**
  * Fetches restaurant and meal suggestions based on image and location
  * 
@@ -210,5 +226,84 @@ export const getMealSuggestionsForRestaurant = async (
 
     // Return empty result on error rather than throwing
     return {};
+  }
+};
+
+/**
+ * Searches for restaurants by text input and provides autocomplete suggestions
+ * Uses the backend service which connects to Google Places API
+ *
+ * @param searchText - The text to search for restaurants
+ * @param location - The user's current location (optional)
+ * @returns A promise that resolves to restaurant suggestions
+ */
+export const searchRestaurants = async (
+  searchText: string,
+  location?: { latitude: number; longitude: number } | null
+): Promise<Restaurant[]> => {
+  try {
+    console.log(`Searching for restaurants with query: ${searchText}`);
+
+    // Check if we have valid inputs
+    if (!searchText || searchText.length < 2) {
+      console.log('Search text too short, skipping API call');
+      return [];
+    }
+
+    // Create form data for the request
+    const formData = new FormData();
+
+    // Add the search query
+    formData.append('query', searchText);
+
+    // Add location data if available
+    if (location) {
+      formData.append('latitude', String(location.latitude));
+      formData.append('longitude', String(location.longitude));
+    }
+
+    // Construct the API URL for restaurant search
+    const searchUrl = `${API_CONFIG.BASE_URL}/suggest-meal`;
+    console.log(`Making restaurant search API request to: ${searchUrl}`);
+
+    // Make the API request
+    const response = await fetch(searchUrl, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+      },
+      timeout: 10000, // 10 seconds timeout for search requests
+    });
+
+    // Check if the response is successful
+    if (!response.ok) {
+      console.error(`API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`API Error: ${response.status} - ${errorText}`);
+    }
+
+    // Parse the JSON response
+    const data = await response.json();
+
+    console.log(`Received ${data.restaurants?.length || 0} restaurant suggestions`);
+
+    // Debug the restaurant data structure to see if geometry info is included
+    if (data.restaurants && data.restaurants.length > 0) {
+      const firstRestaurant = data.restaurants[0];
+      console.log('Sample restaurant data structure:', {
+        id: firstRestaurant.id,
+        name: firstRestaurant.name,
+        hasGeometry: !!firstRestaurant.geometry,
+        geometryData: firstRestaurant.geometry,
+        keys: Object.keys(firstRestaurant)
+      });
+    }
+
+    return data.restaurants || [];
+  } catch (error) {
+    console.error('Error in searchRestaurants:', error);
+    // Return empty result on error rather than throwing
+    return [];
   }
 };

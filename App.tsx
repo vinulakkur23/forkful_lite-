@@ -317,8 +317,7 @@ function TabNavigator() {
         component={FoodPassportWrapper} // This wrapper handles FoodPassportScreen
         options={{
           title: 'My Passport',
-          headerTitle: 'My Food Passport', // This will be shown if headerShown: true
-          headerShown: true, // FoodPassportWrapper might need its own header logic or this can be true
+          headerShown: false, // Hide the header to avoid duplicate titles
         }}
       />
       

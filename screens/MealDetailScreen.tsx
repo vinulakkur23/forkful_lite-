@@ -253,13 +253,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Icon name="place" size={18} color="#666" />
             <View style={styles.locationTextContainer}>
               <Text style={styles.locationText}>
-                {`${meal.location.latitude.toFixed(4)}, ${meal.location.longitude.toFixed(4)}`}
+                {meal.location.source === 'exif' ? 'Location from photo metadata' : 'Location recorded from device'}
               </Text>
-              {meal.location.source && (
-                <Text style={styles.locationSource}>
-                  {meal.location.source === 'exif' ? 'From photo metadata' : 'From device location'}
-                </Text>
-              )}
             </View>
           </View>
         )}
