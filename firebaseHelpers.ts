@@ -67,6 +67,8 @@ export const saveMealEntry = async (mealData: {
   restaurant?: string;
   meal?: string;
   location?: { latitude: number; longitude: number } | null;
+  mealType?: string;
+  comments?: { liked: string; disliked: string };
 }) => {
   try {
     const user = auth().currentUser;
@@ -79,6 +81,22 @@ export const saveMealEntry = async (mealData: {
     // Upload the image to Firebase Storage
     const photoUrl = await uploadImage(mealData.photoUri, imagePath);
 
+    // Generate date metadata from current timestamp
+    const mealDate = new Date(timestamp);
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][mealDate.getDay()];
+    const month = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][mealDate.getMonth()];
+    const year = mealDate.getFullYear();
+
+    // Extract location metadata if available
+    let locationMetadata = null;
+    if (mealData.location) {
+      locationMetadata = {
+        latitude: mealData.location.latitude,
+        longitude: mealData.location.longitude,
+        source: mealData.location.source || 'unknown',
+      };
+    }
+
     // Save the meal data to Firestore
     const firestoreData = {
       userId: user.uid,
@@ -87,7 +105,30 @@ export const saveMealEntry = async (mealData: {
       restaurant: mealData.restaurant || '',
       meal: mealData.meal || '',
       location: mealData.location,
-      createdAt: firestore.FieldValue.serverTimestamp()
+      mealType: mealData.mealType || '',
+      comments: mealData.comments || { liked: '', disliked: '' },
+      createdAt: firestore.FieldValue.serverTimestamp(),
+
+      // Add new metadata fields
+      dateMetadata: {
+        dayOfWeek,
+        month,
+        year,
+        timestamp
+      },
+
+      // Initialize AI metadata as empty - will be filled by backend service
+      aiMetadata: {
+        cuisineType: 'Unknown',
+        foodType: 'Unknown',
+        mealType: 'Unknown',
+        primaryProtein: 'Unknown',
+        dietType: 'Unknown',
+        eatingMethod: 'Unknown',
+        setting: 'Unknown',
+        platingStyle: 'Unknown',
+        beverageType: 'Unknown'
+      }
     };
 
     // Add to 'mealEntries' collection

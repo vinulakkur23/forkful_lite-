@@ -10,6 +10,8 @@ import { RootStackParamList, TabParamList } from '../App';
 import StarRating from '../components/StarRating';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
+// Import AI metadata service
+import { processImageMetadata } from '../services/aiMetadataService';
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -320,6 +322,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
         setSaved(true);
         console.log(`Meal saved with ID: ${docRef.id} (session: ${sessionId})`);
+
+        // Process image metadata in the background - don't wait for it to complete
+        setTimeout(() => {
+          processImageMetadata(docRef.id, imageUrl)
+            .then(metadata => {
+              console.log("AI metadata processed successfully:", metadata);
+            })
+            .catch(metadataError => {
+              console.error("Error processing AI metadata:", metadataError);
+              // Don't show an error to the user - this happens in the background
+            });
+        }, 1000);
       } catch (storageError) {
         console.error("Storage or Firestore error:", storageError);
 

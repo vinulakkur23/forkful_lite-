@@ -3,17 +3,21 @@
  * API configuration for the Meal Rating App.
  */
 
+export const API_BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
+
 export const API_CONFIG = {
   // Base URL for API
-  BASE_URL: 'https://dishitout-imageinhancer.onrender.com',
-  
+  BASE_URL: API_BASE_URL,
+
   // API endpoints
   ENDPOINTS: {
     EDIT_PHOTO: '/edit-photo',
     GO_BIG: '/go-big',
     HEALTH: '/health',
     SUGGEST_MEAL: '/suggest-meal',
-    SUGGEST_MEAL_FOR_RESTAURANT: '/suggest-meal-for-restaurant'
+    SUGGEST_MEAL_FOR_RESTAURANT: '/suggest-meal-for-restaurant',
+    EXTRACT_METADATA: '/extract-meal-metadata',
+    EXTRACT_METADATA_FROM_URL: '/extract-meal-metadata-from-url'
   },
   
   // Timeout for API requests in milliseconds

@@ -9,6 +9,10 @@ import StarRating from '../components/StarRating';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
+// Import AI metadata service
+import { processImageMetadata, AIMetadata } from '../services/aiMetadataService';
+// Import API test
+import { testMetadataApi } from '../services/apiTest';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -32,6 +36,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [processingMetadata, setProcessingMetadata] = useState(false);
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
@@ -162,6 +167,71 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log('Sharing error:', error);
     }
   };
+
+  // Process or update meal metadata using AI
+  const handleProcessMetadata = async () => {
+    try {
+      if (!meal || !meal.photoUrl) {
+        Alert.alert('Error', 'No meal photo available for processing');
+        return;
+      }
+
+      setProcessingMetadata(true);
+      Alert.alert('Processing', 'Analyzing your meal photo with AI. This may take a moment...');
+
+      // Call the AI service to process the image
+      const metadata = await processImageMetadata(mealId, meal.photoUrl);
+
+      // Update the local state with the new metadata
+      setMeal({
+        ...meal,
+        aiMetadata: metadata
+      });
+
+      Alert.alert('Success', 'Meal metadata has been updated successfully!');
+    } catch (error) {
+      console.error('Error processing metadata:', error);
+      Alert.alert('Error', 'Failed to process meal metadata');
+    } finally {
+      setProcessingMetadata(false);
+    }
+  };
+
+  // Test the API directly
+  const handleTestApi = async () => {
+    try {
+      if (!meal || !meal.photoUrl) {
+        Alert.alert('Error', 'No meal photo available for testing');
+        return;
+      }
+
+      Alert.alert(
+        'Test API Directly',
+        'This will test the API connection directly using your meal image. Continue?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Test',
+            onPress: async () => {
+              setProcessingMetadata(true);
+              try {
+                // Call the API test function
+                await testMetadataApi(meal.photoUrl);
+              } finally {
+                setProcessingMetadata(false);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error testing API:', error);
+      Alert.alert('Error', 'Failed to test API');
+    }
+  };
   
   // Navigate back
   const goBack = () => {
@@ -265,6 +335,80 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
       
       {/* Action buttons */}
+      {/* AI Metadata Section */}
+      {meal.aiMetadata && (
+        <View style={styles.metadataContainer}>
+          <Text style={styles.metadataTitle}>AI Analysis</Text>
+
+          <View style={styles.metadataGrid}>
+            {meal.aiMetadata.cuisineType !== 'Unknown' && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>Cuisine</Text>
+                <Text style={styles.metadataValue}>{meal.aiMetadata.cuisineType}</Text>
+              </View>
+            )}
+
+            {meal.aiMetadata.foodType !== 'Unknown' && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>Food Type</Text>
+                <Text style={styles.metadataValue}>{meal.aiMetadata.foodType}</Text>
+              </View>
+            )}
+
+            {meal.aiMetadata.mealType !== 'Unknown' && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>Meal</Text>
+                <Text style={styles.metadataValue}>{meal.aiMetadata.mealType}</Text>
+              </View>
+            )}
+
+            {meal.aiMetadata.primaryProtein !== 'Unknown' && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>Protein</Text>
+                <Text style={styles.metadataValue}>{meal.aiMetadata.primaryProtein}</Text>
+              </View>
+            )}
+
+            {meal.aiMetadata.dietType !== 'Unknown' && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>Diet</Text>
+                <Text style={styles.metadataValue}>{meal.aiMetadata.dietType}</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.metadataButtonsRow}>
+            <TouchableOpacity
+              style={[
+                styles.metadataButton,
+                processingMetadata && styles.disabledButton
+              ]}
+              onPress={handleProcessMetadata}
+              disabled={processingMetadata}
+            >
+              <Icon name="refresh" size={16} color="white" />
+              <Text style={styles.buttonText}>
+                {processingMetadata ? 'Processing...' : 'Update Analysis'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.apiTestButton,
+                processingMetadata && styles.disabledButton
+              ]}
+              onPress={handleTestApi}
+              disabled={processingMetadata}
+            >
+              <Icon name="api" size={16} color="white" />
+              <Text style={styles.buttonText}>
+                Test API
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.shareButton}
@@ -273,7 +417,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <Icon name="share" size={18} color="white" />
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
-        
+
         {/* Only show delete button if the user is the owner */}
         {meal.userId === auth().currentUser?.uid && (
           <TouchableOpacity
@@ -284,7 +428,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.buttonText}>Delete</Text>
           </TouchableOpacity>
         )}
-        
+
         <TouchableOpacity
           style={styles.backButton}
           onPress={goBack}
@@ -429,6 +573,79 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 10,
     textAlign: 'right',
+  },
+  // Metadata styles
+  metadataContainer: {
+    padding: 20,
+    backgroundColor: 'white',
+    margin: 10,
+    marginTop: 0,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  metadataTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  metadataGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  metadataItem: {
+    width: '48%',
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ff6b6b',
+  },
+  metadataLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  metadataValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  metadataButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 5,
+  },
+  metadataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4a6fa5',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 10,
+  },
+  apiTestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2ecc71',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   actionsContainer: {
     flexDirection: 'row',
