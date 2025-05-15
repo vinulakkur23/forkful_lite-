@@ -10,6 +10,8 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		7E573AC92DA4C396008880D5 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7E573AC82DA4C396008880D5 /* GoogleService-Info.plist */; };
+		7EBE54222DD68A30003CD5BD /* PhotoGPSModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */; };
+		7EBE54232DD68A30003CD5BD /* PhotoGPSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		EA074F54591B60E5413625FA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		EABF2C0C4526A95EA13E2650 /* Pods_MealRatingAppNew.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5108C94108A2AB2AD22212FA /* Pods_MealRatingAppNew.framework */; };
@@ -23,6 +25,8 @@
 		5108C94108A2AB2AD22212FA /* Pods_MealRatingAppNew.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MealRatingAppNew.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MealRatingAppNew/AppDelegate.swift; sourceTree = "<group>"; };
 		7E573AC82DA4C396008880D5 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhotoGPSModule.m; sourceTree = "<group>"; };
+		7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGPSModule.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MealRatingAppNew/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8CF10130EA8DE0AD66E6268F /* Pods-MealRatingAppNew.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MealRatingAppNew.debug.xcconfig"; path = "Target Support Files/Pods-MealRatingAppNew/Pods-MealRatingAppNew.debug.xcconfig"; sourceTree = "<group>"; };
 		B29EAAA60A75DAAEDE280891 /* Pods-MealRatingAppNew.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MealRatingAppNew.release.xcconfig"; path = "Target Support Files/Pods-MealRatingAppNew/Pods-MealRatingAppNew.release.xcconfig"; sourceTree = "<group>"; };
@@ -44,6 +48,7 @@
 		13B07FAE1A68108700A75B9A /* MealRatingAppNew */ = {
 			isa = PBXGroup;
 			children = (
+				7EBE54212DD68A30003CD5BD /* PhotoGPSModule 2 */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -61,6 +66,15 @@
 				5108C94108A2AB2AD22212FA /* Pods_MealRatingAppNew.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7EBE54212DD68A30003CD5BD /* PhotoGPSModule 2 */ = {
+			isa = PBXGroup;
+			children = (
+				7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */,
+				7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */,
+			);
+			path = "PhotoGPSModule 2";
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -264,6 +278,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7EBE54222DD68A30003CD5BD /* PhotoGPSModule.m in Sources */,
+				7EBE54232DD68A30003CD5BD /* PhotoGPSModule.swift in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -294,6 +310,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = manu.mealratingapp;
 				PRODUCT_NAME = MealRatingAppNew;
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MealRatingAppNew-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -322,6 +339,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = manu.mealratingapp;
 				PRODUCT_NAME = MealRatingAppNew;
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MealRatingAppNew-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};

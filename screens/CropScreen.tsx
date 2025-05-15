@@ -17,6 +17,31 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import ImageCropPicker from 'react-native-image-crop-picker';
+import { getMealSuggestions } from '../services/mealService';
+import Exif from 'react-native-exif';
+
+// Extend the TabParamList to include exifData in the Crop screen params
+declare module '../App' {
+  interface TabParamList {
+    Crop: {
+      photo: {
+        uri: string;
+        width?: number;
+        height?: number;
+        originalUri?: string;
+        fromGallery?: boolean;
+        assetId?: string;
+      };
+      location?: {
+        latitude: number;
+        longitude: number;
+        source: string;
+      } | null;
+      exifData?: any;
+      _navigationKey: string;
+    };
+  }
+}
 
 // Define the navigation prop type
 type CropScreenNavigationProp = CompositeNavigationProp<
@@ -36,20 +61,44 @@ const { width: screenWidth } = Dimensions.get('window');
 const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const { photo, location, _navigationKey } = route.params;
   const [processing, setProcessing] = useState(false);
+  const [prefetchingSuggestions, setPrefetchingSuggestions] = useState(false);
   
   // Use refs to track component mounted state
   const isMounted = useRef(true);
   const cropperOpened = useRef(false);
+  const suggestionsFetched = useRef(false);
+  
+  // Store the previous photo URI to detect changes
+  const prevPhotoUri = useRef('');
   
   // Focus effect to reset state when screen gains focus
   useFocusEffect(
     React.useCallback(() => {
       console.log('CropScreen focused with key:', _navigationKey);
+      console.log('Photo URI:', photo?.uri);
+      console.log('Previous photo URI:', prevPhotoUri.current);
+      
+      // Check if this is a new photo by comparing URIs
+      const isNewPhoto = photo?.uri && photo.uri !== prevPhotoUri.current;
+      
+      if (isNewPhoto) {
+        console.log('New photo detected, resetting suggestion fetch state');
+        // Store the current URI as previous for next comparison
+        prevPhotoUri.current = photo.uri;
+        // Reset the suggestion fetched state to ensure we fetch again
+        suggestionsFetched.current = false;
+      }
       
       // Reset state when screen comes into focus
       isMounted.current = true;
       cropperOpened.current = false;
       setProcessing(false);
+      
+      // Start prefetching suggestions again for new photos
+      if (isNewPhoto) {
+        console.log('Starting suggestion prefetch for new photo');
+        prefetchSuggestions();
+      }
       
       // Delay opening the cropper slightly to ensure component is fully rendered
       setTimeout(() => {
@@ -61,15 +110,219 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       return () => {
         console.log('CropScreen blurred');
       };
-    }, [_navigationKey])
+    }, [_navigationKey, photo?.uri]) // Add photo URI as dependency
   );
 
   // Setup effect that runs once on mount
+  // Function to prefetch restaurant suggestions from original image
+  const prefetchSuggestions = async () => {
+    // Only prefetch if not already doing so and we have a valid photo
+    if (!photo || !photo.uri || prefetchingSuggestions || suggestionsFetched.current) {
+      return;
+    }
+
+    try {
+      console.log('Starting to prefetch restaurant suggestions from original photo URI');
+      setPrefetchingSuggestions(true);
+      suggestionsFetched.current = true;
+
+      // Use the original URI if available (for uploaded photos)
+      let photoUriToUse = photo.originalUri || photo.uri;
+      
+      // Clean the URI by removing query parameters which can cause issues with EXIF extraction
+      photoUriToUse = photoUriToUse.split('?')[0];
+      
+      // Assume ANY photo in iOS temporary directory is from gallery upload or camera
+      // This is more reliable than checking for fromGallery which might be undefined
+      const isFromIosTemporaryDir = Platform.OS === 'ios' && 
+        (photoUriToUse.includes('/tmp/') || photoUriToUse.includes('/temporary/'));
+      const isGalleryUpload = Boolean(photo.originalUri || photo.fromGallery || isFromIosTemporaryDir);
+      
+      // Log sources for debugging
+      console.log(`Prefetching with photo URI (cleaned): ${photoUriToUse}`);
+      console.log(`Is from gallery/camera: ${isGalleryUpload ? 'Yes' : 'No'} (fromGallery=${photo.fromGallery}, originalUri=${Boolean(photo.originalUri)}, isFromIosTemporaryDir=${isFromIosTemporaryDir})`);
+      console.log(`Location data for prefetch:`, 
+        location ? `${location.latitude}, ${location.longitude} (source: ${location.source})` : 'No location');
+      
+      // Check if we already have location from PHAsset (preferred source)
+      // Make a defensive copy of the location and ensure source is set
+      let enhancedLocation = location ? {
+        ...location,
+        // Add a default source if it's missing
+        source: location.source || (isGalleryUpload ? 'exif' : 'device')
+      } : location;
+      
+      // If we have location data with source='exif' from photoLibraryService, prioritize it
+      if (location && location.source === 'exif') {
+        console.log("Using location data provided from PHAsset extraction:", location);
+      } 
+      // If we have route.params.exifData from photoLibraryService, use it
+      else if (route.params.exifData) {
+        console.log("Using EXIF data passed in route params:", route.params.exifData);
+        
+        // Check if GPS coordinates are available in the passed EXIF data
+        if (route.params.exifData.location) {
+          console.log("Found GPS data in passed EXIF data:", route.params.exifData.location);
+          
+          enhancedLocation = {
+            latitude: route.params.exifData.location.latitude,
+            longitude: route.params.exifData.location.longitude,
+            source: 'exif'
+          };
+          
+          console.log("Will use passed EXIF location data for API call");
+        } else {
+          console.log("Passed EXIF data doesn't contain GPS coordinates");
+        }
+      } 
+      // Otherwise, try direct EXIF extraction as a fallback
+      else {
+        // For ALL photos, not just gallery uploads, try to extract EXIF data directly
+        console.log("No PHAsset location data, attempting to extract EXIF directly before API call");
+        
+        try {
+          // On iOS, we need to handle temporary file paths specially
+          // Define exifData here so it's accessible in both branches
+          let exifData = null;
+          
+          if (Platform.OS === 'ios') {
+            console.log("iOS platform detected, using specialized EXIF extraction");
+            
+            // Clean any URI that might have query parameters
+            const cleanUri = photoUriToUse.split('?')[0];
+            
+            // Try different variations of the URI for iOS
+            const uriVariations = [
+              cleanUri,
+              cleanUri.replace('file://', ''),
+              `file://${cleanUri.replace('file://', '')}`,
+              // Try absolute paths that start with /var or /private/var
+              cleanUri.startsWith('/var') ? cleanUri : null,
+              cleanUri.startsWith('/private/var') ? cleanUri : null,
+              // Try removing duplicated slashes if any
+              cleanUri.replace('//', '/'),
+            ].filter(Boolean); // Remove null/undefined entries
+            
+            console.log("Will try these URI variations for EXIF extraction:", uriVariations);
+            
+            // Try each URI variation until one works
+            for (const uri of uriVariations) {
+              try {
+                console.log(`Trying EXIF extraction with URI: ${uri}`);
+                const result = await Exif.getExif(uri);
+                if (result) {
+                  console.log(`EXIF extraction worked with URI: ${uri}`);
+                  exifData = result;
+                  break;
+                }
+              } catch (err) {
+                console.log(`EXIF extraction failed with URI: ${uri}`);
+              }
+            }
+          } else {
+            // Android handling
+            // Try multiple URI formats to maximize chances of success
+            const uriVariations = [
+              photoUriToUse,
+              photoUriToUse.replace('file://', ''),
+              'file://' + photoUriToUse.replace('file://', '')
+            ];
+            
+            // Try each URI variation until one works
+            for (const uri of uriVariations) {
+              try {
+                console.log(`Trying EXIF extraction with URI: ${uri}`);
+                const result = await Exif.getExif(uri);
+                if (result) {
+                  console.log(`EXIF extraction worked with URI: ${uri}`);
+                  exifData = result;
+                  break;
+                }
+              } catch (err) {
+                console.log(`EXIF extraction failed with URI: ${uri}`);
+              }
+            }
+          }
+          
+          if (exifData) {
+            console.log("EXIF data found:", JSON.stringify(exifData, null, 2));
+            
+            // Check if GPS data is available in the EXIF
+            if (exifData.GPSLatitude && exifData.GPSLongitude) {
+              console.log("Found GPS data in EXIF:", {
+                lat: exifData.GPSLatitude,
+                lng: exifData.GPSLongitude
+              });
+              
+              // Create an enhanced location object from EXIF data
+              enhancedLocation = {
+                latitude: parseFloat(exifData.GPSLatitude),
+                longitude: parseFloat(exifData.GPSLongitude),
+                source: 'exif'
+              };
+              
+              console.log("Will use EXIF location data for API call instead of passed location");
+            } else {
+              console.log("EXIF found but no GPS coordinates present");
+            }
+          } else {
+            console.log("No EXIF data could be extracted from the photo");
+          }
+        } catch (exifError) {
+          console.error("Failed to extract EXIF data:", exifError);
+        }
+      }
+      
+      // Check if we have prefetched suggestions in the global context
+      // This would have been set by the photoLibraryService
+      if ((global as any).prefetchedSuggestions) {
+        console.log("Found prefetched suggestions in global context - skipping API call");
+        // No need to make another API call, just log what we have
+        const suggestions = (global as any).prefetchedSuggestions;
+        console.log('Using existing prefetched suggestions:',
+          suggestions.restaurants?.length || 0, 'restaurants,',
+          suggestions.menu_items?.length || 0, 'menu items');
+      } else {
+        // No prefetched suggestions, need to call the API
+        console.log("No prefetched suggestions found, making API call");
+        
+        // Use a clean URI for the API call (no query parameters)
+        // This should work better with the API and EXIF extraction
+        const apiUri = photoUriToUse.split('?')[0];
+        console.log(`Using cleaned URI for API call: ${apiUri}`);
+        
+        // Use the original photo URI to preserve EXIF data with the best available location
+        const suggestions = await getMealSuggestions(apiUri, enhancedLocation);
+
+        // Store the suggestion data in global scope for use in the Rating screen
+        (global as any).prefetchedSuggestions = suggestions;
+
+        console.log('Successfully prefetched restaurant suggestions:',
+          suggestions.restaurants?.length || 0, 'restaurants,',
+          suggestions.menu_items?.length || 0, 'menu items');
+      }
+    } catch (error) {
+      console.error('Error prefetching restaurant suggestions:', error);
+      // Don't show errors to the user - this is a background operation
+    } finally {
+      if (isMounted.current) {
+        setPrefetchingSuggestions(false);
+      }
+    }
+  };
+
   useEffect(() => {
     console.log('CropScreen mounted with key:', _navigationKey);
     
     // Set mounted flag
     isMounted.current = true;
+    suggestionsFetched.current = false;
+    
+    // Always clear the global suggestions cache on mount to ensure fresh data
+    if ((global as any).prefetchedSuggestions) {
+      console.log('Clearing any previously cached suggestions');
+      (global as any).prefetchedSuggestions = null;
+    }
     
     // Validate photo object
     if (!photo || !photo.uri) {
@@ -81,19 +334,39 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       );
       return;
     }
+    
+    // Update the previous URI reference
+    if (photo.uri !== prevPhotoUri.current) {
+      console.log('New photo detected in mount effect');
+      prevPhotoUri.current = photo.uri;
+    }
 
-    // Set transparent status bar
-    StatusBar.setTranslucent(true);
-    StatusBar.setBackgroundColor('transparent');
+    // Set transparent status bar (platform-specific)
+    if (Platform.OS === 'android') {
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    } else {
+      // iOS handling
+      StatusBar.setBarStyle('dark-content');
+    }
+    
+    // Start prefetching suggestions in the background
+    // This should happen even for uploaded photos
+    prefetchSuggestions();
     
     // Cleanup when component unmounts
     return () => {
       console.log('CropScreen unmounting');
       isMounted.current = false;
       
-      // Restore status bar
-      StatusBar.setTranslucent(false);
-      StatusBar.setBackgroundColor('#ffffff');
+      // Restore status bar (platform-specific)
+      if (Platform.OS === 'android') {
+        StatusBar.setTranslucent(false);
+        StatusBar.setBackgroundColor('#ffffff');
+      } else {
+        // iOS handling
+        StatusBar.setBarStyle('default');
+      }
       
       // Clean up any remaining resources
       ImageCropPicker.clean().catch(e => {
@@ -155,8 +428,14 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         // Generate a unique navigation key
         const timestamp = new Date().getTime();
         
-        // Navigate to EditPhoto with the cropped image
+        // Prepare any cached suggestion data
+        const cachedSuggestions = (global as any).prefetchedSuggestions;
+        
+        // Navigate to EditPhoto with the cropped image and any prefetched suggestions
         console.log('Navigating to EditPhoto with cropped image:', result.path);
+        console.log('Passing prefetched suggestions:', 
+          cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
+        
         navigation.navigate('EditPhoto', {
           photo: {
             uri: result.path,
@@ -164,8 +443,14 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
             height: result.height,
           },
           location: location,
+          // Include EXIF data if available from route params
+          exifData: route.params.exifData,
+          // Include suggestionData if available
+          suggestionData: cachedSuggestions || undefined,
           _navigationKey: `edit_photo_${timestamp}`,
         });
+        
+        // Don't clear the global cache here since EditPhoto will pass it along to Rating
       }
     } catch (error) {
       console.log('Crop error:', error);

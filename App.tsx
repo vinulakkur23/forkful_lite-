@@ -9,6 +9,7 @@ import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dim
 import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { getPhotoWithMetadata } from './services/photoLibraryService';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -115,84 +116,49 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  // Updated Image Picker function
+  // Updated Image Picker function to use PhotoGPSModule
     const openImagePicker = async () => {
-      // Removed workaround of navigating to Home first.
-      // The fix should be in CropScreen's ability to handle new props.
-
-      const options: ImagePicker.ImageLibraryOptions = { // Explicitly type options
-        mediaType: 'photo',
-        includeBase64: false,
-        maxHeight: 2000,
-        maxWidth: 2000,
-        quality: 0.8,
-        selectionLimit: 1,
-      };
-
       try {
-        const result = await ImagePicker.launchImageLibrary(options); // Use typed options
+        console.log("Opening gallery from tab bar using PhotoGPSModule");
         
-        if (result.didCancel) {
-          console.log('User cancelled image picker');
+        // Use our enhanced photo library service that gets GPS metadata
+        const photoAsset = await getPhotoWithMetadata();
+        
+        if (!photoAsset) {
+          console.log("No photo selected or selection was cancelled");
           return;
         }
         
-        if (result.errorCode) {
-          console.log('Image picker error:', result.errorCode, result.errorMessage);
-          Alert.alert('Error', 'There was an error selecting the image: ' + result.errorMessage);
-          return;
-        }
+        console.log("Selected photo with metadata:", {
+          uri: photoAsset.uri,
+          hasLocation: !!photoAsset.location,
+          location: photoAsset.location,
+        });
         
-        if (!result.assets || result.assets.length === 0 || !result.assets[0].uri) {
-          console.log('No assets or URI returned from picker');
-          Alert.alert('Error', 'Could not get image data. Please try another image.');
-          return;
-        }
-        
-        const selectedImage = result.assets[0];
-        
-        // Add a timestamp and unique key to ensure CropScreen refreshes
+        // Add a timestamp to create a unique navigation key
         const timestamp = new Date().getTime();
-        const navigationKey = `crop_upload_${timestamp}`;
-        // Ensure URI is unique to bust any caching by Image component itself if needed
-        const uniqueImageUri = selectedImage.uri!.includes('?')
-          ? `${selectedImage.uri}&t=${timestamp}`
-          : `${selectedImage.uri}?t=${timestamp}`;
+        const navigationKey = `gallery_photo_${timestamp}`;
         
-        Geolocation.getCurrentPosition(
-          position => {
-            const location = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            };
-            
-            navigation.navigate('Crop', {
-              photo: {
-                uri: uniqueImageUri,
-                width: selectedImage.width || 1000,
-                height: selectedImage.height || 1000,
-              },
-              location: location,
-              _navigationKey: navigationKey,
-            });
+        // Navigate to Crop screen with the selected photo and location data
+        navigation.navigate('Crop', {
+          photo: {
+            uri: photoAsset.uri,
+            width: photoAsset.width,
+            height: photoAsset.height,
+            originalUri: photoAsset.originalUri,
+            fromGallery: true,
+            assetId: photoAsset.assetId,
           },
-          error => {
-            console.log('Location error:', error);
-            navigation.navigate('Crop', {
-              photo: {
-                uri: uniqueImageUri,
-                width: selectedImage.width || 1000,
-                height: selectedImage.height || 1000,
-              },
-              location: null,
-              _navigationKey: navigationKey,
-            });
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+          location: photoAsset.location || null,
+          exifData: photoAsset.exifData,
+          _navigationKey: navigationKey,
+        });
+      } catch (error: any) {
+        console.error('Error selecting photo from gallery:', error);
+        Alert.alert(
+          "Gallery Error", 
+          `There was a problem accessing your photo library: ${error.message || 'Unknown error'}`
         );
-      } catch (error: any) { // Catch any error
-        console.error('Unexpected error in image picker:', error);
-        Alert.alert('Error', `An unexpected error occurred: ${error.message || 'Unknown error'}`);
       }
     };
 

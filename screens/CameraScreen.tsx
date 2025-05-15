@@ -19,6 +19,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import Exif from 'react-native-exif';
 import { getMealSuggestions } from '../services/mealService';
+import { getPhotoWithMetadata } from '../services/photoLibraryService';
 
 // Update the navigation prop type to use composite navigation
 type CameraScreenNavigationProp = CompositeNavigationProp<
@@ -277,6 +278,82 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('Home');
   };
 
+  // Function to select a photo from the gallery using the PhotoGPSModule
+  const selectFromGallery = async () => {
+    try {
+      console.log("Opening gallery with PhotoGPSModule...");
+      const photoAsset = await getPhotoWithMetadata();
+      
+      if (!photoAsset) {
+        console.log("No photo selected from gallery");
+        return;
+      }
+      
+      console.log("Photo selected from gallery:", {
+        uri: photoAsset.uri,
+        hasLocation: !!photoAsset.location,
+        location: photoAsset.location,
+      });
+      
+      // Add a timestamp to create a unique navigation key
+      const timestamp = new Date().getTime();
+      const navigationKey = `gallery_photo_${timestamp}`;
+      
+      // Navigate to Crop screen with the selected photo and location data
+      navigation.navigate('Crop', {
+        photo: {
+          uri: photoAsset.uri,
+          width: photoAsset.width,
+          height: photoAsset.height,
+          originalUri: photoAsset.originalUri,
+          fromGallery: true,
+          assetId: photoAsset.assetId,
+        },
+        location: photoAsset.location || location, // Use photo location or fallback to device location
+        exifData: photoAsset.exifData,
+        _navigationKey: navigationKey,
+      });
+      
+      // If we have location data, start prefetching restaurant suggestions
+      if (photoAsset.location && photoAsset.uri) {
+        console.log("Starting early fetch of restaurant suggestions for gallery photo");
+        setTimeout(() => {
+          getMealSuggestions(photoAsset.uri, photoAsset.location)
+            .then(suggestions => {
+              console.log("Early restaurant suggestions fetched successfully:",
+                suggestions.restaurants?.length || 0, "restaurants");
+              // Store in global app cache for later screens to use
+              (global as any).prefetchedSuggestions = suggestions;
+            })
+            .catch(err => {
+              console.log("Early restaurant suggestions fetch failed:", err);
+            });
+        }, 0);
+      } else if (location) {
+        // If photo has no location, use device location as fallback
+        console.log("Gallery photo has no location, using device location");
+        setTimeout(() => {
+          getMealSuggestions(photoAsset.uri, location)
+            .then(suggestions => {
+              console.log("Early restaurant suggestions fetched successfully:",
+                suggestions.restaurants?.length || 0, "restaurants");
+              // Store in global app cache for later screens to use
+              (global as any).prefetchedSuggestions = suggestions;
+            })
+            .catch(err => {
+              console.log("Early restaurant suggestions fetch failed:", err);
+            });
+        }, 0);
+      }
+    } catch (error) {
+      console.error("Error selecting photo from gallery:", error);
+      Alert.alert(
+        "Gallery Error",
+        "There was a problem accessing your photo library. Please try again."
+      );
+    }
+  };
+
   // In your render function
   if (isLoading) {
     return (
@@ -388,6 +465,16 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       </TouchableOpacity>
       
       <View style={styles.buttonContainer}>
+        {/* Gallery button */}
+        <TouchableOpacity 
+          onPress={selectFromGallery}
+          style={styles.galleryButton}
+          disabled={isTakingPicture}
+        >
+          <Icon name="photo-library" size={28} color="white" />
+        </TouchableOpacity>
+        
+        {/* Capture button */}
         <TouchableOpacity
           onPress={takePicture}
           style={styles.captureButton}
@@ -395,6 +482,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         >
           <View style={styles.captureButtonInner} />
         </TouchableOpacity>
+        
+        {/* Empty view for balance (to center the capture button) */}
+        <View style={styles.galleryButton} />
       </View>
     </View>
   );
@@ -501,7 +591,10 @@ const styles = StyleSheet.create({
     bottom: 50,
     left: 0,
     right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   captureButton: {
     width: 70,
@@ -510,12 +603,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginHorizontal: 20,
   },
   captureButtonInner: {
     width: 60,
     height: 60,
     borderRadius: 30,
     backgroundColor: 'white',
+  },
+  galleryButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fallbackButton: {
     backgroundColor: '#ff6b6b',

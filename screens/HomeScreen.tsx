@@ -16,6 +16,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom StarRating component instead of FontAwesome
 import StarRating from '../components/StarRating';
+import SimpleFilterComponent from '../components/SimpleFilterComponent';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
@@ -43,18 +44,36 @@ interface MealEntry {
   } | null;
   createdAt: any;
   distance?: number; // Distance in meters from user's current location
+  aiMetadata?: {
+    cuisineType: string;
+    foodType: string;
+    mealType: string;
+    primaryProtein: string;
+    dietType: string;
+    eatingMethod: string;
+    setting: string;
+    platingStyle: string;
+    beverageType: string;
+  };
 }
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [user, setUser] = useState<any>(null);
+  const [allNearbyMeals, setAllNearbyMeals] = useState<MealEntry[]>([]);
   const [nearbyMeals, setNearbyMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+  
+  // Simple filter state
+  const [activeFilter, setActiveFilter] = useState<{
+    type: string,
+    value: string
+  } | null>(null);
 
   // Get user's current location
   useEffect(() => {
@@ -87,6 +106,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       fetchNearbyMeals();
     }
   }, [userLocation]);
+  
+  // Apply filter whenever meals or active filter changes
+  useEffect(() => {
+    applyFilter();
+  }, [allNearbyMeals, activeFilter]);
 
   // Calculate distance between two coordinates in kilometers
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -169,7 +193,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         ? meals.sort((a, b) => (a.distance || 9999) - (b.distance || 9999))
         : meals;
       
-      setNearbyMeals(sortedMeals);
+      setAllNearbyMeals(sortedMeals);
+      // Filtered meals will be updated via the useEffect
     } catch (error) {
       console.error('Error fetching nearby meals:', error);
       Alert.alert('Error', 'Failed to load nearby meals');
@@ -183,6 +208,46 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     setRefreshing(true);
     setImageErrors({}); // Reset image errors on refresh
     fetchNearbyMeals();
+  };
+  
+  // Apply filter to all nearby meals
+  const applyFilter = () => {
+    if (!allNearbyMeals.length) {
+      setNearbyMeals([]);
+      return;
+    }
+    
+    // If no filter is active, show all meals
+    if (!activeFilter) {
+      setNearbyMeals(allNearbyMeals);
+      return;
+    }
+    
+    // Apply the active filter
+    let result = [...allNearbyMeals];
+    
+    if (activeFilter.type === 'cuisineType') {
+      result = result.filter(meal => 
+        meal.aiMetadata && 
+        meal.aiMetadata.cuisineType && 
+        meal.aiMetadata.cuisineType === activeFilter.value
+      );
+    } else if (activeFilter.type === 'foodType') {
+      result = result.filter(meal => 
+        meal.aiMetadata && 
+        meal.aiMetadata.foodType && 
+        meal.aiMetadata.foodType === activeFilter.value
+      );
+    }
+    
+    // Set filtered meals
+    setNearbyMeals(result);
+  };
+  
+  // Handle filter changes from SimpleFilterComponent
+  const handleFilterChange = (filter: { type: string, value: string } | null) => {
+    setActiveFilter(filter);
+    // applyFilter will be called via useEffect
   };
 
   const viewMealDetails = (meal: MealEntry) => {
@@ -293,6 +358,15 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>DishItOut</Text>
       </View>
+      
+      {/* Simple Filter Component */}
+      <View style={styles.filterArea}>
+        <SimpleFilterComponent 
+          key="home-filter"
+          onFilterChange={handleFilterChange}
+          initialFilter={activeFilter}
+        />
+      </View>
 
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
@@ -346,6 +420,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     zIndex: 10,
+  },
+  filterArea: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    zIndex: 5,
   },
   headerTitle: {
     fontSize: 22,

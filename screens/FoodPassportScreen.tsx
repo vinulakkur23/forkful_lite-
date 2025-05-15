@@ -23,6 +23,7 @@ import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
 import StarRating from '../components/StarRating';
+import SimpleFilterComponent from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
@@ -52,6 +53,17 @@ interface MealEntry {
     liked: string;
     disliked: string;
   };
+  aiMetadata?: {
+    cuisineType: string;
+    foodType: string;
+    mealType: string;
+    primaryProtein: string;
+    dietType: string;
+    eatingMethod: string;
+    setting: string;
+    platingStyle: string;
+    beverageType: string;
+  };
 }
 
 const { width } = Dimensions.get('window');
@@ -65,11 +77,18 @@ type TabRoutes = {
 
 const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
+    const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [userInfo, setUserInfo] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+    
+    // Simple filter state
+    const [activeFilter, setActiveFilter] = useState<{
+        type: string,
+        value: string
+    } | null>(null);
 
     // State for profile stats
     const [profileStats, setProfileStats] = useState({
@@ -121,6 +140,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
         }
     }, []);
     
+    // Apply filter whenever meals or active filter changes
+    useEffect(() => {
+        applyFilter();
+    }, [meals, activeFilter]);
+    
     const fetchMealEntries = async () => {
         try {
             setLoading(true);
@@ -154,6 +178,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
             });
 
             setMeals(fetchedMeals);
+            // Filtered meals will be updated via the useEffect
 
             // Calculate profile stats
             const totalMeals = fetchedMeals.length;
@@ -184,6 +209,45 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     const handleRefresh = () => {
         setRefreshing(true);
         fetchMealEntries();
+    };
+    
+    // Apply filter to meals
+    const applyFilter = () => {
+        if (!meals.length) {
+            setFilteredMeals([]);
+            return;
+        }
+        
+        // If no filter is active, show all meals
+        if (!activeFilter) {
+            setFilteredMeals(meals);
+            return;
+        }
+        
+        // Apply the active filter
+        let result = [...meals];
+        
+        if (activeFilter.type === 'cuisineType') {
+            result = result.filter(meal => 
+                meal.aiMetadata && 
+                meal.aiMetadata.cuisineType && 
+                meal.aiMetadata.cuisineType === activeFilter.value
+            );
+        } else if (activeFilter.type === 'foodType') {
+            result = result.filter(meal => 
+                meal.aiMetadata && 
+                meal.aiMetadata.foodType && 
+                meal.aiMetadata.foodType === activeFilter.value
+            );
+        }
+        
+        setFilteredMeals(result);
+    };
+    
+    // Handle filter changes from SimpleFilterComponent
+    const handleFilterChange = (filter: { type: string, value: string } | null) => {
+        setActiveFilter(filter);
+        // applyFilter will be called via useEffect
     };
     
     const viewMealDetails = (meal: MealEntry) => {
@@ -389,6 +453,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.signOutText}>Sign Out</Text>
                 </TouchableOpacity>
             </View>
+            
+            {/* Simple Filter Component */}
+            <View style={styles.filterArea}>
+                <SimpleFilterComponent 
+                    key="passport-filter"
+                    onFilterChange={handleFilterChange}
+                    initialFilter={activeFilter}
+                />
+            </View>
 
             {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
@@ -400,7 +473,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
 
 
                     <FlatList
-                        data={meals}
+                        data={filteredMeals}
                         renderItem={renderMealItem}
                         keyExtractor={(item) => item.id}
                         numColumns={2}
@@ -439,6 +512,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                                                 </Text>
                                             </View>
                                         </View>
+                                        
                                         <View style={styles.profileStats}>
                                             <View style={styles.statItem}>
                                                 <Icon name="file-upload" size={18} color="#666" />
@@ -499,6 +573,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 15,
         backgroundColor: '#ff6b6b',
+        zIndex: 10,
     },
     title: {
         fontSize: 20,
@@ -566,6 +641,26 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#f0f0f0',
         paddingTop: 15,
+    },
+    filterContainer: {
+        marginVertical: 10,
+        paddingHorizontal: 10,
+    },
+    filterArea: {
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        zIndex: 100,
+        position: 'relative',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        marginTop: 5,
+        marginBottom: 5,
     },
     statItem: {
         flex: 1,

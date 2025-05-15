@@ -27,7 +27,10 @@ import * as ImagePicker from 'react-native-image-picker';
 import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
+// Import our new photoLibraryService for improved metadata extraction
+import { getPhotoWithMetadata, prefetchSuggestionsFromPhoto } from '../services/photoLibraryService';
 import StarRating from '../components/StarRating';
+import SimpleFilterComponent from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
@@ -49,6 +52,9 @@ interface MealEntry {
   rating: number;
   restaurant: string;
   meal: string;
+  userId?: string;
+  userName?: string;
+  userPhoto?: string;
   location: {
     latitude: number;
     longitude: number;
@@ -61,6 +67,18 @@ interface MealEntry {
     liked: string;
     disliked: string;
   };
+  aiMetadata?: {
+    cuisineType: string;
+    foodType: string;
+    mealType: string;
+    primaryProtein: string;
+    dietType: string;
+    eatingMethod: string;
+    setting: string;
+    platingStyle: string;
+    beverageType: string;
+  };
+  distance?: number;
 }
 
 const { width } = Dimensions.get('window');
@@ -79,6 +97,13 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+  
+  // Simple filter state
+  const [activeFilter, setActiveFilter] = useState<{
+    type: string,
+    value: string
+  } | null>(null);
+  const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   
   // State for profile stats
   const [profileStats, setProfileStats] = useState({
@@ -151,20 +176,44 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        console.log(`Processing meal entry: ${doc.id}`, data.aiMetadata ? "HAS aiMetadata" : "NO aiMetadata");
+        
+        // Ensure aiMetadata is properly structured 
+        let processedAiMetadata = undefined;
+        
+        if (data.aiMetadata && typeof data.aiMetadata === 'object') {
+          processedAiMetadata = {
+            cuisineType: data.aiMetadata.cuisineType || '',
+            foodType: data.aiMetadata.foodType || '',
+            mealType: data.aiMetadata.mealType || '',
+            primaryProtein: data.aiMetadata.primaryProtein || '',
+            dietType: data.aiMetadata.dietType || '',
+            eatingMethod: data.aiMetadata.eatingMethod || '',
+            setting: data.aiMetadata.setting || '',
+            platingStyle: data.aiMetadata.platingStyle || '',
+            beverageType: data.aiMetadata.beverageType || ''
+          };
+          console.log(`Meal ${doc.id} processed aiMetadata:`, JSON.stringify(processedAiMetadata));
+        }
+        
         fetchedMeals.push({
           id: doc.id,
           photoUrl: data.photoUrl,
           rating: data.rating,
           restaurant: data.restaurant || '',
           meal: data.meal || '',
+          userId: data.userId,
           location: data.location,
           createdAt: data.createdAt?.toDate?.() || Date.now(),
           mealType: data.mealType || 'Restaurant',
-          comments: data.comments || { liked: '', disliked: '' }
+          comments: data.comments || { liked: '', disliked: '' },
+          aiMetadata: processedAiMetadata
         });
       });
 
       setMeals(fetchedMeals);
+      // Initial state for filtered meals will be the same as all meals
+      setFilteredMeals(fetchedMeals);
 
       // Calculate profile stats
       const totalMeals = fetchedMeals.length;
@@ -197,6 +246,125 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     fetchMealEntries();
   };
   
+  // Apply filter to meals
+  const applyFilter = () => {
+    if (!meals.length) {
+      console.log("No meals to filter");
+      setFilteredMeals([]);
+      return;
+    }
+    
+    // If no filter is active, show all meals
+    if (!activeFilter) {
+      console.log("No active filter, showing all meals:", meals.length);
+      setFilteredMeals(meals);
+      return;
+    }
+    
+    console.log(`Applying filter: ${activeFilter.type}=${activeFilter.value}`);
+    
+    // Deep inspection of meal data structure
+    console.log("First meal data sample:", JSON.stringify(meals[0], null, 2));
+    
+    // Check for aiMetadata presence and structure
+    const mealsWithMetadata = meals.filter(meal => 
+      meal.aiMetadata && typeof meal.aiMetadata === 'object'
+    );
+    console.log("Meals with aiMetadata objects:", mealsWithMetadata.length);
+    
+    if (mealsWithMetadata.length === 0) {
+      console.warn("No meals have proper aiMetadata objects!");
+      // Show all meals when there's no metadata
+      setFilteredMeals(meals);
+      return;
+    }
+    
+    // Sample aiMetadata structures to debug
+    if (mealsWithMetadata.length > 0) {
+      console.log("Sample aiMetadata structures:");
+      mealsWithMetadata.slice(0, 3).forEach((meal, i) => {
+        console.log(`Sample ${i+1}:`, JSON.stringify(meal.aiMetadata, null, 2));
+      });
+    }
+    
+    // Apply the active filter
+    let result = [...meals];
+    
+    if (activeFilter.type === 'cuisineType') {
+      console.log("Filtering by cuisineType:", activeFilter.value);
+      // Debug - show available cuisine types
+      const availableCuisines = new Set();
+      meals.forEach(meal => {
+        if (meal.aiMetadata && meal.aiMetadata.cuisineType) {
+          availableCuisines.add(meal.aiMetadata.cuisineType);
+        }
+      });
+      console.log("Available cuisineTypes:", Array.from(availableCuisines));
+      
+      result = result.filter(meal => {
+        // More verbose debugging for each meal
+        const hasMeta = Boolean(meal.aiMetadata);
+        const hasCuisine = hasMeta && Boolean(meal.aiMetadata.cuisineType);
+        const cuisineType = hasCuisine ? meal.aiMetadata.cuisineType : 'none';
+        
+        // Case-insensitive and trim comparison
+        const mealCuisineNormalized = hasCuisine ? meal.aiMetadata.cuisineType.trim().toLowerCase() : '';
+        const filterValueNormalized = activeFilter.value.trim().toLowerCase();
+        const matches = hasCuisine && mealCuisineNormalized === filterValueNormalized;
+        
+        // Log details for a sample of meals
+        if (Math.random() < 0.1) { // Only log ~10% of meals to avoid console spam
+          console.log(`Meal ${meal.id}: hasMeta=${hasMeta}, hasCuisine=${hasCuisine}, cuisineType="${cuisineType}", normalized="${mealCuisineNormalized}", filter="${filterValueNormalized}", matches=${matches}`);
+        }
+        
+        return matches;
+      });
+    } else if (activeFilter.type === 'foodType') {
+      console.log("Filtering by foodType:", activeFilter.value);
+      // Debug - show available food types
+      const availableFoodTypes = new Set();
+      meals.forEach(meal => {
+        if (meal.aiMetadata && meal.aiMetadata.foodType) {
+          availableFoodTypes.add(meal.aiMetadata.foodType);
+        }
+      });
+      console.log("Available foodTypes:", Array.from(availableFoodTypes));
+      
+      result = result.filter(meal => {
+        // More verbose debugging for each meal
+        const hasMeta = Boolean(meal.aiMetadata);
+        const hasFoodType = hasMeta && Boolean(meal.aiMetadata.foodType);
+        const foodType = hasFoodType ? meal.aiMetadata.foodType : 'none';
+        
+        // Case-insensitive and trim comparison
+        const mealFoodTypeNormalized = hasFoodType ? meal.aiMetadata.foodType.trim().toLowerCase() : '';
+        const filterValueNormalized = activeFilter.value.trim().toLowerCase();
+        const matches = hasFoodType && mealFoodTypeNormalized === filterValueNormalized;
+        
+        // Log details for a sample of meals
+        if (Math.random() < 0.1) { // Only log ~10% of meals to avoid console spam
+          console.log(`Meal ${meal.id}: hasMeta=${hasMeta}, hasFoodType=${hasFoodType}, foodType="${foodType}", normalized="${mealFoodTypeNormalized}", filter="${filterValueNormalized}", matches=${matches}`);
+        }
+        
+        return matches;
+      });
+    }
+    
+    console.log(`Filtered meals: ${result.length} of ${meals.length}`);
+    setFilteredMeals(result);
+  };
+  
+  // Handle filter changes from SimpleFilterComponent
+  const handleFilterChange = (filter: { type: string, value: string } | null) => {
+    setActiveFilter(filter);
+    // applyFilter will be called via useEffect
+  };
+  
+  // Apply filter whenever meals or active filter changes
+  useEffect(() => {
+    applyFilter();
+  }, [meals, activeFilter]);
+  
   const viewMealDetails = (meal: MealEntry) => {
     console.log("Navigating to meal detail with ID:", meal.id);
     navigation.navigate('MealDetail', { mealId: meal.id });
@@ -207,124 +375,147 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     setImageErrors(prev => ({...prev, [mealId]: true}));
   };
 
-  // Simplified Image Picker function for debugging
+  // Updated Image Picker function using photoLibraryService for full metadata access
   const openImagePicker = async () => {
-    console.log('Opening image picker with EXIF data extraction');
-
-    const options = {
-      mediaType: 'photo' as const,
-      includeBase64: false,
-      maxHeight: 2000,
-      maxWidth: 2000,
-      quality: 0.8,
-    };
+    console.log('Opening enhanced image picker with PHAsset metadata extraction');
 
     try {
-      // Use the Promise API
-      const result = await ImagePicker.launchImageLibrary(options);
+      // Use our new getPhotoWithMetadata function to access full metadata including location
+      const photoAsset = await getPhotoWithMetadata();
 
-      if (result.didCancel) {
-        console.log('User cancelled image picker');
+      if (!photoAsset) {
+        console.log('No photo selected or permission denied');
         return;
       }
 
-      if (result.errorCode) {
-        console.log('Image picker error:', result.errorCode, result.errorMessage);
-        Alert.alert('Error', 'There was an error selecting the image.');
-        return;
+      console.log(`Selected photo with URI: ${photoAsset.uri}`);
+      console.log(`Photo has location data: ${!!photoAsset.location}`);
+      
+      if (photoAsset.location) {
+        console.log(`Location data: ${JSON.stringify(photoAsset.location)}`);
       }
 
-      if (!result.assets || result.assets.length === 0) {
-        console.log('No assets returned from picker');
-        return;
+      // Prefetch restaurant suggestions based on the photo location
+      if (photoAsset.location) {
+        console.log("Prefetching suggestions based on photo location");
+        
+        // Store the prefetched suggestions in a global variable for the Rating screen to use
+        try {
+          const suggestions = await prefetchSuggestionsFromPhoto(photoAsset);
+          if (suggestions) {
+            // Save suggestions to global for RatingScreen to access
+            (global as any).prefetchedSuggestions = suggestions;
+            console.log("Stored prefetched suggestions in global:", 
+              suggestions.restaurants ? `${suggestions.restaurants.length} restaurants` : "No restaurants",
+              suggestions.suggested_meal ? `Meal: ${suggestions.suggested_meal}` : "No meal suggestion"
+            );
+          }
+        } catch (suggestionError) {
+          console.log("Error prefetching suggestions:", suggestionError);
+        }
       }
 
-      const selectedImage = result.assets[0];
-
-      if (!selectedImage.uri) {
-        Alert.alert('Error', 'Could not get image data. Please try another image.');
-        return;
-      }
-
-      // Use the clean URI directly without any modifications
-      const imageUri = selectedImage.uri;
-      console.log(`Selected image with URI: ${imageUri}`);
-
-      // Create a simple photo object for the crop screen
+      // Create a photo object for the Crop screen
       const photoObject = {
-        uri: imageUri,
-        width: selectedImage.width || 1000,
-        height: selectedImage.height || 1000
+        uri: photoAsset.uri,
+        width: photoAsset.width,
+        height: photoAsset.height,
+        originalUri: photoAsset.originalUri || photoAsset.uri, // Preserve original URI for EXIF
+        fromGallery: true, // Mark that this is an uploaded image
+        assetId: photoAsset.assetId // Include the asset ID for potential future use
       };
 
-      // Try to extract EXIF data including location
-      try {
-        console.log("Attempting to extract EXIF data from image");
-        const exifData = await Exif.getExif(imageUri);
-        console.log("EXIF data retrieved:", JSON.stringify(exifData));
-
-        // Check if GPS data is available in the EXIF
-        if (exifData && exifData.GPSLatitude && exifData.GPSLongitude) {
-          console.log("EXIF GPS data found:", {
-            lat: exifData.GPSLatitude,
-            lng: exifData.GPSLongitude
-          });
-
-          // Create a location object from EXIF data
-          const location = {
-            latitude: parseFloat(exifData.GPSLatitude),
-            longitude: parseFloat(exifData.GPSLongitude),
-            source: 'exif'
-          };
-
-          // Navigate with EXIF location data
-          navigation.navigate('Crop', {
-            photo: photoObject,
-            location: location,
-            exifData: exifData, // Pass the full EXIF data for potential future use
-            _navigationKey: `image_${Date.now()}`
-          });
-          return;
-        } else {
-          console.log("No EXIF GPS data found in the image, falling back to device location");
-        }
-      } catch (exifError) {
-        console.log("Error extracting EXIF data:", exifError);
-        console.log("Falling back to device location");
+      // Make sure location has a source property before navigating
+      let locationWithSource = null;
+      if (photoAsset.location) {
+        locationWithSource = {
+          ...photoAsset.location,
+          // Ensure source is set - default to 'exif' if missing
+          source: photoAsset.location.source || 'exif'
+        };
+        console.log('Using location with source:', locationWithSource);
       }
 
-      // Fallback to device location if EXIF extraction fails or no GPS data
+      // Navigate with photo and location data if available
+      navigation.navigate('Crop', {
+        photo: photoObject,
+        location: locationWithSource,
+        exifData: photoAsset.exifData || null, // Pass any extracted EXIF data
+        _navigationKey: `image_${Date.now()}`
+      });
+    } catch (error) {
+      console.error('Unexpected error in enhanced image picker:', error);
+      Alert.alert('Error', 'An unexpected error occurred while selecting an image.');
+      
+      // Fall back to device location if the enhanced picker fails
+      console.log('Falling back to device location');
       Geolocation.getCurrentPosition(
         position => {
-          const location = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            source: 'device'
-          };
-
-          // Navigate with device location as fallback
-          navigation.navigate('Crop', {
-            photo: photoObject,
-            location: location,
-            // Generate a unique navigation key
-            _navigationKey: `image_${Date.now()}`
-          });
+          // Create basic photo object with device location
+          Alert.alert(
+            'Limited Photo Access', 
+            'We were unable to access full photo metadata. Location information will be based on your current location instead.',
+            [
+              { 
+                text: 'Select a Different Photo', 
+                style: 'cancel' 
+              },
+              {
+                text: 'Continue',
+                onPress: () => {
+                  // Launch standard image picker as fallback
+                  const fallbackOptions = {
+                    mediaType: 'photo' as const,
+                    includeBase64: false,
+                    maxHeight: 2000,
+                    maxWidth: 2000,
+                    quality: 0.8,
+                  };
+                  
+                  ImagePicker.launchImageLibrary(fallbackOptions, (result) => {
+                    if (result.didCancel || !result.assets || result.assets.length === 0) {
+                      return;
+                    }
+                    
+                    const selectedImage = result.assets[0];
+                    if (!selectedImage.uri) {
+                      return;
+                    }
+                    
+                    const photoObject = {
+                      uri: selectedImage.uri,
+                      width: selectedImage.width || 1000,
+                      height: selectedImage.height || 1000,
+                      originalUri: selectedImage.uri,
+                      fromGallery: true
+                    };
+                    
+                    // Make sure to include source in the location object
+                    const location = {
+                      latitude: position.coords.latitude,
+                      longitude: position.coords.longitude,
+                      source: 'device' // Explicitly mark as device location for proper handling
+                    };
+                    
+                    console.log('Using device location as fallback:', location);
+                    
+                    navigation.navigate('Crop', {
+                      photo: photoObject,
+                      location: location,
+                      _navigationKey: `image_${Date.now()}`
+                    });
+                  });
+                }
+              }
+            ]
+          );
         },
         error => {
           console.log('Location error:', error);
-
-          // Navigate without location info
-          navigation.navigate('Crop', {
-            photo: photoObject,
-            location: null,
-            _navigationKey: `image_${Date.now()}`
-          });
+          Alert.alert('Error', 'Unable to access photo metadata or location. Please try again or use the camera.');
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
-    } catch (error) {
-      console.error('Unexpected error in image picker:', error);
-      Alert.alert('Error', 'An unexpected error occurred while selecting an image.');
     }
   };
   
@@ -401,7 +592,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     
     return (
       <FlatList
-        data={meals}
+        data={filteredMeals}
         renderItem={renderMealItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
@@ -473,11 +664,31 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Icon name="book" size={64} color="#ddd" />
-            <Text style={styles.emptyText}>No meals in your passport yet</Text>
-            <Text style={styles.emptySubtext}>
-              Tap "New Entry" to add your first meal!
-            </Text>
+            {meals.length === 0 ? (
+              // No meals at all
+              <>
+                <Icon name="book" size={64} color="#ddd" />
+                <Text style={styles.emptyText}>No meals in your passport yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap "New Entry" to add your first meal!
+                </Text>
+              </>
+            ) : (
+              // We have meals but none match the current filter
+              <>
+                <Icon name="filter-alt" size={64} color="#ddd" />
+                <Text style={styles.emptyText}>No matches found</Text>
+                <Text style={styles.emptySubtext}>
+                  {activeFilter ? `No meals match the filter "${activeFilter.value}"` : 'No meals match your filter'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.clearFilterButton}
+                  onPress={() => setActiveFilter(null)}
+                >
+                  <Text style={styles.clearFilterText}>Clear Filter</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         }
       />
@@ -487,7 +698,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
   // MapView Component for the second tab - simplified for stability
   const MapViewComponent = () => {
     // Filter meals that have location data
-    const mealsWithLocation = meals.filter(meal => meal.location !== null);
+    const mealsWithLocation = filteredMeals.filter(meal => meal.location !== null);
     
     // Calculate initial region based on meals only - no user location yet
     const initialRegion = useMemo<Region>(() => {
@@ -544,9 +755,9 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
       return (
         <View style={styles.emptyContainer}>
           <Icon name="place" size={64} color="#ddd" />
-          <Text style={styles.emptyText}>No meals with location data</Text>
+          <Text style={styles.emptyText}>{filteredMeals.length > 0 ? 'No matching meals with location data' : 'No meals with location data'}</Text>
           <Text style={styles.emptySubtext}>
-            Add meals with location information to see them on the map
+            {filteredMeals.length > 0 ? 'Try changing your filters to see more locations' : 'Add meals with location information to see them on the map'}
           </Text>
         </View>
       );
@@ -711,6 +922,15 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
       
+      {/* Simple Filter Component */}
+      <View style={styles.filterArea}>
+        <SimpleFilterComponent 
+          key="passport-map-filter"
+          onFilterChange={handleFilterChange}
+          initialFilter={activeFilter}
+        />
+      </View>
+      
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
@@ -744,6 +964,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 15,
     backgroundColor: '#ff6b6b',
+    zIndex: 10,
+  },
+  filterArea: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    zIndex: 100,
+    position: 'relative',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginTop: 5,
+    marginBottom: 5,
   },
   title: {
     fontSize: 20,
@@ -939,9 +1176,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 5,
   },
+  clearFilterButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#ff6b6b',
+    borderRadius: 8,
+  },
+  clearFilterText: {
+    color: 'white',
+    fontWeight: '500',
+  },
   // Tab View Styles
   tabView: {
     flex: 1,
+    zIndex: 1, // Lower z-index than the filter
   },
   // Map Styles
   mapContainer: {

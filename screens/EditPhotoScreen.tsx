@@ -11,7 +11,8 @@ import {
   Dimensions,
   PanResponder,
   Animated,
-  Modal
+  Modal,
+  Platform
 } from 'react-native';
 import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -19,6 +20,27 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList, TabParamList } from '../App';
+
+// Extend the TabParamList to include exifData in the EditPhoto screen params
+declare module '../App' {
+  interface TabParamList {
+    EditPhoto: {
+      photo: {
+        uri: string;
+        width?: number;
+        height?: number;
+      };
+      location?: {
+        latitude: number;
+        longitude: number;
+        source: string;
+      } | null;
+      exifData?: any;
+      suggestionData?: any;
+      _navigationKey: string;
+    };
+  }
+}
 import API_CONFIG from '../config/api';
 import ImageResizer from 'react-native-image-resizer';
 import ImageCropPicker from 'react-native-image-crop-picker';
@@ -133,11 +155,39 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     const fetchRestaurantSuggestions = async () => {
       if (!photo || !photo.uri || fetchingSuggestions) return;
 
+      // First check if we already have suggestion data from the previous screen
+      if (route.params.suggestionData) {
+        console.log('Using suggestion data passed from previous screen');
+        setSuggestionData(route.params.suggestionData);
+        return;
+      }
+
+      // Check if we have prefetched suggestions in global context
+      if ((global as any).prefetchedSuggestions) {
+        console.log('Using prefetched suggestions from global context');
+        setSuggestionData((global as any).prefetchedSuggestions);
+        return;
+      }
+
+      // If we don't have any suggestion data yet, fetch it now
       try {
         console.log('Prefetching restaurant suggestions while user edits photo');
         setFetchingSuggestions(true);
 
-        const suggestions = await getMealSuggestions(photo.uri, location);
+        // Use the best location data available
+        let bestLocation = location;
+        
+        // If we have exifData with location, prioritize it
+        if (route.params.exifData && route.params.exifData.location) {
+          console.log('Using location from EXIF data for suggestion prefetch');
+          bestLocation = {
+            latitude: route.params.exifData.location.latitude,
+            longitude: route.params.exifData.location.longitude,
+            source: 'exif'
+          };
+        }
+
+        const suggestions = await getMealSuggestions(photo.uri, bestLocation);
 
         // Store the suggestion data for later use
         setSuggestionData(suggestions);
@@ -462,13 +512,42 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
 
           console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
 
+          // Check if we have prefetched suggestion data
+          let useSuggestionData = suggestionData;
+
+          // If we don't have suggestions yet, check if we have them in global context
+          if (!useSuggestionData && (global as any).prefetchedSuggestions) {
+            console.log('Using global prefetched suggestions in EditPhotoScreen');
+            useSuggestionData = (global as any).prefetchedSuggestions;
+          }
+
+          // Check if we have suggestions from the previous screen
+          if (!useSuggestionData && route.params.suggestionData) {
+            console.log('Using suggestions passed from previous screen');
+            useSuggestionData = route.params.suggestionData;
+          }
+
+          // Log suggestion data status
+          console.log('Suggestion data for Rating screen:', 
+            useSuggestionData ? 
+              `Present with ${useSuggestionData.restaurants?.length || 0} restaurants` : 
+              'Not available');
+
+          // Check if we have EXIF data
+          const exifData = route.params.exifData || null;
+          if (exifData) {
+            console.log('Passing EXIF data to Rating screen');
+          }
+
           // Use navigate with a unique key to force a new instance
           navigation.navigate('Rating', {
             photo: freshImageSource,
             location: location,
             // Pass the prefetched suggestion data if available
-            suggestionData: suggestionData,
-            _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+            suggestionData: useSuggestionData,
+            // Pass the EXIF data if available
+            exifData: exifData,
+            _navigationKey: sessionId // This helps React Navigation identify this as a new navigation
           });
         } catch (error) {
           console.error('Error preparing image for Rating screen:', error);

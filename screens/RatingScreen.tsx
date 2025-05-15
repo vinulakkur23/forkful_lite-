@@ -26,6 +26,27 @@ import { getMealSuggestions, getMealSuggestionsForRestaurant, searchRestaurants,
 import StarRating from '../components/StarRating';
 import Geolocation from '@react-native-community/geolocation';
 
+// Extend the TabParamList to include suggestionData in the Rating screen params
+declare module '../App' {
+  interface TabParamList {
+    Rating: {
+      photo: {
+        uri: string;
+        width?: number;
+        height?: number;
+      };
+      location?: {
+        latitude: number;
+        longitude: number;
+        source: string;
+        priority?: number;
+      } | null;
+      suggestionData?: any;
+      _navigationKey: string;
+    };
+  }
+}
+
 // Update the navigation prop type to use composite navigation
 type RatingScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Rating'>,
@@ -74,6 +95,8 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   // Use state to manage location so we can update it when restaurant is selected
   const [location, setLocation] = useState(initializeLocation());
   const [rating, setRating] = useState<number>(0);
+  // Reset key to force the suggestion process to run when a new photo is uploaded
+  const [suggestionResetKey, setSuggestionResetKey] = useState(Date.now());
 
   // Restaurant and meal state
   const [restaurant, setRestaurant] = useState("");
@@ -169,19 +192,71 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
     }
 
     // Log location data for debugging
-    console.log("Initial location data in RatingScreen:", location);
+    console.log("Initial location data in RatingScreen:", JSON.stringify(location));
+    console.log("Suggestion reset key:", suggestionResetKey);
 
     // Get current device location for restaurant searches
+    // This will only be used if no EXIF location is available
     getCurrentLocation();
 
-    // Get suggestions when the screen loads if photo is valid
-    getSuggestions();
-  }, []);
+    // Check if we already have fields populated
+    const hasDataAlready = restaurant && mealName;
+    
+    // Log prefetched data status
+    console.log('Global prefetched suggestions:', (global as any).prefetchedSuggestions ? 'Present' : 'Not present');
+    console.log('Route params suggestion data:', route.params.suggestionData ? 'Present' : 'Not present');
+    console.log('Current restaurant/meal data:', hasDataAlready ? 'Populated' : 'Empty');
+    
+    // Only get new suggestions if we don't already have data
+    // This prevents duplicate API calls
+    if (!hasDataAlready) {
+      // Get suggestions when the screen loads if photo is valid
+      getSuggestions();
+    } else {
+      console.log('Restaurant and meal already populated, skipping duplicate suggestion fetch');
+    }
+
+    // This effect should run whenever photo changes
+    // This ensures we get new suggestions when a new photo is uploaded
+  }, [photo.uri, suggestionResetKey]);
 
   // Add effect to log when location changes
   useEffect(() => {
-    console.log("Location updated in RatingScreen:", location);
+    console.log("Location updated in RatingScreen:", JSON.stringify(location));
   }, [location]);
+  
+  // Add effect to detect navigation focus events and new photos
+  // This will help us reset the form when the user returns to this screen with new images
+  useEffect(() => {
+    const resetOnFocus = () => {
+      console.log("RatingScreen gained focus, checking for new photo data");
+      console.log("Current restaurant value:", restaurant);
+      console.log("Current meal value:", mealName);
+      console.log("Current photo URI:", photo?.uri);
+      
+      // Check if we have prefetched suggestions
+      const hasPrefetchedData = Boolean((global as any).prefetchedSuggestions || route.params.suggestionData);
+      
+      // If we have a valid photo and either no restaurant/meal data set 
+      // or we have prefetched data, then get suggestions
+      if (photo?.uri && ((!restaurant && !mealName) || hasPrefetchedData)) {
+        console.log("Need to load suggestion data for photo:", photo.uri);
+        
+        // Force suggestions to run by updating the key
+        setSuggestionResetKey(Date.now());
+      } else {
+        console.log("Keeping existing field values:", {restaurant, meal: mealName});
+      }
+    };
+    
+    // Listen for when the screen comes into focus
+    const unsubscribeFocus = navigation.addListener('focus', resetOnFocus);
+    
+    // Cleanup the listener when component unmounts
+    return () => {
+      unsubscribeFocus();
+    };
+  }, [navigation, photo?.uri, restaurant, mealName]); // Added more dependencies to better detect changes
   
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
@@ -218,8 +293,32 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
       console.log(`Fetching meal suggestions for restaurant: ${restaurantName}`);
 
-      // Use device location when available
-      const searchLocation = deviceLocation || location;
+      // Determine the best location to use based on priority and availability
+      let searchLocation = null;
+      
+      // First priority: restaurant location (if available from a previous selection)
+      if (location && location.source === 'restaurant_selection') {
+        searchLocation = location;
+        console.log('Using restaurant-specific location with highest priority for menu lookup');
+      } 
+      // Second priority: EXIF data from the photo
+      else if (location && location.source === 'exif') {
+        searchLocation = location;
+        console.log('Using EXIF location data from photo with medium priority for menu lookup');
+      } 
+      // Third priority: Device location
+      else if (deviceLocation) {
+        searchLocation = deviceLocation;
+        console.log('Using current device location with lowest priority for menu lookup');
+      }
+      // Fallback: Any location we have
+      else if (location) {
+        searchLocation = location;
+        console.log('Using fallback location data for menu lookup');
+      }
+
+      console.log('Location for menu suggestion:',
+        searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude} (source: ${searchLocation.source || 'unknown'})` : 'No location available');
 
       // Make the API call
       const result = await getMealSuggestionsForRestaurant(restaurantName, photo?.uri, searchLocation);
@@ -253,7 +352,8 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   
   // Function to get restaurant and meal suggestions
   const getSuggestions = async () => {
-    if (!location || !photo || !photo.uri) {
+    if (!photo || !photo.uri) {
+      console.error("Invalid photo in getSuggestions");
       setIsLoadingSuggestions(false);
       return;
     }
@@ -261,11 +361,29 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
     setIsLoadingSuggestions(true);
 
     try {
+      // First check if we have fields already populated from a previous run
+      // This helps ensure we don't overwrite existing data
+      const fieldsAlreadyPopulated = restaurant && mealName;
+      
+      if (fieldsAlreadyPopulated) {
+        console.log('Fields already populated, preserving existing data');
+        setIsLoadingSuggestions(false);
+        return;
+      }
+      
       // Check if we have prefetched suggestion data from the previous screen
       if (route.params.suggestionData) {
         console.log('Using prefetched suggestion data from route params');
 
         const prefetchedData = route.params.suggestionData;
+
+        // Log the data we're using
+        console.log('Route params data:', {
+          hasRestaurants: prefetchedData.restaurants?.length > 0,
+          restaurantCount: prefetchedData.restaurants?.length || 0,
+          hasSuggestedMeal: Boolean(prefetchedData.suggested_meal),
+          hasMenuItems: prefetchedData.menu_items?.length > 0
+        });
 
         // Update restaurant and meal suggestions from prefetched data
         setSuggestedRestaurants(prefetchedData.restaurants || []);
@@ -289,6 +407,14 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
         const cachedData = (global as any).prefetchedSuggestions;
 
+        // Log the data we're using
+        console.log('Global cache data:', {
+          hasRestaurants: cachedData.restaurants?.length > 0,
+          restaurantCount: cachedData.restaurants?.length || 0,
+          hasSuggestedMeal: Boolean(cachedData.suggested_meal),
+          hasMenuItems: cachedData.menu_items?.length > 0
+        });
+
         // Update restaurant and meal suggestions from prefetched data
         setSuggestedRestaurants(cachedData.restaurants || []);
         setMenuItems(cachedData.menu_items || []);
@@ -301,23 +427,53 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
           setMealName(cachedData.suggested_meal);
         }
 
-        // Clear the global cache to avoid stale data
-        (global as any).prefetchedSuggestions = null;
+        // DON'T clear the global cache to avoid losing data when navigating back
+        // (global as any).prefetchedSuggestions = null;
 
         setIsLoadingSuggestions(false);
         return;
       }
 
-      console.log('No prefetched data available, fetching suggestions now');
+      console.log('No prefetched data available, fetching suggestions now (last resort)');
 
-      // Use device location when available for restaurant suggestions
-      const searchLocation = deviceLocation || location;
-      console.log('Using location for restaurant suggestions:',
-        searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude}` : 'No location available');
+      // Determine the best location to use based on priority and availability
+      let searchLocation = null;
+      
+      // First priority: restaurant location (if available from a previous selection)
+      if (location && location.source === 'restaurant_selection') {
+        searchLocation = location;
+        console.log('Using restaurant-specific location with highest priority');
+      } 
+      // Second priority: EXIF data from the photo
+      else if (location && location.source === 'exif') {
+        searchLocation = location;
+        console.log('Using EXIF location data from photo with medium priority');
+      } 
+      // Third priority: Device location
+      else if (deviceLocation) {
+        searchLocation = deviceLocation;
+        console.log('Using current device location with lowest priority');
+      }
+      // Fallback: Any location we have
+      else if (location) {
+        searchLocation = location;
+        console.log('Using fallback location data');
+      }
+
+      console.log('Location for restaurant suggestions:',
+        searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude} (source: ${searchLocation.source || 'unknown'})` : 'No location available');
 
       // Fetch new suggestions using our service
       const result = await getMealSuggestions(photo.uri, searchLocation);
-      console.log('Received suggestion response');
+      console.log('Received fresh suggestion response from API');
+
+      // Log the API response data
+      console.log('API response data:', {
+        hasRestaurants: result.restaurants?.length > 0,
+        restaurantCount: result.restaurants?.length || 0,
+        hasSuggestedMeal: Boolean(result.suggested_meal),
+        hasMenuItems: result.menu_items?.length > 0
+      });
 
       // Update restaurant and meal suggestions
       setSuggestedRestaurants(result.restaurants || []);
@@ -330,6 +486,9 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       if (result.suggested_meal) {
         setMealName(result.suggested_meal);
       }
+
+      // Store the suggestion data in global scope for future use
+      (global as any).prefetchedSuggestions = result;
 
     } catch (error) {
       console.error('Error getting suggestions:', error);
