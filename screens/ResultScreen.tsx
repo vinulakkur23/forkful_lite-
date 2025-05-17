@@ -8,10 +8,14 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import StarRating from '../components/StarRating';
+import AchievementNotification from '../components/AchievementNotification';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
+// Import achievement service
+import { checkAchievements } from '../services/achievementService';
+import { Achievement } from '../types/achievements';
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -43,6 +47,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<Achievement[]>([]);
+  const [currentAchievement, setCurrentAchievement] = useState<Achievement | null>(null);
+  const [mealId, setMealId] = useState<string | null>(null);
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}`;
@@ -322,6 +329,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
         setSaved(true);
         console.log(`Meal saved with ID: ${docRef.id} (session: ${sessionId})`);
+        
+        // Store the meal ID so we can use it for achievement checking
+        setMealId(docRef.id);
 
         // Process image metadata in the background - don't wait for it to complete
         setTimeout(() => {
@@ -334,6 +344,48 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               // Don't show an error to the user - this happens in the background
             });
         }, 1000);
+        
+        // Check for achievements
+        // We need to create the full meal object for achievement checking
+        const mealEntry = {
+          id: docRef.id,
+          userId: user.uid,
+          photoUrl: imageUrl,
+          rating,
+          restaurant: restaurant || '',
+          meal: meal || '',
+          mealType: mealType || 'Restaurant',
+          comments: {
+            liked: likedComment || '',
+            disliked: dislikedComment || ''
+          },
+          location: location ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            source: location.source || 'unknown'
+          } : null,
+          createdAt: new Date().getTime()
+        };
+        
+        // Check for achievements
+        checkAchievements(mealEntry)
+          .then(achievements => {
+            if (achievements.length > 0) {
+              console.log(`Unlocked ${achievements.length} achievements:`, 
+                achievements.map(a => a.name).join(', '));
+              
+              // Store the unlocked achievements
+              setUnlockedAchievements(achievements);
+              
+              // Show the first achievement notification
+              if (achievements.length > 0) {
+                setCurrentAchievement(achievements[0]);
+              }
+            }
+          })
+          .catch(achievementError => {
+            console.error("Error checking achievements:", achievementError);
+          });
       } catch (storageError) {
         console.error("Storage or Firestore error:", storageError);
 
@@ -417,9 +469,31 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     console.log('Image failed to load in ResultScreen');
     setImageError(true);
   };
+  
+  // Handle achievement notification dismissal 
+  const handleDismissAchievement = () => {
+    // If there are more achievements to show, show the next one
+    if (unlockedAchievements.length > 0) {
+      const nextAchievements = [...unlockedAchievements];
+      const nextAchievement = nextAchievements.shift();
+      
+      setUnlockedAchievements(nextAchievements);
+      setCurrentAchievement(nextAchievements.length > 0 ? nextAchievements[0] : null);
+    } else {
+      // No more achievements to show
+      setCurrentAchievement(null);
+    }
+  };
 
   return (
     <View style={styles.container}>
+      {/* Achievement notification */}
+      {currentAchievement && (
+        <AchievementNotification 
+          achievement={currentAchievement}
+          onDismiss={handleDismissAchievement}
+        />
+      )}
       <Text style={styles.title}>Your Rating Has Been Saved!</Text>
 
       <View style={styles.resultCard}>

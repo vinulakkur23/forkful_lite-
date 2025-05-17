@@ -447,13 +447,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     // Render the main screen
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Food Passport</Text>
-                <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-                    <Text style={styles.signOutText}>Sign Out</Text>
-                </TouchableOpacity>
-            </View>
-            
             {/* Simple Filter Component */}
             <View style={styles.filterArea}>
                 <SimpleFilterComponent 
