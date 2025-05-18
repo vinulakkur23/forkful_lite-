@@ -431,12 +431,12 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         // Prepare any cached suggestion data
         const cachedSuggestions = (global as any).prefetchedSuggestions;
         
-        // Navigate to EditPhoto with the cropped image and any prefetched suggestions
-        console.log('Navigating to EditPhoto with cropped image:', result.path);
+        // Navigate to RatingScreen1 with the cropped image and any prefetched suggestions
+        console.log('Navigating to RatingScreen1 with cropped image:', result.path);
         console.log('Passing prefetched suggestions:', 
           cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
         
-        navigation.navigate('EditPhoto', {
+        navigation.navigate('RatingScreen1', {
           photo: {
             uri: result.path,
             width: result.width,
@@ -447,7 +447,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           exifData: route.params.exifData,
           // Include suggestionData if available
           suggestionData: cachedSuggestions || undefined,
-          _navigationKey: `edit_photo_${timestamp}`,
+          _uniqueKey: `rating_screen1_${timestamp}`,
         });
         
         // Don't clear the global cache here since EditPhoto will pass it along to Rating

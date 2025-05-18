@@ -14,9 +14,9 @@ import { getPhotoWithMetadata } from './services/photoLibraryService';
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import CameraScreen from './screens/CameraScreen';
-import CropScreen from './screens/CropScreen'; // Import the new Crop Screen
-import EditPhotoScreen from './screens/EditPhotoScreen';
-import RatingScreen from './screens/RatingScreen';
+import CropScreen from './screens/CropScreen';
+import RatingScreen1 from './screens/RatingScreen1';
+import RatingScreen2 from './screens/RatingScreen2';
 import ResultScreen from './screens/ResultScreen';
 import LoginScreen from './screens/LoginScreen';
 import MealDetailScreen from './screens/MealDetailScreen';
@@ -45,20 +45,7 @@ export type RootStackParamList = {
     } | null;
     _navigationKey?: string; // For forcing screen refresh
   };
-  EditPhoto: {
-    photo: {
-      uri: string;
-      base64?: string;
-      width?: number;
-      height?: number;
-    };
-    location: {
-      latitude: number;
-      longitude: number;
-    } | null;
-    _navigationKey?: string;
-  };
-  Rating: {
+  RatingScreen1: {
     photo: {
       uri: string;
       base64?: string;
@@ -70,6 +57,23 @@ export type RootStackParamList = {
       latitude: number;
       longitude: number;
     } | null;
+    _uniqueKey?: string; // Ensure Rating screen reloads with new data
+  };
+  RatingScreen2: {
+    photo: {
+      uri: string;
+      base64?: string;
+      width?: number;
+      height?: number;
+      sessionId?: string; // For tracking session
+    };
+    location: {
+      latitude: number;
+      longitude: number;
+    } | null;
+    rating: number;
+    likedComment?: string;
+    dislikedComment?: string;
     _uniqueKey?: string; // Ensure Rating screen reloads with new data
   };
   Result: {
@@ -104,8 +108,8 @@ export type TabParamList = {
   // Screens that are part of flows, not "tabs" themselves, but defined in Tab.Navigator
   // They will be hidden from the tab bar using tabBarButton: () => null
   Crop: RootStackParamList['Crop']; // Use RootStackParamList type
-  EditPhoto: RootStackParamList['EditPhoto'];
-  Rating: RootStackParamList['Rating'];
+  RatingScreen1: RootStackParamList['RatingScreen1'];
+  RatingScreen2: RootStackParamList['RatingScreen2'];
   Result: RootStackParamList['Result'];
   MealDetail: RootStackParamList['MealDetail'];
 };
@@ -298,20 +302,20 @@ function TabNavigator() {
         }}
       />
       <Tab.Screen
-        name="EditPhoto"
-        component={EditPhotoScreen}
+        name="RatingScreen1"
+        component={RatingScreen1}
         options={{
-          title: 'Edit Photo',
-          headerShown: true, // EditPhotoScreen seems to expect a header
+          title: 'Rate Your Meal',
+          headerShown: true,
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
       <Tab.Screen
-        name="Rating"
-        component={RatingScreen}
+        name="RatingScreen2"
+        component={RatingScreen2}
         options={{
-          title: 'Rate Your Meal',
-          headerShown: true, // RatingScreen expects a header
+          title: 'Meal Details',
+          headerShown: true,
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
