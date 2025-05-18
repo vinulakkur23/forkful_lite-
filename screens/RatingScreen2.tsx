@@ -222,7 +222,39 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // Add effect to log when location changes
   useEffect(() => {
     console.log("Location updated in RatingScreen2:", JSON.stringify(location));
+    
+    // When location updates, let's get restaurant suggestions if we don't have any
+    if (location && suggestedRestaurants.length === 0) {
+      const fetchRestaurants = async () => {
+        try {
+          console.log("Attempting to fetch restaurant suggestions based on location");
+          setIsLoadingSuggestions(true);
+          
+          // Use searchRestaurants since we don't need to specify a query
+          const results = await searchRestaurants("food", location);
+          console.log(`Fetched ${results.length} restaurants based on location`);
+          
+          if (results.length > 0) {
+            setSuggestedRestaurants(results);
+          }
+        } catch (error) {
+          console.error("Error fetching restaurant suggestions:", error);
+        } finally {
+          setIsLoadingSuggestions(false);
+        }
+      };
+      
+      fetchRestaurants();
+    }
   }, [location]);
+  
+  // Add effect to log when suggestedRestaurants changes
+  useEffect(() => {
+    console.log(`SuggestedRestaurants updated: found ${suggestedRestaurants.length} restaurants`);
+    if (suggestedRestaurants.length > 0) {
+      console.log("First suggested restaurant:", suggestedRestaurants[0].name);
+    }
+  }, [suggestedRestaurants]);
 
   // Function to update meal suggestions when restaurant changes
   const updateMealSuggestionsForRestaurant = async (restaurantName: string): Promise<void> => {
@@ -477,11 +509,46 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                               // If restaurant has location (from Places API), update the location data
                               // We always prefer restaurant location if available for better accuracy
                               if (item.geometry && item.geometry.location) {
+                                // Extract city from address if available
+                                let city = '';
+                                if (item.vicinity || item.formatted_address) {
+                                  const address = item.vicinity || item.formatted_address;
+                                  console.log("Got restaurant address:", address);
+                                  
+                                  // Try to extract city - typically the second component in a comma-separated address
+                                  const addressParts = address.split(',').map(part => part.trim());
+                                  console.log("Address parts:", addressParts);
+                                  
+                                  if (addressParts.length > 1) {
+                                    // The second part is usually the city + state (e.g., "Portland, OR")
+                                    // If it has spaces, the city is likely before the first space
+                                    const secondPart = addressParts[1];
+                                    
+                                    // Check if second part has a space (like "Portland OR")
+                                    if (secondPart.includes(' ')) {
+                                      city = secondPart.split(' ')[0]; // Take just the city name
+                                    } else {
+                                      city = secondPart; // Use the whole part if no spaces
+                                    }
+                                    
+                                    // If we couldn't extract from second part, try third part if it exists
+                                    if (!city && addressParts.length > 2) {
+                                      city = addressParts[2].split(' ')[0];
+                                    }
+                                    
+                                    console.log("Extracted city name:", city);
+                                  }
+                                }
+                                
+                                // For debugging
+                                console.log("Final city value for location:", city);
+                                
                                 const restaurantLocation = {
                                   latitude: item.geometry.location.lat,
                                   longitude: item.geometry.location.lng,
                                   source: 'restaurant_selection', // Mark the source of this location data
-                                  priority: 1 // Highest priority (1 = restaurant, 2 = exif, 3 = user location)
+                                  priority: 1, // Highest priority (1 = restaurant, 2 = exif, 3 = user location)
+                                  city: city // Save extracted city
                                 };
 
                                 console.log(`Updating location from restaurant selection: ${JSON.stringify(restaurantLocation)}`);
@@ -520,12 +587,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 </View>
 
                 <TouchableOpacity
-                  style={[
-                    styles.suggestButton,
-                    suggestedRestaurants.length === 0 ? styles.suggestButtonDisabled : {}
-                  ]}
-                  onPress={() => setShowRestaurantModal(true)}
-                  disabled={suggestedRestaurants.length === 0}
+                  style={styles.suggestButton}
+                  onPress={() => {
+                    console.log("Restaurant button clicked, showing modal");
+                    setShowRestaurantModal(true);
+                  }}
                 >
                   <MaterialIcon name="restaurant" size={16} color="white" />
                 </TouchableOpacity>
@@ -606,58 +672,73 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         visible={showRestaurantModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowRestaurantModal(false)}
+        onRequestClose={() => {
+          console.log("Restaurant modal closed via request close");
+          setShowRestaurantModal(false);
+        }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nearby Restaurants</Text>
-            {suggestedRestaurants.length > 0 ? (
-              <FlatList
-                data={suggestedRestaurants}
-                keyExtractor={(item) => item.id || item.name}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.restaurantItem}
-                    onPress={() => {
-                      // If this is a different restaurant than currently selected
-                      if (restaurant !== item.name) {
-                        setRestaurant(item.name);
-
-                        // Update location if the restaurant has location data
-                        if (item.geometry && item.geometry.location) {
-                          const restaurantLocation = {
-                            latitude: item.geometry.location.lat,
-                            longitude: item.geometry.location.lng,
-                            source: 'restaurant_selection',
-                            priority: 1 // Restaurant location has highest priority
-                          };
-
-                          console.log(`Updating location from restaurant modal selection: ${item.name}`);
-
-                          // Update location in state and route params
-                          setLocation(restaurantLocation);
-                          if (route.params) {
-                            route.params.location = restaurantLocation;
+            <View>
+              <Text style={{marginBottom: 10}}>
+                {`Found ${suggestedRestaurants.length} restaurants to suggest.`}
+              </Text>
+              
+              {suggestedRestaurants.length > 0 ? (
+                <FlatList
+                  data={suggestedRestaurants}
+                  keyExtractor={(item) => item.id || item.name || Math.random().toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.restaurantItem}
+                      onPress={() => {
+                        // Log the selection
+                        console.log(`Restaurant selected: ${item.name}`);
+                        
+                        // If this is a different restaurant than currently selected
+                        if (restaurant !== item.name) {
+                          setRestaurant(item.name);
+  
+                          // Update location if the restaurant has location data
+                          if (item.geometry && item.geometry.location) {
+                            const restaurantLocation = {
+                              latitude: item.geometry.location.lat,
+                              longitude: item.geometry.location.lng,
+                              source: 'restaurant_selection',
+                              priority: 1 // Restaurant location has highest priority
+                            };
+  
+                            console.log(`Updating location from restaurant modal selection: ${item.name}`);
+  
+                            // Update location in state and route params
+                            setLocation(restaurantLocation);
+                            if (route.params) {
+                              route.params.location = restaurantLocation;
+                            }
                           }
+  
+                          // Fetch meal suggestions for this restaurant
+                          updateMealSuggestionsForRestaurant(item.name);
                         }
-
-                        // Fetch meal suggestions for this restaurant
-                        updateMealSuggestionsForRestaurant(item.name);
-                      }
-                      setShowRestaurantModal(false);
-                    }}
-                  >
-                    <Text style={styles.restaurantName}>{item.name}</Text>
-                    <Text style={styles.restaurantAddress}>{item.vicinity}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            ) : (
-              <Text style={styles.noResultsText}>No restaurants found nearby</Text>
-            )}
+                        setShowRestaurantModal(false);
+                      }}
+                    >
+                      <Text style={styles.restaurantName}>{item.name || 'Unnamed Restaurant'}</Text>
+                      <Text style={styles.restaurantAddress}>{item.vicinity || 'No address available'}</Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              ) : (
+                <Text style={styles.noResultsText}>No restaurants found nearby. Try entering a restaurant name manually.</Text>
+              )}
+            </View>
             <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => setShowRestaurantModal(false)}
+              onPress={() => {
+                console.log("Restaurant modal close button clicked");
+                setShowRestaurantModal(false);
+              }}
             >
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>

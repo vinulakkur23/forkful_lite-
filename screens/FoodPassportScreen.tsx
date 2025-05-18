@@ -42,10 +42,13 @@ interface MealEntry {
   rating: number;
   restaurant: string;
   meal: string;
+  // Add city as a top-level field
+  city?: string;
   location: {
     latitude: number;
     longitude: number;
     source?: string;
+    city?: string;
   } | null;
   createdAt: number;
   // Add any other fields that might be in your database
@@ -167,9 +170,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
                     rating: data.rating,
                     restaurant: data.restaurant || '',
                     meal: data.meal || '',
+                    // Include top-level city field
+                    city: data.city || '',
                     location: data.location,
                     createdAt: data.createdAt?.toDate?.() || Date.now(),
-                    aiMetadata: data.aiMetadata || null // Include aiMetadata for filtering
+                    aiMetadata: data.aiMetadata || null, // Include aiMetadata for filtering
+                    mealType: data.mealType || 'Restaurant',
+                    comments: data.comments || { liked: '', disliked: '' }
                 });
             });
 
@@ -243,6 +250,31 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
                 meal.aiMetadata.foodType && 
                 meal.aiMetadata.foodType === activeFilter.value
             );
+        } else if (activeFilter.type === 'city') {
+            result = result.filter(meal => {
+                // First check if city is stored as top-level city property
+                if (meal.city) {
+                    return meal.city.toLowerCase() === activeFilter.value.toLowerCase();
+                }
+                
+                // Next check if city is stored in location.city
+                if (meal.location && meal.location.city) {
+                    return meal.location.city.toLowerCase() === activeFilter.value.toLowerCase();
+                }
+                
+                // Fallback: Try to match city in restaurant field
+                if (meal.restaurant && meal.restaurant.includes(',')) {
+                    const restaurantParts = meal.restaurant.split(',');
+                    if (restaurantParts.length > 1) {
+                        // Handle cases where city might be "Portland OR" format
+                        const secondPart = restaurantParts[1].trim();
+                        const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
+                        
+                        return cityPart.toLowerCase() === activeFilter.value.toLowerCase();
+                    }
+                }
+                return false;
+            });
         }
         
         console.log(`Filter results: ${result.length} meals match the filter criteria`);

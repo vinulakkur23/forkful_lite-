@@ -55,10 +55,13 @@ interface MealEntry {
   userId?: string;
   userName?: string;
   userPhoto?: string;
+  // Add top-level city field
+  city?: string;
   location: {
     latitude: number;
     longitude: number;
     source?: string;
+    city?: string;
   } | null;
   createdAt: number;
   // Add any other fields that might be in your database
@@ -347,6 +350,64 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
         }
         
         return matches;
+      });
+    } else if (activeFilter.type === 'city') {
+      console.log("Filtering by city:", activeFilter.value);
+      
+      // Debug - show available cities
+      const availableCities = new Set<string>();
+      meals.forEach(meal => {
+        // Check all possible city sources
+        if (meal.city) {
+          availableCities.add(meal.city);
+        } else if (meal.location && meal.location.city) {
+          availableCities.add(meal.location.city);
+        } else if (meal.restaurant && meal.restaurant.includes(',')) {
+          const restaurantParts = meal.restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            const secondPart = restaurantParts[1].trim();
+            const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
+            availableCities.add(cityPart);
+          }
+        }
+      });
+      console.log("Available cities:", Array.from(availableCities));
+      
+      result = result.filter(meal => {
+        const filterValueNormalized = activeFilter.value.trim().toLowerCase();
+        
+        // First check if city is stored as top-level city property
+        if (meal.city) {
+          const cityNormalized = meal.city.trim().toLowerCase();
+          if (cityNormalized === filterValueNormalized) {
+            return true;
+          }
+        }
+        
+        // Next check if city is stored in location.city
+        if (meal.location && meal.location.city) {
+          const locationCityNormalized = meal.location.city.trim().toLowerCase();
+          if (locationCityNormalized === filterValueNormalized) {
+            return true;
+          }
+        }
+        
+        // Fallback: Try to match city in restaurant field
+        if (meal.restaurant && meal.restaurant.includes(',')) {
+          const restaurantParts = meal.restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            // Handle cases where city might be "Portland OR" format
+            const secondPart = restaurantParts[1].trim();
+            const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
+            
+            const extractedCityNormalized = cityPart.toLowerCase();
+            if (extractedCityNormalized === filterValueNormalized) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
       });
     }
     

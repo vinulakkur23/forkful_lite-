@@ -238,6 +238,23 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         meal.aiMetadata.foodType && 
         meal.aiMetadata.foodType === activeFilter.value
       );
+    } else if (activeFilter.type === 'city') {
+      result = result.filter(meal => {
+        // First check if city is stored in location.city
+        if (meal.location && meal.location.city) {
+          return meal.location.city.toLowerCase() === activeFilter.value.toLowerCase();
+        }
+        
+        // Fallback: Try to match city in restaurant field
+        if (meal.restaurant) {
+          const restaurantParts = meal.restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            const city = restaurantParts[1].trim();
+            return city.toLowerCase() === activeFilter.value.toLowerCase();
+          }
+        }
+        return false;
+      });
     }
     
     // Set filtered meals

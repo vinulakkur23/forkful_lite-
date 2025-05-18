@@ -138,6 +138,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             <MapScreen 
               navigation={props.navigation}
               activeFilter={activeFilter}
+              isActive={tabIndex === 1} // Pass whether this tab is active
             />
           </ErrorBoundary>
         );

@@ -11,16 +11,20 @@ import {
   Linking,
   Clipboard,
   Share,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
+import Geolocation from '@react-native-community/geolocation';
 
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
   activeFilter: { type: string, value: string } | null;
+  isActive?: boolean; // Flag to indicate if this tab is currently active
 };
 
 interface MealEntry {
@@ -53,12 +57,13 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActive }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
   
   // Map view reference
   const mapRef = useRef<MapView | null>(null);
@@ -107,6 +112,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
       setAllMeals(fetchedMeals);
       applyFilter(fetchedMeals, activeFilter);
       setLoading(false);
+      
+      // Trigger map fitting after data is loaded
+      if (fetchedMeals.length > 0 && mapRef.current) {
+        setTimeout(() => fitMapToMarkers(), 500);
+      }
     } catch (err: any) {
       console.error('Error fetching meal entries:', err);
       setError(`Failed to load meals: ${err.message}`);
@@ -153,6 +163,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
         meal.aiMetadata.foodType && 
         meal.aiMetadata.foodType === filter.value
       );
+    } else if (filter.type === 'city') {
+      result = result.filter(meal => {
+        // First check if city is stored in location.city
+        if (meal.location && meal.location.city) {
+          return meal.location.city.toLowerCase() === filter.value.toLowerCase();
+        }
+        
+        // Fallback: Try to match city in restaurant field
+        if (meal.restaurant) {
+          const restaurantParts = meal.restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            const city = restaurantParts[1].trim();
+            return city.toLowerCase() === filter.value.toLowerCase();
+          }
+        }
+        return false;
+      });
     }
     
     console.log(`MapScreen: Filter results: ${result.length} meals match the filter criteria`);
@@ -163,7 +190,105 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
   useEffect(() => {
     console.log('MapScreen: activeFilter changed:', activeFilter);
     applyFilter(allMeals, activeFilter);
+    
+    // When filter changes and we have meals, fit the map to show them
+    if (filteredMeals.length > 0 && mapRef.current && !loading) {
+      setTimeout(() => fitMapToMarkers(), 500); // Small delay to ensure filteredMeals is updated
+    }
   }, [activeFilter, allMeals]);
+  
+  // Request location permission and get current position
+  const requestLocationPermission = async () => {
+    if (Platform.OS === 'ios') {
+      Geolocation.requestAuthorization();
+      getCurrentPosition();
+    } else {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message: "This app needs access to your location to center the map",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK"
+          }
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          getCurrentPosition();
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  };
+  
+  // Get current position
+  const getCurrentPosition = () => {
+    Geolocation.getCurrentPosition(
+      position => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ latitude, longitude });
+        if (isActive && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude,
+            longitude,
+            latitudeDelta: 0.05, // Close zoom level
+            longitudeDelta: 0.05,
+          }, 1000); // Animation duration in ms
+        }
+      },
+      error => {
+        console.log('Error getting location:', error);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
+  
+  // Effect to handle tab activation
+  useEffect(() => {
+    if (isActive && mapRef.current) {
+      // If we have filtered meals, fit map to those pins
+      if (filteredMeals.length > 0) {
+        fitMapToMarkers();
+      } else {
+        // If no filtered meals, try to center on user location
+        requestLocationPermission();
+      }
+    }
+  }, [isActive, filteredMeals.length]);
+  
+  // Function to fit map to all markers
+  const fitMapToMarkers = () => {
+    if (!mapRef.current || filteredMeals.length === 0) return;
+    
+    // Create an array of coordinates from filtered meals
+    const points = filteredMeals
+      .filter(meal => meal.location && meal.location.latitude && meal.location.longitude)
+      .map(meal => ({
+        latitude: meal.location!.latitude,
+        longitude: meal.location!.longitude
+      }));
+    
+    if (points.length === 0) return;
+    
+    // If there's only one point, center on it with a closer zoom
+    if (points.length === 1) {
+      mapRef.current.animateToRegion({
+        latitude: points[0].latitude,
+        longitude: points[0].longitude,
+        latitudeDelta: 0.01,  // Closer zoom for single point
+        longitudeDelta: 0.01,
+      }, 1000);
+      return;
+    }
+    
+    // For multiple points, fit all markers on screen with padding
+    mapRef.current.fitToCoordinates(points, {
+      edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+      animated: true
+    });
+  };
 
   // Calculate initial region based on filtered meals
   const initialRegion = useMemo<Region>(() => {
@@ -333,6 +458,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
         style={styles.map}
         initialRegion={initialRegion}
         showsUserLocation={true}
+        onMapReady={fitMapToMarkers}
       >
         {filteredMeals.map(meal => (
           <Marker
@@ -373,14 +499,35 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
         ))}
       </MapView>
 
-      {/* Floating share button */}
-      <TouchableOpacity
-        style={styles.shareButton}
-        onPress={shareMapToGoogleMaps}
-      >
-        <Icon name="share" size={20} color="#fff" />
-        <Text style={styles.shareText}>Share</Text>
-      </TouchableOpacity>
+      {/* Floating buttons */}
+      <View style={styles.buttonContainer}>
+        {/* My Location button */}
+        <TouchableOpacity
+          style={[styles.floatingButton, styles.locationButton]}
+          onPress={() => {
+            if (filteredMeals.length > 0) {
+              fitMapToMarkers();
+            } else {
+              requestLocationPermission();
+            }
+          }}
+        >
+          {filteredMeals.length > 0 ? (
+            <Icon name="zoom-out-map" size={20} color="#fff" />
+          ) : (
+            <Icon name="my-location" size={20} color="#fff" />
+          )}
+        </TouchableOpacity>
+        
+        {/* Share button */}
+        <TouchableOpacity
+          style={[styles.floatingButton, styles.shareButton]}
+          onPress={shareMapToGoogleMaps}
+        >
+          <Icon name="share" size={20} color="#fff" />
+          <Text style={styles.shareText}>Share</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -422,15 +569,17 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  shareButton: {
+  buttonContainer: {
     position: 'absolute',
     right: 16,
     bottom: 30,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  floatingButton: {
     backgroundColor: '#ff6b6b',
-    paddingHorizontal: 16,
     height: 48,
     borderRadius: 24,
-    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 5,
@@ -438,6 +587,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
+    marginBottom: 10,
+  },
+  locationButton: {
+    width: 48,
+  },
+  shareButton: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
   },
   shareText: {
     color: '#fff',

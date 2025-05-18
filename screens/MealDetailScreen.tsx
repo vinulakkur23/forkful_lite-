@@ -66,7 +66,21 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         }
         
         const mealData = mealDoc.data();
-        console.log("Meal data retrieved:", mealData ? "Data exists" : "No data");
+        // Log full meal data for debugging
+        console.log("Meal data retrieved:", JSON.stringify(mealData, null, 2));
+        
+        // Check if location and city exists
+        if (mealData.location) {
+          console.log("Location data:", JSON.stringify(mealData.location, null, 2));
+        }
+        
+        // Check for city data
+        console.log("City data check:", {
+          topLevelCity: mealData.city,
+          locationCity: mealData.location?.city,
+          hasTopLevelCity: !!mealData.city,
+          hasLocationCity: !!(mealData.location && mealData.location.city)
+        });
         
         setMeal(mealData);
       } catch (err) {
@@ -323,8 +337,17 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Icon name="place" size={18} color="#666" />
             <View style={styles.locationTextContainer}>
               <Text style={styles.locationText}>
-                {meal.location.source === 'exif' ? 'Location from photo metadata' : 'Location recorded from device'}
+                {meal.location.source === 'exif' ? 'Location from photo metadata' : 
+                 meal.location.source === 'restaurant_selection' ? 'Location from restaurant' :
+                 'Location recorded from device'}
               </Text>
+              {/* Check both location.city and top-level city field */}
+              {(meal.location?.city || meal.city) && (
+                <Text style={styles.cityText}>
+                  <Text style={styles.cityLabel}>City: </Text>
+                  {meal.location?.city || meal.city || ''}
+                </Text>
+              )}
             </View>
           </View>
         )}
@@ -375,6 +398,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Text style={styles.metadataValue}>{meal.aiMetadata.dietType}</Text>
               </View>
             )}
+            
+            {/* Display city in the metadata section if available */}
+            {(meal.location?.city || meal.city) && (
+              <View style={styles.metadataItem}>
+                <Text style={styles.metadataLabel}>City</Text>
+                <Text style={styles.metadataValue}>{meal.location?.city || meal.city}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.metadataButtonsRow}>
@@ -409,6 +440,35 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
       )}
 
+      {/* Debug View for Location */}
+      <View style={styles.debugContainer}>
+        <Text style={styles.debugTitle}>Location Debug Info:</Text>
+        <View>
+          {meal.location ? (
+            <>
+              <Text>Latitude: {meal.location.latitude}</Text>
+              <Text>Longitude: {meal.location.longitude}</Text>
+              <Text>Source: {meal.location.source}</Text>
+              <Text>City (location object): {meal.location.city || 'Not set'}</Text>
+            </>
+          ) : (
+            <Text>No location object data</Text>
+          )}
+          <Text>City (top-level): {meal.city || 'Not set'}</Text>
+          <Text>Restaurant: {meal.restaurant || 'Not set'}</Text>
+          <Text>City from Restaurant: {
+            meal.restaurant && meal.restaurant.includes(',') ? 
+              meal.restaurant.split(',')[1].trim().split(' ')[0] : 'Not extractable'
+          }</Text>
+          <Text>Full data: {JSON.stringify({
+            city: meal.city,
+            locationCity: meal.location?.city,
+            restaurant: meal.restaurant,
+            locationSource: meal.location?.source,
+          })}</Text>
+        </View>
+      </View>
+      
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.shareButton}
@@ -442,6 +502,20 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  debugContainer: {
+    padding: 15,
+    margin: 10,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#add8e6',
+  },
+  debugTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#4682b4',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8f8f8',
@@ -561,6 +635,14 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: '#666',
+  },
+  cityText: {
+    fontSize: 14,
+    color: '#333',
+    marginTop: 4,
+  },
+  cityLabel: {
+    fontWeight: 'bold',
   },
   locationSource: {
     fontSize: 12,

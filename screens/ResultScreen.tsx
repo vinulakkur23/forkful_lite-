@@ -287,6 +287,60 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         console.log("Image uploaded successfully:", imageUrl);
         setPhotoUrl(imageUrl);
 
+        // Extract city from location or restaurant field
+        let city = '';
+        
+        // First, check if location already has city info (from restaurant selection in RatingScreen2)
+        if (location && location.city) {
+          city = location.city;
+          console.log(`Using city from location: ${city}`);
+        }
+        // If no city in location, try to extract from restaurant name
+        else if (restaurant) {
+          // Try comma pattern: "Restaurant Name, City"
+          const restaurantParts = restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            city = restaurantParts[1].trim();
+            console.log(`Extracted city from restaurant name: ${city}`);
+            
+            // Further clean up city by removing state/zip if present
+            // E.g., "Portland, OR 97201" -> "Portland"
+            const cityParts = city.split(' ');
+            if (cityParts.length > 1) {
+              // If city contains spaces, take only the first part (likely the actual city name)
+              city = cityParts[0];
+            }
+          }
+        }
+        
+        // Determine city information
+        let cityInfo = '';
+        
+        // First check if location already has city data
+        if (location && location.city) {
+          cityInfo = location.city;
+          console.log("Using city from location object:", cityInfo);
+        } 
+        // Next try to extract from restaurant name if provided
+        else if (restaurant) {
+          const restaurantParts = restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            const secondPart = restaurantParts[1].trim();
+            
+            // If second part has spaces (like "Portland OR"), take just the city name
+            if (secondPart.includes(' ')) {
+              cityInfo = secondPart.split(' ')[0];
+            } else {
+              cityInfo = secondPart; // Use the whole part if no spaces
+            }
+            
+            console.log("Extracted city from restaurant name:", cityInfo);
+          }
+        }
+        
+        // Extra logging for debugging
+        console.log("Final city info to be saved:", cityInfo);
+        
         // Save meal data to Firestore, ensuring location data is preserved
         const mealData = {
           userId: user.uid,
@@ -295,6 +349,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           restaurant: restaurant || '',
           meal: meal || '',
           mealType: mealType || 'Restaurant', // Include the meal type
+          // Store city as a top-level field for easier access and querying
+          city: cityInfo ? cityInfo.trim() : '',
           // Include user comments about what they liked and didn't like
           // Save comments with proper formatting
           comments: {
@@ -312,13 +368,22 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               ? 'Photo metadata (EXIF)'
               : location.source === 'restaurant_selection'
                 ? `Selected restaurant: ${restaurant}`
-                : 'Device location'
+                : 'Device location',
+            // Always include city in location object for compatibility
+            // If location already has city info, use that; otherwise use the extracted cityInfo
+            city: location.city ? location.city.trim() : (cityInfo ? cityInfo.trim() : '')
           } : null,
           createdAt: firestore.FieldValue.serverTimestamp(),
           sessionId,
           platform: Platform.OS,
           appVersion: '1.0.0' // Add app version for debugging
         };
+        
+        // Final log of what's being saved to database
+        console.log("Saving city data:", {
+          topLevelCity: mealData.city,
+          locationCity: mealData.location ? mealData.location.city : null
+        });
 
         console.log("Attempting to save to Firestore with data:", JSON.stringify({
           ...mealData,
@@ -355,6 +420,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           restaurant: restaurant || '',
           meal: meal || '',
           mealType: mealType || 'Restaurant',
+          // Include top-level city field for consistency with saved data
+          city: cityInfo || '',
           comments: {
             liked: likedComment || '',
             disliked: dislikedComment || ''
@@ -362,7 +429,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           location: location ? {
             latitude: location.latitude,
             longitude: location.longitude,
-            source: location.source || 'unknown'
+            source: location.source || 'unknown',
+            city: (location.city || cityInfo || '')
           } : null,
           createdAt: new Date().getTime()
         };

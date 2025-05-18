@@ -40,24 +40,47 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
     }
   }, [initialFilter]);
 
-  // Fetch available cuisine and food types from Firestore
+  // Fetch available cuisine, food types, and cities from Firestore
   const fetchFilterOptions = async () => {
     try {
       setLoading(true);
       
       const cuisineTypesSet = new Set<string>();
       const foodTypesSet = new Set<string>();
+      const citiesSet = new Set<string>();
       
-      // Query for meals with valid aiMetadata
+      // Query for meals
       const mealsSnapshot = await firestore()
         .collection('mealEntries')
-        .where('aiMetadata', '!=', null)
-        .limit(100)
+        .limit(150) // Increased limit to get more variety
         .get();
 
       // Extract unique values
       mealsSnapshot.docs.forEach(doc => {
         const data = doc.data();
+        
+        // Get city from location data if available
+        if (data.location && data.location.city) {
+          // If we have explicit city data in the location object
+          const city = data.location.city.trim();
+          if (city && city.length > 2) { // Basic validation
+            citiesSet.add(city);
+          }
+        } 
+        // Fallback to extracting from restaurant if location.city is not available
+        else if (data.restaurant) {
+          // Try to extract city from restaurant name or restaurant address if it exists
+          const restaurantParts = data.restaurant.split(',');
+          if (restaurantParts.length > 1) {
+            // If there's a comma, assume the format might be "Restaurant Name, City"
+            const possibleCity = restaurantParts[1].trim();
+            if (possibleCity && possibleCity.length > 2) { // Basic validation
+              citiesSet.add(possibleCity);
+            }
+          }
+        }
+        
+        // Get cuisine and food types from metadata
         if (data.aiMetadata) {
           if (data.aiMetadata.cuisineType && 
               data.aiMetadata.cuisineType !== 'Unknown') {
@@ -82,6 +105,11 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       // Add food types
       Array.from(foodTypesSet).sort().forEach(food => {
         options.push({ type: 'foodType', value: food });
+      });
+      
+      // Add cities
+      Array.from(citiesSet).sort().forEach(city => {
+        options.push({ type: 'city', value: city });
       });
       
       setFilterOptions(options);
@@ -121,7 +149,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search cuisine or food type..."
+          placeholder="Search cuisine, food, or city..."
           value={searchText}
           onChangeText={(text) => {
             setSearchText(text);
@@ -160,14 +188,19 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
                   onPress={() => handleSelectOption(item)}
                 >
                   <Icon 
-                    name={item.type === 'cuisineType' ? 'restaurant' : 'fastfood'} 
+                    name={
+                      item.type === 'cuisineType' ? 'restaurant' : 
+                      item.type === 'foodType' ? 'fastfood' :
+                      'location-city'
+                    } 
                     size={16} 
                     color="#666" 
                     style={styles.optionIcon} 
                   />
                   <Text style={styles.optionText}>{item.value}</Text>
                   <Text style={styles.optionType}>
-                    {item.type === 'cuisineType' ? 'Cuisine' : 'Food'}
+                    {item.type === 'cuisineType' ? 'Cuisine' : 
+                     item.type === 'foodType' ? 'Food' : 'City'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -185,7 +218,11 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
         <View style={styles.selectedFilterContainer}>
           <View style={styles.filterBadge}>
             <Icon 
-              name={currentFilter.type === 'cuisineType' ? 'restaurant' : 'fastfood'} 
+              name={
+                currentFilter.type === 'cuisineType' ? 'restaurant' : 
+                currentFilter.type === 'foodType' ? 'fastfood' :
+                'location-city'
+              } 
               size={12} 
               color="#fff" 
             />
