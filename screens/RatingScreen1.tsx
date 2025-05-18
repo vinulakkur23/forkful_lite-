@@ -83,11 +83,9 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Comment sections with multiple text fields per section
-  const [likedComment1, setLikedComment1] = useState<string>('');
-  const [likedComment2, setLikedComment2] = useState<string>('');
-  const [dislikedComment1, setDislikedComment1] = useState<string>('');
-  const [dislikedComment2, setDislikedComment2] = useState<string>('');
+  // Comments for both liked and disliked
+  const [likedComment, setLikedComment] = useState<string>('');
+  const [dislikedComment, setDislikedComment] = useState<string>('');
 
   // Add validation on component mount
   useEffect(() => {
@@ -168,36 +166,15 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
       console.log(`Navigating to RatingScreen2 with fresh image: ${freshPhoto.uri}`);
 
-      // Format and combine the comments from each section
-      const formatComments = (comment1: string, comment2: string): string => {
-        let result = '';
-
-        // Add first comment if it's not empty
-        if (comment1.trim()) {
-          result += '• ' + comment1.trim();
-        }
-
-        // Add second comment if it's not empty
-        if (comment2.trim()) {
-          // Add a line break if we already have content
-          if (result) result += '\n';
-          result += '• ' + comment2.trim();
-        }
-
-        return result;
-      };
-
-      // Format and combine the comments from each section
-      const formattedLikedComment = formatComments(likedComment1, likedComment2);
-      const formattedDislikedComment = formatComments(dislikedComment1, dislikedComment2);
+      // No need to format comments as we're using single text fields
 
       // Navigate to RatingScreen2 with all collected data
       navigation.navigate('RatingScreen2', {
         photo: freshPhoto,
         location: location,
         rating: rating,
-        likedComment: formattedLikedComment,
-        dislikedComment: formattedDislikedComment,
+        likedComment: likedComment.trim(),
+        dislikedComment: dislikedComment.trim(),
         suggestionData: route.params.suggestionData, // Pass along any suggestion data
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
@@ -252,7 +229,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Rating Section */}
           <View style={styles.ratingSection}>
-            <Text style={styles.ratingTitle}>How would you rate this meal?</Text>
+            <Text style={styles.ratingTitle}>Rate this meal</Text>
             <View style={styles.ratingContainer}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity
@@ -278,75 +255,39 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.commentSection}>
               <Text style={styles.commentTitle}>What did you like about this dish?</Text>
               <Text style={styles.commentSubtitle}>(This will help us give you better meal recommendations)</Text>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="First thing you liked..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setLikedComment1}
-                  value={likedComment1}
-                  maxLength={150}
-                />
-              </View>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="Second thing you liked..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setLikedComment2}
-                  value={likedComment2}
-                  maxLength={150}
-                />
-              </View>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Tell us what you liked about this meal..."
+                placeholderTextColor="#999"
+                multiline={true}
+                blurOnSubmit={true}
+                returnKeyType="done"
+                autoCapitalize="sentences"
+                onSubmitEditing={handleSubmitEditing}
+                onChangeText={setLikedComment}
+                value={likedComment}
+                maxLength={300}
+                numberOfLines={4}
+              />
             </View>
 
             {/* Disliked Comments Section */}
             <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>What did you not like?</Text>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="First thing you didn't like..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setDislikedComment1}
-                  value={dislikedComment1}
-                  maxLength={150}
-                />
-              </View>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="Second thing you didn't like..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setDislikedComment2}
-                  value={dislikedComment2}
-                  maxLength={150}
-                />
-              </View>
+              <Text style={styles.commentTitle}>What could be better?</Text>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Tell us what could be improved..."
+                placeholderTextColor="#999"
+                multiline={true}
+                blurOnSubmit={true}
+                returnKeyType="done"
+                autoCapitalize="sentences"
+                onSubmitEditing={handleSubmitEditing}
+                onChangeText={setDislikedComment}
+                value={dislikedComment}
+                maxLength={300}
+                numberOfLines={4}
+              />
             </View>
           </View>
 
@@ -385,11 +326,11 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 200,
+    height: 180,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#eee',
-    marginBottom: 15,
+    marginBottom: 10,
     position: 'relative',
   },
   image: {
@@ -426,18 +367,18 @@ const styles = StyleSheet.create({
   ratingSection: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   ratingTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: 8,
     color: '#333',
   },
   ratingContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 10,
+    marginVertical: 5,
   },
   starTouchable: {
     padding: 5,
@@ -449,11 +390,11 @@ const styles = StyleSheet.create({
   },
   commentsContainer: {
     width: '100%',
-    marginVertical: 10,
+    marginVertical: 5,
   },
   commentSection: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   commentTitle: {
     fontSize: 16,
@@ -491,13 +432,25 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlignVertical: 'top',
   },
+  commentInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 10,
+    minHeight: 80,
+    fontSize: 14,
+    backgroundColor: 'white',
+    color: '#333',
+    textAlignVertical: 'top',
+  },
   continueButton: {
     width: '100%',
     paddingHorizontal: 40,
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 10,
   },
   continueButtonText: {
     color: 'white',

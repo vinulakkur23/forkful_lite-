@@ -119,7 +119,6 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search cuisine or food type..."
@@ -215,18 +214,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 20,
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     height: 40,
     borderWidth: 1,
     borderColor: '#eee',
-  },
-  searchIcon: {
-    marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     height: '100%',
+    paddingLeft: 5,
   },
   clearButton: {
     padding: 4,

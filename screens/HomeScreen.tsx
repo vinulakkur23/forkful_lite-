@@ -272,18 +272,18 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
     // Check if location was from EXIF data
     if (meal.location.source === 'exif') {
-      return "📍 At photo location";
+      return "At photo location";
     }
 
     // If no distance available
-    if (!distance) return "📍 Unknown distance";
+    if (!distance) return "Unknown distance";
 
     if (distance < 1) {
       // Convert to meters
-      return `📍 ${Math.round(distance * 1000)}m away`;
+      return `${Math.round(distance * 1000)}m away`;
     } else {
       // In kilometers with one decimal
-      return `📍 ${distance.toFixed(1)}km away`;
+      return `${distance.toFixed(1)}km away`;
     }
   };
 
@@ -293,59 +293,37 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       style={styles.mealCard}
       onPress={() => viewMealDetails(item)}
     >
-      {/* Add safe image handling */}
-      {item.photoUrl && !imageErrors[item.id] ? (
-        <Image
-          source={{ uri: item.photoUrl }}
-          style={styles.mealImage}
-          resizeMode="cover"
-          onError={() => handleImageError(item.id)}
-        />
-      ) : (
-        <View style={[styles.mealImage, styles.placeholderContainer]}>
-          <Icon name="image-not-supported" size={32} color="#ddd" />
-        </View>
-      )}
-      
-      <View style={styles.mealCardContent}>
-        <View style={styles.mealCardHeader}>
-          {item.userPhoto && !imageErrors[`user-${item.userId}`] ? (
-            <Image
-              source={{ uri: item.userPhoto }}
-              style={styles.userPhoto}
-              onError={() => setImageErrors(prev => ({...prev, [`user-${item.userId}`]: true}))}
-            />
-          ) : (
-            <View style={styles.userPhotoPlaceholder}>
-              <Icon name="person" size={16} color="#fff" />
-            </View>
-          )}
-          <Text style={styles.userName}>{item.userName || 'Food Lover'}</Text>
-        </View>
-        
-        <Text style={styles.mealName} numberOfLines={1}>
-          {item.meal || 'Delicious meal'}
-        </Text>
-        
-        {item.restaurant && (
-          <View style={styles.restaurantRow}>
-            <Icon name="restaurant" size={14} color="#666" />
-            <Text style={styles.restaurantName} numberOfLines={1}>
-              {item.restaurant}
-            </Text>
+      <View style={styles.imageContainer}>
+        {/* Add safe image handling */}
+        {item.photoUrl && !imageErrors[item.id] ? (
+          <Image
+            source={{ uri: item.photoUrl }}
+            style={styles.mealImage}
+            resizeMode="cover"
+            onError={() => handleImageError(item.id)}
+          />
+        ) : (
+          <View style={[styles.mealImage, styles.placeholderContainer]}>
+            <Icon name="image-not-supported" size={32} color="#ddd" />
           </View>
         )}
         
-        <View style={styles.mealCardFooter}>
+        {/* Star rating overlay */}
+        <View style={styles.ratingOverlay}>
           {renderStars(item.rating)}
+        </View>
+      </View>
+      
+      <View style={styles.mealCardContent}>
+        <View style={styles.infoRow}>
+          <Text style={styles.mealName} numberOfLines={1}>
+            {item.meal || 'Delicious meal'}
+          </Text>
           
           {item.distance !== undefined && (
-            <View style={styles.distanceContainer}>
-              <Icon name="place" size={12} color="#666" />
-              <Text style={styles.distanceText}>
-                {formatDistance(item.distance, item)}
-              </Text>
-            </View>
+            <Text style={styles.distanceText}>
+              {formatDistance(item.distance, item)}
+            </Text>
           )}
         </View>
       </View>
@@ -454,83 +432,58 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     overflow: 'hidden',
-    marginHorizontal: 16,
-    marginTop: 16,
+    marginHorizontal: 10,
+    marginTop: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+  },
   mealImage: {
     width: '100%',
-    height: 300,
+    height: 350, // Increased height for more prominent images
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
   },
+  ratingOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20,
+    padding: 5,
+    paddingHorizontal: 8,
+  },
   mealCardContent: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 14,
   },
-  mealCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  userPhoto: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  userPhotoPlaceholder: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  userName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  mealName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  restaurantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  restaurantName: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
-  },
-  mealCardFooter: {
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    width: '100%',
   },
-  starsContainer: {
-    flexDirection: 'row',
-  },
-  distanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  mealName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    flex: 1,
+    marginRight: 8,
   },
   distanceText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#666',
-    marginLeft: 4,
+    textAlign: 'right',
   },
   emptyContainer: {
     padding: 40,

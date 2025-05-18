@@ -33,6 +33,7 @@ type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 
 
 type Props = {
   navigation: FoodPassportScreenNavigationProp;
+  activeFilter: { type: string, value: string } | null;
 };
 
 interface MealEntry {
@@ -75,20 +76,14 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [userInfo, setUserInfo] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
-    const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
-    
-    // Simple filter state
-    const [activeFilter, setActiveFilter] = useState<{
-        type: string,
-        value: string
-    } | null>(null);
+    const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({}); 
 
     // State for profile stats
     const [profileStats, setProfileStats] = useState({
@@ -173,7 +168,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                     restaurant: data.restaurant || '',
                     meal: data.meal || '',
                     location: data.location,
-                    createdAt: data.createdAt?.toDate?.() || Date.now()
+                    createdAt: data.createdAt?.toDate?.() || Date.now(),
+                    aiMetadata: data.aiMetadata || null // Include aiMetadata for filtering
                 });
             });
 
@@ -214,15 +210,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     // Apply filter to meals
     const applyFilter = () => {
         if (!meals.length) {
+            console.log('No meals to filter');
             setFilteredMeals([]);
             return;
         }
         
+        // Check if we have meals with aiMetadata for debugging
+        const mealsWithMetadata = meals.filter(meal => meal.aiMetadata);
+        console.log(`Found ${mealsWithMetadata.length} out of ${meals.length} meals with aiMetadata`);
+        
         // If no filter is active, show all meals
         if (!activeFilter) {
+            console.log('No active filter, showing all meals');
             setFilteredMeals(meals);
             return;
         }
+        
+        console.log(`Applying filter: ${activeFilter.type} = ${activeFilter.value}`);
         
         // Apply the active filter
         let result = [...meals];
@@ -241,14 +245,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
             );
         }
         
+        console.log(`Filter results: ${result.length} meals match the filter criteria`);
         setFilteredMeals(result);
     };
     
-    // Handle filter changes from SimpleFilterComponent
-    const handleFilterChange = (filter: { type: string, value: string } | null) => {
-        setActiveFilter(filter);
-        // applyFilter will be called via useEffect
-    };
+    // No longer need handleFilterChange as it's handled in the wrapper
     
     const viewMealDetails = (meal: MealEntry) => {
         console.log("Navigating to meal detail with ID:", meal.id);
@@ -447,14 +448,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
     // Render the main screen
     return (
         <View style={styles.container}>
-            {/* Simple Filter Component */}
-            <View style={styles.filterArea}>
-                <SimpleFilterComponent 
-                    key="passport-filter"
-                    onFilterChange={handleFilterChange}
-                    initialFilter={activeFilter}
-                />
-            </View>
+            {/* Filter is now in the wrapper component */}
 
             {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
@@ -542,10 +536,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation }) => {
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Icon name="book" size={64} color="#ddd" />
-                                <Text style={styles.emptyText}>No meals in your passport yet</Text>
-                                <Text style={styles.emptySubtext}>
-                                    Tap "New Entry" to add your first meal!
-                                </Text>
+                                {activeFilter ? (
+                                    <>
+                                        <Text style={styles.emptyText}>No meals match your filter</Text>
+                                        <Text style={styles.emptySubtext}>
+                                            Try a different filter or clear your search
+                                        </Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Text style={styles.emptyText}>No meals in your passport yet</Text>
+                                        <Text style={styles.emptySubtext}>
+                                            Tap "New Entry" to add your first meal!
+                                        </Text>
+                                    </>
+                                )}
                             </View>
                         }
                     />

@@ -20,6 +20,7 @@ import { RootStackParamList } from '../App';
 
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
+  activeFilter: { type: string, value: string } | null;
 };
 
 interface MealEntry {
@@ -37,12 +38,24 @@ interface MealEntry {
     source?: string;
   } | null;
   createdAt: number;
+  aiMetadata?: {
+    cuisineType: string;
+    foodType: string;
+    mealType: string;
+    primaryProtein: string;
+    dietType: string;
+    eatingMethod: string;
+    setting: string;
+    platingStyle: string;
+    beverageType: string;
+  };
 }
 
 const { width } = Dimensions.get('window');
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
-  const [meals, setMeals] = useState<MealEntry[]>([]);
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter }) => {
+  const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
+  const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
@@ -85,12 +98,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             meal: data.meal || '',
             userId: data.userId,
             location: data.location,
-            createdAt: data.createdAt?.toDate?.() || Date.now()
+            createdAt: data.createdAt?.toDate?.() || Date.now(),
+            aiMetadata: data.aiMetadata || null // Include aiMetadata for filtering
           });
         }
       });
 
-      setMeals(fetchedMeals);
+      setAllMeals(fetchedMeals);
+      applyFilter(fetchedMeals, activeFilter);
       setLoading(false);
     } catch (err: any) {
       console.error('Error fetching meal entries:', err);
@@ -108,10 +123,54 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     setImageErrors(prev => ({ ...prev, [mealId]: true }));
   };
 
-  // Calculate initial region based on meals
+  // Add function to apply filter
+  const applyFilter = (mealsToFilter: MealEntry[], filter: { type: string, value: string } | null) => {
+    console.log(`MapScreen: Applying filter to ${mealsToFilter.length} meals`);
+    
+    if (!filter) {
+      console.log('MapScreen: No filter active, showing all meals');
+      setFilteredMeals(mealsToFilter);
+      return;
+    }
+    
+    console.log(`MapScreen: Filter active: ${filter.type} = ${filter.value}`);
+    
+    // Check if we have meals with metadata
+    const mealsWithMetadata = mealsToFilter.filter(meal => meal.aiMetadata);
+    console.log(`MapScreen: Found ${mealsWithMetadata.length} meals with aiMetadata`);
+    
+    let result = [...mealsToFilter];
+    
+    if (filter.type === 'cuisineType') {
+      result = result.filter(meal => 
+        meal.aiMetadata && 
+        meal.aiMetadata.cuisineType && 
+        meal.aiMetadata.cuisineType === filter.value
+      );
+    } else if (filter.type === 'foodType') {
+      result = result.filter(meal => 
+        meal.aiMetadata && 
+        meal.aiMetadata.foodType && 
+        meal.aiMetadata.foodType === filter.value
+      );
+    }
+    
+    console.log(`MapScreen: Filter results: ${result.length} meals match the filter criteria`);
+    setFilteredMeals(result);
+  };
+  
+  // Update the filter whenever activeFilter changes
+  useEffect(() => {
+    console.log('MapScreen: activeFilter changed:', activeFilter);
+    applyFilter(allMeals, activeFilter);
+  }, [activeFilter, allMeals]);
+
+  // Calculate initial region based on filtered meals
   const initialRegion = useMemo<Region>(() => {
+    const mealsToUse = filteredMeals;
+    
     // Default fallback if no meals with location
-    if (meals.length === 0) {
+    if (mealsToUse.length === 0) {
       return {
         latitude: 37.78825,
         longitude: -122.4324,
@@ -126,7 +185,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     let minLng = Number.MAX_VALUE;
     let maxLng = Number.MIN_VALUE;
     
-    meals.forEach(meal => {
+    mealsToUse.forEach(meal => {
       if (meal.location) {
         minLat = Math.min(minLat, meal.location.latitude);
         maxLat = Math.max(maxLat, meal.location.latitude);
@@ -158,12 +217,15 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       latitudeDelta: Math.max(0.01, latDelta), // Minimum zoom level
       longitudeDelta: Math.max(0.01, lngDelta),
     };
-  }, [meals]);
+  }, [filteredMeals]);
 
   // Function to share map locations via Google Maps
   const shareMapToGoogleMaps = async () => {
     try {
-      if (meals.length === 0) {
+      // Use filtered meals for sharing
+      const mealsToShare = filteredMeals;
+      
+      if (mealsToShare.length === 0) {
         Alert.alert("Nothing to Share", "Add meals with location to share your food map.");
         return;
       }
@@ -172,11 +234,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       // Format: https://www.google.com/maps/dir/?api=1&destination=lat,lng&waypoints=lat,lng|lat,lng
 
       // Use first meal as destination
-      const firstMeal = meals[0];
+      const firstMeal = mealsToShare[0];
       let mapUrl = `https://www.google.com/maps/search/?api=1&query=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
 
       // If there are multiple meals, create a custom map link instead
-      if (meals.length > 1) {
+      if (mealsToShare.length > 1) {
         // Start a custom map link
         mapUrl = 'https://www.google.com/maps/dir/?api=1';
 
@@ -184,7 +246,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         mapUrl += `&destination=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
 
         // Add waypoints (other meals) - limited to 10 due to URL length limits
-        const waypoints = meals.slice(1, 10).map(meal =>
+        const waypoints = mealsToShare.slice(1, 10).map(meal =>
           `${meal.location?.latitude},${meal.location?.longitude}`
         ).join('|');
 
@@ -194,12 +256,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       }
 
       // Create a shareable text
-      const shareText = `Check out my Food Passport with ${meals.length} dining experiences! 🍽️\n\n`;
-      const locationNames = meals.slice(0, 5).map(meal =>
+      const shareText = `Check out my Food Passport with ${mealsToShare.length} dining experiences! 🍽️\n\n`;
+      const locationNames = mealsToShare.slice(0, 5).map(meal =>
         meal.restaurant || meal.meal || 'Untitled meal'
       ).join(', ');
 
-      const shareMessage = `${shareText}Featuring: ${locationNames}${meals.length > 5 ? ' and more...' : ''}`;
+      const shareMessage = `${shareText}Featuring: ${locationNames}${mealsToShare.length > 5 ? ' and more...' : ''}`;
 
       try {
         // Use React Native's Share API
@@ -241,14 +303,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     );
   }
   
-  if (meals.length === 0) {
+  if (filteredMeals.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="place" size={64} color="#ddd" />
-        <Text style={styles.emptyText}>No meals with location data</Text>
-        <Text style={styles.emptySubtext}>
-          Add meals with location information to see them on the map
-        </Text>
+        {activeFilter ? (
+          <>
+            <Text style={styles.emptyText}>No meals match your filter</Text>
+            <Text style={styles.emptySubtext}>
+              Try a different filter or clear your search
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.emptyText}>No meals with location data</Text>
+            <Text style={styles.emptySubtext}>
+              Add meals with location information to see them on the map
+            </Text>
+          </>
+        )}
       </View>
     );
   }
@@ -261,7 +334,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         initialRegion={initialRegion}
         showsUserLocation={true}
       >
-        {meals.map(meal => (
+        {filteredMeals.map(meal => (
           <Marker
             key={meal.id}
             coordinate={{

@@ -8,6 +8,7 @@ import StampsScreen from './StampsScreen';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth } from '../firebaseConfig';
+import SimpleFilterComponent from '../components/SimpleFilterComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -80,6 +81,18 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     { key: 'map', title: 'Map', icon: 'place' },
     { key: 'stamps', title: 'Stamps', icon: 'emoji-events' },
   ]);
+  
+  // Shared filter state for both tabs
+  const [activeFilter, setActiveFilter] = useState<{
+    type: string,
+    value: string
+  } | null>(null);
+  
+  // Handle filter changes from SimpleFilterComponent
+  const handleFilterChange = (filter: { type: string, value: string } | null) => {
+    console.log('Filter changed in wrapper to:', filter);
+    setActiveFilter(filter);
+  };
 
   React.useEffect(() => {
     // Simulate loading to give components time to initialize
@@ -96,13 +109,19 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       case 'passport':
         return (
           <ErrorBoundary navigation={props.navigation}>
-            <FoodPassportScreen navigation={props.navigation} />
+            <FoodPassportScreen 
+              navigation={props.navigation}
+              activeFilter={activeFilter}
+            />
           </ErrorBoundary>
         );
       case 'map':
         return (
           <ErrorBoundary navigation={props.navigation}>
-            <MapScreen navigation={props.navigation} />
+            <MapScreen 
+              navigation={props.navigation}
+              activeFilter={activeFilter}
+            />
           </ErrorBoundary>
         );
       case 'stamps':
@@ -137,7 +156,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         </TouchableOpacity>
       </View>
       
-      {/* Tab navigation is inserted directly, not using renderTabBar */}
+      {/* Tab navigation */}
       <View style={styles.tabBarContainer}>
         {routes.map((route, i) => (
           <TouchableOpacity
@@ -164,6 +183,15 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+      
+      {/* Shared filter component */}
+      <View style={styles.filterArea}>
+        <SimpleFilterComponent 
+          key="shared-passport-filter"
+          onFilterChange={handleFilterChange}
+          initialFilter={activeFilter}
+        />
       </View>
       
       {/* Content area */}
@@ -212,6 +240,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  filterArea: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    zIndex: 100,
+    position: 'relative',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   tabButton: {
     flex: 1,
