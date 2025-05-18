@@ -53,6 +53,18 @@ export const getPhotoWithMetadata = async (): Promise<PhotoAsset | null> => {
         location: photoAsset.location,
       });
       
+      // Extra debug for photo location
+      if (photoAsset.location) {
+        console.log('PHOTO LOCATION DEBUG - Native picker provided location:', {
+          latitude: photoAsset.location.latitude,
+          longitude: photoAsset.location.longitude,
+          source: photoAsset.location.source || 'unknown',
+          hasSource: !!photoAsset.location.source
+        });
+      } else {
+        console.log('PHOTO LOCATION DEBUG - Native picker did NOT provide location data');
+      }
+      
       // Convert the native photo asset to our internal format
       const result: PhotoAsset = {
         uri: photoAsset.uri,
@@ -301,6 +313,19 @@ export const prefetchSuggestionsFromPhoto = async (photo: PhotoAsset): Promise<a
       hasLocation: !!photo.location,
       location: photo.location,
     });
+    
+    // Extra debugging for location
+    if (photo.location) {
+      console.log('SUGGESTION PREFETCH DEBUG - Photo has location:', {
+        latitude: photo.location.latitude,
+        longitude: photo.location.longitude,
+        source: photo.location.source || 'unknown',
+        hasSource: !!photo.location.source,
+        fullLocation: JSON.stringify(photo.location)
+      });
+    } else {
+      console.log('SUGGESTION PREFETCH DEBUG - Photo does NOT have location data');
+    }
     
     // If we have a location from the photo, use it
     if (photo.location) {

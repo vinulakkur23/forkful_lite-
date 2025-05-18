@@ -169,7 +169,39 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       {/* App header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Food Passport</Text>
-        <TouchableOpacity onPress={() => auth().signOut()} style={styles.signOutButton}>
+        <TouchableOpacity 
+          onPress={async () => {
+            console.log("Sign out button pressed");
+            try {
+              // Enhanced sign out that handles Google Sign In properly
+              if (global.GoogleSignin) {
+                try {
+                  // First revoke access and sign out from Google
+                  await global.GoogleSignin.revokeAccess();
+                  await global.GoogleSignin.signOut();
+                  console.log("Google Sign In: Signed out successfully");
+                } catch (googleError) {
+                  console.log("Error signing out from Google:", googleError);
+                  // Continue with Firebase sign out even if Google sign out fails
+                }
+              }
+              
+              // Then sign out from Firebase
+              await auth().signOut();
+              console.log("Firebase Auth: Signed out successfully");
+              
+              // Navigate to Login
+              props.navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (error) {
+              console.error("Error signing out:", error);
+              alert("Failed to sign out. Please try again.");
+            }
+          }} 
+          style={styles.signOutButton}
+        >
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>

@@ -316,32 +316,72 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       
       // If we have location data, start prefetching restaurant suggestions
       if (photoAsset.location && photoAsset.uri) {
-        console.log("Starting early fetch of restaurant suggestions for gallery photo");
+        console.log("CAMERA: Starting early fetch of restaurant suggestions based on PHOTO LOCATION");
+        console.log("CAMERA: Photo location data:", {
+          latitude: photoAsset.location.latitude,
+          longitude: photoAsset.location.longitude,
+          source: photoAsset.location.source || 'unknown'
+        });
+        
+        // Use setTimeout to ensure this doesn't block navigation
         setTimeout(() => {
+          // Log the fact that we're making the API call
+          console.log("CAMERA: Making API call to fetch restaurant suggestions with photo location");
+          
           getMealSuggestions(photoAsset.uri, photoAsset.location)
             .then(suggestions => {
-              console.log("Early restaurant suggestions fetched successfully:",
-                suggestions.restaurants?.length || 0, "restaurants");
+              console.log("CAMERA: Restaurant suggestions fetched successfully:", {
+                count: suggestions.restaurants?.length || 0,
+                firstRestaurant: suggestions.restaurants?.length > 0 ? suggestions.restaurants[0].name : 'none'
+              });
+              
               // Store in global app cache for later screens to use
               (global as any).prefetchedSuggestions = suggestions;
+              console.log("CAMERA: Stored suggestions in global cache");
+              
+              // Log all restaurants for debugging
+              if (suggestions.restaurants && suggestions.restaurants.length > 0) {
+                console.log("CAMERA: All suggested restaurants:", 
+                  suggestions.restaurants.map(r => r.name).join(', '));
+              }
             })
             .catch(err => {
-              console.log("Early restaurant suggestions fetch failed:", err);
+              console.log("CAMERA: Restaurant suggestions fetch failed:", err);
             });
         }, 0);
       } else if (location) {
         // If photo has no location, use device location as fallback
-        console.log("Gallery photo has no location, using device location");
+        console.log("CAMERA: Gallery photo has no location, using DEVICE LOCATION as fallback");
+        console.log("CAMERA: Device location data:", {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          source: location.source || 'device'
+        });
+        
+        // Use setTimeout to ensure this doesn't block navigation
         setTimeout(() => {
+          // Log the fact that we're making the API call
+          console.log("CAMERA: Making API call to fetch restaurant suggestions with device location");
+          
           getMealSuggestions(photoAsset.uri, location)
             .then(suggestions => {
-              console.log("Early restaurant suggestions fetched successfully:",
-                suggestions.restaurants?.length || 0, "restaurants");
+              console.log("CAMERA: Restaurant suggestions (device location) fetched successfully:", {
+                count: suggestions.restaurants?.length || 0,
+                firstRestaurant: suggestions.restaurants?.length > 0 ? suggestions.restaurants[0].name : 'none'
+              });
+              
               // Store in global app cache for later screens to use
               (global as any).prefetchedSuggestions = suggestions;
+              console.log("CAMERA: Stored device-based suggestions in global cache");
+              
+              // Log all restaurants for debugging
+              if (suggestions.restaurants && suggestions.restaurants.length > 0) {
+                console.log("CAMERA: All suggested restaurants (device location):", 
+                  suggestions.restaurants.map(r => r.name).join(', '));
+              }
             })
             .catch(err => {
-              console.log("Early restaurant suggestions fetch failed:", err);
+              console.log("CAMERA: Restaurant suggestions fetch (device location) failed:", err);
             });
         }, 0);
       }

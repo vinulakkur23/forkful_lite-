@@ -21,7 +21,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
-import { searchRestaurants, getMealSuggestionsForRestaurant, Restaurant } from '../services/mealService';
+import { searchRestaurants, getMealSuggestionsForRestaurant, getMealSuggestions, Restaurant } from '../services/mealService';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
@@ -99,6 +99,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [isSearchingRestaurants, setIsSearchingRestaurants] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUserEditingRestaurant, setIsUserEditingRestaurant] = useState(false);
+  const [isUserEditingMeal, setIsUserEditingMeal] = useState(false);
 
   // Limit number of results in the autocomplete dropdown
   const MAX_AUTOCOMPLETE_RESULTS = 3; // Show at most 3 restaurant options in the dropdown
@@ -182,15 +184,97 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       console.log('Using suggestion data from route params');
       const suggestionData = route.params.suggestionData;
       
-      setSuggestedRestaurants(suggestionData.restaurants || []);
-      setMenuItems(suggestionData.menu_items || []);
+      // Log the entire suggestion data to see what we're working with
+      console.log('DEBUGGING SUGGESTION DATA:', JSON.stringify(suggestionData, null, 2));
       
-      // Auto-select first suggestion if available
-      if (suggestionData.restaurants?.length > 0) {
-        setRestaurant(suggestionData.restaurants[0].name);
-      }
-      if (suggestionData.suggested_meal) {
-        setMealName(suggestionData.suggested_meal);
+      // Check if there are actually restaurants in the suggestion data
+      if (suggestionData.restaurants && suggestionData.restaurants.length > 0) {
+        console.log(`Found ${suggestionData.restaurants.length} restaurants in suggestion data`);
+        console.log('First restaurant is:', suggestionData.restaurants[0].name);
+          
+        // IMPORTANT: Save the restaurants to state immediately to ensure they're available
+        // This prevents any race conditions that might cause us to miss them
+        setSuggestedRestaurants(suggestionData.restaurants);
+          
+        // Auto-select first suggestion right away
+        const firstRestaurant = suggestionData.restaurants[0];
+        console.log(`Setting restaurant to first suggestion from route params: ${firstRestaurant.name}`);
+        setRestaurant(firstRestaurant.name);
+          
+        // Check if restaurant has location (from Places API)
+        if (firstRestaurant.geometry && firstRestaurant.geometry.location) {
+          console.log("Auto-suggested restaurant has location data, extracting city");
+            
+          // Extract city from address if available
+          let city = '';
+          if (firstRestaurant.vicinity || firstRestaurant.formatted_address) {
+            const address = firstRestaurant.vicinity || firstRestaurant.formatted_address;
+            console.log("Got auto-suggested restaurant address:", address);
+              
+            // Try to extract city - typically the second component in a comma-separated address
+            const addressParts = address.split(',').map(part => part.trim());
+            console.log("Address parts for auto-suggested restaurant:", addressParts);
+              
+            if (addressParts.length > 1) {
+              // If second part has spaces, take just the city name
+              const secondPart = addressParts[1];
+              if (secondPart.includes(' ')) {
+                city = secondPart.split(' ')[0];
+              } else {
+                city = secondPart;
+              }
+                
+              console.log("Extracted city from auto-suggested restaurant:", city);
+            }
+          }
+            
+          // Create and save location with city information
+          const restaurantLocation = {
+            latitude: firstRestaurant.geometry.location.lat,
+            longitude: firstRestaurant.geometry.location.lng,
+            source: 'restaurant_selection',
+            priority: 1,
+            city: city
+          };
+            
+          console.log("Setting location from auto-suggested restaurant:", JSON.stringify(restaurantLocation));
+          setLocation(restaurantLocation);
+            
+          // Update route params too
+          if (route.params) {
+            route.params.location = restaurantLocation;
+          }
+        }
+          
+        // Set menu items if available
+        if (suggestionData.menu_items && suggestionData.menu_items.length > 0) {
+          console.log(`Found ${suggestionData.menu_items.length} menu items in suggestion data`);
+          setMenuItems(suggestionData.menu_items);
+        } else {
+          // Important: If we don't have menu items, get them for this restaurant
+          console.log("No menu items in suggestion data, fetching menu for restaurant");
+          updateMealSuggestionsForRestaurant(firstRestaurant.name);
+        }
+          
+        // Set suggested meal if available
+        if (suggestionData.suggested_meal) {
+          console.log(`Setting meal to suggested meal: ${suggestionData.suggested_meal}`);
+          setMealName(suggestionData.suggested_meal);
+        } else if (suggestionData.menu_items && suggestionData.menu_items.length > 0) {
+          // Use first menu item as meal name if no specific suggestion
+          console.log(`No suggested meal, using first menu item: ${suggestionData.menu_items[0]}`);
+          setMealName(suggestionData.menu_items[0]);
+        }
+      } else {
+        console.log('No restaurants found in suggestion data');
+          
+        // Still set whatever data we have
+        setSuggestedRestaurants([]);
+        setMenuItems(suggestionData.menu_items || []);
+          
+        if (suggestionData.suggested_meal) {
+          setMealName(suggestionData.suggested_meal);
+        }
       }
       
       setIsLoadingSuggestions(false);
@@ -200,15 +284,96 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         console.log('Using prefetched suggestion data from global cache');
         const cachedData = (global as any).prefetchedSuggestions;
         
-        setSuggestedRestaurants(cachedData.restaurants || []);
-        setMenuItems(cachedData.menu_items || []);
+        // Log the entire cached suggestion data
+        console.log('DEBUGGING CACHED SUGGESTION DATA:', JSON.stringify(cachedData, null, 2));
         
-        // Auto-select first suggestion if available
-        if (cachedData.restaurants?.length > 0) {
-          setRestaurant(cachedData.restaurants[0].name);
-        }
-        if (cachedData.suggested_meal) {
-          setMealName(cachedData.suggested_meal);
+        // Check if there are actually restaurants in the cached data
+        if (cachedData.restaurants && cachedData.restaurants.length > 0) {
+          console.log(`Found ${cachedData.restaurants.length} restaurants in cached suggestion data`);
+          console.log('First restaurant is:', cachedData.restaurants[0].name);
+          
+          // IMPORTANT: Save the restaurants to state immediately
+          setSuggestedRestaurants(cachedData.restaurants);
+          
+          // Auto-select first suggestion right away
+          const firstRestaurant = cachedData.restaurants[0];
+          console.log(`Setting restaurant to first cached suggestion: ${firstRestaurant.name}`);
+          setRestaurant(firstRestaurant.name);
+          
+          // Extract city information and set location if available
+          if (firstRestaurant.geometry && firstRestaurant.geometry.location) {
+            console.log("Auto-suggested restaurant (from cache) has location data, extracting city");
+            
+            // Extract city from address if available
+            let city = '';
+            if (firstRestaurant.vicinity || firstRestaurant.formatted_address) {
+              const address = firstRestaurant.vicinity || firstRestaurant.formatted_address;
+              console.log("Got cached restaurant address:", address);
+              
+              // Try to extract city - typically the second component in a comma-separated address
+              const addressParts = address.split(',').map(part => part.trim());
+              console.log("Address parts for cached restaurant:", addressParts);
+              
+              if (addressParts.length > 1) {
+                // If second part has spaces, take just the city name
+                const secondPart = addressParts[1];
+                if (secondPart.includes(' ')) {
+                  city = secondPart.split(' ')[0];
+                } else {
+                  city = secondPart;
+                }
+                
+                console.log("Extracted city from cached restaurant:", city);
+              }
+            }
+            
+            // Create and save location with city information
+            const restaurantLocation = {
+              latitude: firstRestaurant.geometry.location.lat,
+              longitude: firstRestaurant.geometry.location.lng,
+              source: 'restaurant_selection',
+              priority: 1,
+              city: city
+            };
+            
+            console.log("Setting location from cached restaurant:", JSON.stringify(restaurantLocation));
+            setLocation(restaurantLocation);
+            
+            // Update route params too
+            if (route.params) {
+              route.params.location = restaurantLocation;
+            }
+          }
+          
+          // Set menu items if available
+          if (cachedData.menu_items && cachedData.menu_items.length > 0) {
+            console.log(`Found ${cachedData.menu_items.length} menu items in cached data`);
+            setMenuItems(cachedData.menu_items);
+          } else {
+            // If no menu items, fetch them for this restaurant
+            console.log("No menu items in cached data, fetching menu for restaurant");
+            updateMealSuggestionsForRestaurant(firstRestaurant.name);
+          }
+          
+          // Set suggested meal if available
+          if (cachedData.suggested_meal) {
+            console.log(`Setting meal to suggested meal from cache: ${cachedData.suggested_meal}`);
+            setMealName(cachedData.suggested_meal);
+          } else if (cachedData.menu_items && cachedData.menu_items.length > 0) {
+            // Use first menu item as meal name if no specific suggestion
+            console.log(`No suggested meal in cache, using first menu item: ${cachedData.menu_items[0]}`);
+            setMealName(cachedData.menu_items[0]);
+          }
+        } else {
+          console.log('No restaurants found in cached suggestion data');
+          
+          // Still use whatever data we have
+          setSuggestedRestaurants([]);
+          setMenuItems(cachedData.menu_items || []);
+          
+          if (cachedData.suggested_meal) {
+            setMealName(cachedData.suggested_meal);
+          }
         }
         
         setIsLoadingSuggestions(false);
@@ -219,51 +384,137 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
   }, []);
 
-  // Add effect to log when location changes
+  // Only fetch restaurant suggestions if we don't already have any
+  // This provides a fallback while preventing override of correct suggestions
   useEffect(() => {
     console.log("Location updated in RatingScreen2:", JSON.stringify(location));
     
-    // When location updates, let's get restaurant suggestions if we don't have any
-    if (location && suggestedRestaurants.length === 0) {
-      const fetchRestaurants = async () => {
+    // Check if we already have restaurants
+    const hasRestaurants = suggestedRestaurants && suggestedRestaurants.length > 0;
+    
+    // If no restaurants and we have location, fetch suggestions as a fallback
+    if (!hasRestaurants && location) {
+      console.log("FALLBACK: No restaurant suggestions found but we have location - fetching suggestions");
+      
+      const fetchRestaurantSuggestions = async () => {
         try {
-          console.log("Attempting to fetch restaurant suggestions based on location");
           setIsLoadingSuggestions(true);
+          console.log("FALLBACK: Fetching restaurant suggestions using location");
           
-          // Use searchRestaurants since we don't need to specify a query
-          const results = await searchRestaurants("food", location);
-          console.log(`Fetched ${results.length} restaurants based on location`);
+          // Check global cache once more before fetching
+          if ((global as any).prefetchedSuggestions?.restaurants?.length > 0) {
+            console.log("FALLBACK: Found prefetched suggestions in global cache, using those");
+            const cachedData = (global as any).prefetchedSuggestions;
+            setSuggestedRestaurants(cachedData.restaurants || []);
+            setMenuItems(cachedData.menu_items || []);
+            
+            if (cachedData.restaurants?.length > 0) {
+              const firstRestaurant = cachedData.restaurants[0];
+              console.log(`FALLBACK: Using first cached suggestion: ${firstRestaurant.name}`);
+              setRestaurant(firstRestaurant.name);
+              updateMealSuggestionsForRestaurant(firstRestaurant.name);
+            }
+            
+            setIsLoadingSuggestions(false);
+            return;
+          }
           
-          if (results.length > 0) {
-            setSuggestedRestaurants(results);
+          // Fetch using mealService directly
+          console.log("FALLBACK: No cached suggestions, fetching from API");
+          if (photo && photo.uri) {
+            // Use photo location if available, otherwise device location
+            // Make sure to preserve source and priority
+            console.log("FALLBACK: Location source to use for API call:", location.source || "unknown");
+            
+            const result = await getMealSuggestions(photo.uri, location);
+            console.log(`FALLBACK: Got ${result.restaurants?.length || 0} restaurant suggestions`);
+            
+            if (result.restaurants && result.restaurants.length > 0) {
+              setSuggestedRestaurants(result.restaurants);
+              setMenuItems(result.menu_items || []);
+              
+              // Auto-select the first restaurant
+              const firstRestaurant = result.restaurants[0];
+              console.log(`FALLBACK: Setting restaurant to first suggestion: ${firstRestaurant.name}`);
+              setRestaurant(firstRestaurant.name);
+              
+              // Update menu suggestions for this restaurant
+              updateMealSuggestionsForRestaurant(firstRestaurant.name);
+              
+              // Save to global cache for future use
+              (global as any).prefetchedSuggestions = result;
+            } else {
+              console.log("FALLBACK: No restaurant suggestions found from API call");
+            }
+          } else {
+            console.log("FALLBACK: Can't fetch suggestions - no photo URI available");
           }
         } catch (error) {
-          console.error("Error fetching restaurant suggestions:", error);
+          console.error("FALLBACK: Error fetching restaurant suggestions:", error);
         } finally {
           setIsLoadingSuggestions(false);
         }
       };
       
-      fetchRestaurants();
+      fetchRestaurantSuggestions();
+    } else if (hasRestaurants) {
+      console.log("Not fetching suggestions - already have", suggestedRestaurants.length, "restaurants");
+      
+      // Auto-select the first restaurant if it's not already selected
+      if (suggestedRestaurants.length > 0 && !restaurant) {
+        const firstRestaurant = suggestedRestaurants[0];
+        console.log(`Auto-selecting first available restaurant: ${firstRestaurant.name}`);
+        setRestaurant(firstRestaurant.name);
+        
+        // Also get menu suggestions for this restaurant
+        updateMealSuggestionsForRestaurant(firstRestaurant.name);
+      }
+    } else {
+      console.log("Not fetching suggestions - no location data available");
     }
-  }, [location]);
-  
-  // Add effect to log when suggestedRestaurants changes
+  }, [location, suggestedRestaurants.length]);
+  // Add effect to log when suggestedRestaurants changes and automatically select first restaurant
   useEffect(() => {
     console.log(`SuggestedRestaurants updated: found ${suggestedRestaurants.length} restaurants`);
-    if (suggestedRestaurants.length > 0) {
-      console.log("First suggested restaurant:", suggestedRestaurants[0].name);
+    
+    // Only auto-select if the user is not currently editing the restaurant field
+    if (suggestedRestaurants.length > 0 && !isUserEditingRestaurant) {
+      const firstRestaurant = suggestedRestaurants[0];
+      console.log("First suggested restaurant:", firstRestaurant.name);
+      
+      // Auto-select the first restaurant only if the restaurant field is empty
+      if (!restaurant && firstRestaurant.name) {
+        console.log(`Auto-selecting first restaurant: ${firstRestaurant.name}`);
+        setRestaurant(firstRestaurant.name);
+        
+        // Get menu suggestions for this restaurant
+        updateMealSuggestionsForRestaurant(firstRestaurant.name);
+      } else if (restaurant !== firstRestaurant.name && restaurant.trim() === '') {
+        // Only override the current selection if the field is empty
+        // This prevents overriding user input
+        console.log(`Setting empty restaurant field to first suggestion: ${firstRestaurant.name}`);
+        setRestaurant(firstRestaurant.name);
+        
+        // Get menu suggestions for this restaurant
+        updateMealSuggestionsForRestaurant(firstRestaurant.name);
+      } else {
+        console.log(`Keeping current restaurant selection: "${restaurant}" (user input has priority)`);
+      }
     }
-  }, [suggestedRestaurants]);
+  }, [suggestedRestaurants, restaurant, location, isUserEditingRestaurant]);
 
   // Function to update meal suggestions when restaurant changes
+
   const updateMealSuggestionsForRestaurant = async (restaurantName: string): Promise<void> => {
-    if (!restaurantName) return;
+    if (!restaurantName) {
+      console.log("No restaurant name provided for menu suggestions");
+      return;
+    }
 
     try {
       setIsLoadingSuggestions(true);
 
-      console.log(`Fetching meal suggestions for restaurant: ${restaurantName}`);
+      console.log(`MENU LOOKUP: Fetching meal suggestions for restaurant: ${restaurantName}`);
 
       // Determine the best location to use based on priority and availability
       let searchLocation = null;
@@ -271,39 +522,59 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // First priority: restaurant location (if available from a previous selection)
       if (location && location.source === 'restaurant_selection') {
         searchLocation = location;
-        console.log('Using restaurant-specific location with highest priority for menu lookup');
+        console.log('MENU LOOKUP: Using restaurant-specific location with highest priority');
       } 
       // Second priority: EXIF data from the photo
       else if (location && location.source === 'exif') {
         searchLocation = location;
-        console.log('Using EXIF location data from photo with medium priority for menu lookup');
+        console.log('MENU LOOKUP: Using EXIF location data from photo with medium priority');
       } 
       // Third priority: Device location
       else if (deviceLocation) {
         searchLocation = deviceLocation;
-        console.log('Using current device location with lowest priority for menu lookup');
+        console.log('MENU LOOKUP: Using current device location with lowest priority');
       }
       // Fallback: Any location we have
       else if (location) {
         searchLocation = location;
-        console.log('Using fallback location data for menu lookup');
+        console.log('MENU LOOKUP: Using fallback location data');
       }
 
-      console.log('Location for menu suggestion:',
-        searchLocation ? `${searchLocation.latitude}, ${searchLocation.longitude} (source: ${searchLocation.source || 'unknown'})` : 'No location available');
+      if (searchLocation) {
+        console.log('MENU LOOKUP: Using location:', {
+          latitude: searchLocation.latitude,
+          longitude: searchLocation.longitude,
+          source: searchLocation.source || 'unknown',
+          city: searchLocation.city || 'unknown'
+        });
+      } else {
+        console.log('MENU LOOKUP: No location available for menu suggestion');
+      }
 
       // Make the API call
       const result = await getMealSuggestionsForRestaurant(restaurantName, photo?.uri, searchLocation);
+      console.log(`MENU LOOKUP: Retrieved ${result.menu_items?.length || 0} menu items for ${restaurantName}`);
 
       // Update only menu items and suggested meal, not restaurants
       setMenuItems(result.menu_items || []);
 
-      // Update suggested meal if available
-      if (result.suggested_meal) {
-        setMealName(result.suggested_meal);
-      } else if (result.menu_items && result.menu_items.length > 0) {
-        // If no specific meal is suggested but we have menu items, select the first one
-        setMealName(result.menu_items[0]);
+      // Only update the meal name if the user isn't currently editing it
+      // This prevents overriding user input when they're typing
+      if (!isUserEditingMeal) {
+        // Update suggested meal if available
+        if (result.suggested_meal) {
+          console.log(`MENU LOOKUP: Using suggested meal: ${result.suggested_meal}`);
+          setMealName(result.suggested_meal);
+        } else if (result.menu_items && result.menu_items.length > 0 && !mealName.trim()) {
+          // If no specific meal is suggested but we have menu items and meal field is empty,
+          // select the first one
+          console.log(`MENU LOOKUP: No suggested meal, using first menu item: ${result.menu_items[0]}`);
+          setMealName(result.menu_items[0]);
+        } else {
+          console.log(`MENU LOOKUP: Keeping current meal name: "${mealName}" (user input has priority)`);
+        }
+      } else {
+        console.log(`MENU LOOKUP: User is editing meal name, not auto-selecting a meal`);
       }
 
       // Log success
@@ -444,6 +715,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                     style={styles.infoInput}
                     value={restaurant}
                     onChangeText={(text) => {
+                      // Mark that the user is actively editing
+                      setIsUserEditingRestaurant(true);
                       setRestaurant(text);
 
                       // Show autocomplete dropdown when typing
@@ -476,14 +749,22 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                       }
                     }}
                     onFocus={() => {
+                      // Mark that the user is actively editing
+                      console.log("User focused on restaurant input - preventing auto-suggestions");
+                      setIsUserEditingRestaurant(true);
+                      
                       // Show autocomplete when input is focused if text length is sufficient
                       if (restaurant.length >= 2) {
                         setShowAutocomplete(true);
                       }
                     }}
                     onBlur={() => {
-                      // Delay hiding autocomplete to allow for selection
-                      setTimeout(() => setShowAutocomplete(false), 200);
+                      // After a delay, mark that the user is no longer editing
+                      setTimeout(() => {
+                        console.log("User blurred restaurant input");
+                        setIsUserEditingRestaurant(false);
+                        setShowAutocomplete(false);
+                      }, 200);
                     }}
                     placeholder="Enter restaurant name"
                   />
@@ -503,7 +784,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                           <TouchableOpacity
                             style={styles.autocompleteItem}
                             onPress={() => {
+                              console.log(`Autocomplete restaurant selected: ${item.name}`);
+                              // User has explicitly selected a restaurant from autocomplete
+                              // Set the restaurant name and mark that we're no longer in editing mode
                               setRestaurant(item.name);
+                              setIsUserEditingRestaurant(false);
                               setShowAutocomplete(false);
 
                               // If restaurant has location (from Places API), update the location data
@@ -513,11 +798,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                                 let city = '';
                                 if (item.vicinity || item.formatted_address) {
                                   const address = item.vicinity || item.formatted_address;
-                                  console.log("Got restaurant address:", address);
+                                  console.log("Got restaurant address from autocomplete:", address);
                                   
                                   // Try to extract city - typically the second component in a comma-separated address
                                   const addressParts = address.split(',').map(part => part.trim());
-                                  console.log("Address parts:", addressParts);
+                                  console.log("Address parts for autocomplete:", addressParts);
                                   
                                   if (addressParts.length > 1) {
                                     // The second part is usually the city + state (e.g., "Portland, OR")
@@ -536,12 +821,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                                       city = addressParts[2].split(' ')[0];
                                     }
                                     
-                                    console.log("Extracted city name:", city);
+                                    console.log("Extracted city name from autocomplete:", city);
                                   }
                                 }
                                 
                                 // For debugging
-                                console.log("Final city value for location:", city);
+                                console.log("Final city value for location from autocomplete:", city);
                                 
                                 const restaurantLocation = {
                                   latitude: item.geometry.location.lat,
@@ -551,7 +836,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                                   city: city // Save extracted city
                                 };
 
-                                console.log(`Updating location from restaurant selection: ${JSON.stringify(restaurantLocation)}`);
+                                console.log(`Updating location from autocomplete restaurant selection: ${item.name}`);
+                                console.log(`Location details: ${JSON.stringify(restaurantLocation)}`);
 
                                 // Update both local state and route params
                                 setLocation(restaurantLocation);
@@ -560,9 +846,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                                 if (route.params) {
                                   route.params.location = restaurantLocation;
                                 }
+                              } else {
+                                console.log(`Selected restaurant from autocomplete has no location data: ${item.name}`);
                               }
 
                               // Update meal suggestions for this restaurant
+                              console.log(`Fetching meal suggestions for autocomplete restaurant: ${item.name}`);
                               updateMealSuggestionsForRestaurant(item.name);
                             }}
                           >
@@ -603,7 +892,22 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               <TextInput
                 style={styles.infoInput}
                 value={mealName}
-                onChangeText={setMealName}
+                onChangeText={(text) => {
+                  // Mark that user is actively editing the meal name
+                  setIsUserEditingMeal(true);
+                  setMealName(text);
+                }}
+                onFocus={() => {
+                  console.log("User focused on meal input - preventing auto-suggestions");
+                  setIsUserEditingMeal(true);
+                }}
+                onBlur={() => {
+                  console.log("User blurred meal input");
+                  // After a delay, mark that user is no longer editing
+                  setTimeout(() => {
+                    setIsUserEditingMeal(false);
+                  }, 200);
+                }}
                 placeholder="Enter meal name"
               />
               {menuItems.length > 0 && (
@@ -694,33 +998,62 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                       style={styles.restaurantItem}
                       onPress={() => {
                         // Log the selection
-                        console.log(`Restaurant selected: ${item.name}`);
+                        console.log(`Restaurant selected from modal: ${item.name}`);
                         
-                        // If this is a different restaurant than currently selected
-                        if (restaurant !== item.name) {
-                          setRestaurant(item.name);
+                        // Always select the restaurant that the user clicked on
+                        // This is an explicit user selection, so we should not override it
+                        setRestaurant(item.name);
+                        
+                        // User has explicitly selected a restaurant, so turn off editing mode
+                        setIsUserEditingRestaurant(false);
   
-                          // Update location if the restaurant has location data
-                          if (item.geometry && item.geometry.location) {
-                            const restaurantLocation = {
-                              latitude: item.geometry.location.lat,
-                              longitude: item.geometry.location.lng,
-                              source: 'restaurant_selection',
-                              priority: 1 // Restaurant location has highest priority
-                            };
-  
-                            console.log(`Updating location from restaurant modal selection: ${item.name}`);
-  
-                            // Update location in state and route params
-                            setLocation(restaurantLocation);
-                            if (route.params) {
-                              route.params.location = restaurantLocation;
+                        // Update location if the restaurant has location data
+                        if (item.geometry && item.geometry.location) {
+                          // Extract city information for this restaurant selection
+                          let city = '';
+                          if (item.vicinity || item.formatted_address) {
+                            const address = item.vicinity || item.formatted_address;
+                            console.log("Got selected restaurant address:", address);
+                            
+                            // Try to extract city from address
+                            const addressParts = address.split(',').map(part => part.trim());
+                            console.log("Address parts for selected restaurant:", addressParts);
+                            
+                            if (addressParts.length > 1) {
+                              // If second part has spaces, take just the city name
+                              const secondPart = addressParts[1];
+                              if (secondPart.includes(' ')) {
+                                city = secondPart.split(' ')[0];
+                              } else {
+                                city = secondPart;
+                              }
+                              
+                              console.log("Extracted city from selected restaurant:", city);
                             }
                           }
-  
-                          // Fetch meal suggestions for this restaurant
-                          updateMealSuggestionsForRestaurant(item.name);
+                          
+                          const restaurantLocation = {
+                            latitude: item.geometry.location.lat,
+                            longitude: item.geometry.location.lng,
+                            source: 'restaurant_selection',
+                            priority: 1, // Restaurant location has highest priority
+                            city: city
+                          };
+
+                          console.log(`Updating location from restaurant modal selection: ${item.name}`);
+
+                          // Update location in state and route params
+                          setLocation(restaurantLocation);
+                          if (route.params) {
+                            route.params.location = restaurantLocation;
+                          }
                         }
+
+                        // Always fetch menu suggestions for this restaurant
+                        // This ensures we get the best menu recommendations for the selected restaurant
+                        console.log(`Fetching meal suggestions for selected restaurant: ${item.name}`);
+                        updateMealSuggestionsForRestaurant(item.name);
+                        
                         setShowRestaurantModal(false);
                       }}
                     >
@@ -764,7 +1097,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                   <TouchableOpacity
                     style={styles.menuItem}
                     onPress={() => {
+                      console.log(`Menu item selected: ${item}`);
                       setMealName(item);
+                      // User has explicitly selected a menu item, mark as not editing
+                      setIsUserEditingMeal(false);
                       setShowMenuModal(false);
                     }}
                   >
