@@ -21,7 +21,7 @@ const achievementDefinitions: AchievementDefinition[] = [
     id: 'stubtown_starter',
     name: 'Stubtown Starter',
     description: 'Your first meal in Portland!',
-    image: 'portland.png',
+    image: 'stubtown_starter.png',
     criteria: {
       type: 'location_based',
       location: {
@@ -60,7 +60,7 @@ const achievementDefinitions: AchievementDefinition[] = [
     id: 'big_apple_bite',
     name: 'Big Apple Bite',
     description: 'Your first meal in New York City!',
-    image: 'nyc.png',
+    image: 'big_apple_bite.png',
     criteria: {
       type: 'location_based',
       location: {

@@ -82,49 +82,54 @@ const StampsScreen: React.FC = () => {
     });
   };
 
+  // Helper function to get the appropriate stamp image
+  const getStampImage = (achievementId: string) => {
+    // Use require statements for bundled images - these would need to be added in advance
+    const images = {
+      'first_bite': require('../assets/stamps/first_bite.png'),
+      'stubtown_starter': require('../assets/stamps/stubtown_starter.png'),
+      'big_apple_bite': require('../assets/stamps/big_apple_bite.png')
+    };
+    
+    // If we have a bundled image for this achievement, use it
+    if (images[achievementId]) {
+      return images[achievementId];
+    }
+    
+    // Otherwise fall back to a default image
+    return require('../assets/stars/star-filled.png');
+  };
+
   const renderAchievementItem = ({ item }: { item: AchievementDisplayItem }) => (
     <TouchableOpacity
       style={[
         styles.stampItem,
-        item.earned ? styles.earnedStamp : styles.unearnedStamp
+        styles.earnedStamp
       ]}
       onPress={() => setSelectedAchievement(item)}
     >
-      {/* Determine the image source */}
-      {item.earned ? (
-        // For now we'll use icons until we have actual stamp images
-        <View style={styles.stampIconContainer}>
-          <Icon 
-            name={
-              item.id === 'first_bite' ? 'restaurant' : 
-              item.id === 'stubtown_starter' ? 'location-city' :
-              item.id === 'big_apple_bite' ? 'location-on' : 'stars'
-            } 
-            size={40} 
-            color="#fff" 
-          />
-        </View>
-      ) : (
-        <View style={styles.lockedIconContainer}>
-          <Icon name="lock" size={40} color="#ccc" />
-        </View>
-      )}
+      <View style={styles.stampIconContainer}>
+        {/* Try to load the custom stamp image if it exists */}
+        <Image 
+          source={getStampImage(item.id)}
+          style={styles.stampImage}
+          resizeMode="contain"
+        />
+      </View>
       
       <Text 
         style={[
           styles.stampName, 
-          item.earned ? styles.earnedStampText : styles.unearnedStampText
+          styles.earnedStampText
         ]}
         numberOfLines={2}
       >
         {item.name}
       </Text>
       
-      {item.earned && (
-        <Text style={styles.earnedDate}>
-          {formatDate(item.earnedAt)}
-        </Text>
-      )}
+      <Text style={styles.earnedDate}>
+        {formatDate(item.earnedAt)}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -141,12 +146,8 @@ const StampsScreen: React.FC = () => {
         </View>
       ) : (
         <>
-          <Text style={styles.subtitle}>
-            {userAchievements.length} of {achievementItems.length} stamps collected
-          </Text>
-          
           <FlatList
-            data={achievementItems}
+            data={achievementItems.filter(item => item.earned)}
             renderItem={renderAchievementItem}
             keyExtractor={item => item.id}
             numColumns={3}
@@ -154,12 +155,12 @@ const StampsScreen: React.FC = () => {
           />
           
           {/* Empty state */}
-          {achievementItems.length === 0 && (
+          {achievementItems.filter(item => item.earned).length === 0 && (
             <View style={styles.emptyContainer}>
               <Icon name="emoji-events" size={64} color="#ddd" />
-              <Text style={styles.emptyText}>No achievements available yet</Text>
+              <Text style={styles.emptyText}>No stamps collected yet</Text>
               <Text style={styles.emptySubtext}>
-                Keep using the app to earn achievements!
+                Keep using the app to earn stamps!
               </Text>
             </View>
           )}
@@ -179,15 +180,15 @@ const StampsScreen: React.FC = () => {
                   styles.detailIconContainer,
                   selectedAchievement.earned ? styles.earnedDetail : styles.unearnedDetail
                 ]}>
-                  <Icon 
-                    name={
-                      selectedAchievement.id === 'first_bite' ? 'restaurant' : 
-                      selectedAchievement.id === 'stubtown_starter' ? 'location-city' :
-                      selectedAchievement.id === 'big_apple_bite' ? 'location-on' : 'stars'
-                    } 
-                    size={60} 
-                    color={selectedAchievement.earned ? "#fff" : "#ccc"} 
-                  />
+                  {selectedAchievement.earned ? (
+                    <Image 
+                      source={getStampImage(selectedAchievement.id)}
+                      style={styles.detailStampImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Icon name="lock" size={60} color="#ccc" />
+                  )}
                 </View>
                 
                 <Text style={styles.detailName}>
@@ -270,8 +271,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   earnedStamp: {
-    borderWidth: 2,
-    borderColor: '#ff6b6b',
+    borderWidth: 0,
   },
   unearnedStamp: {
     opacity: 0.7,
@@ -282,10 +282,15 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
+    overflow: 'hidden',
+  },
+  stampImage: {
+    width: '100%',
+    height: '100%',
   },
   lockedIconContainer: {
     width: 60,
@@ -363,9 +368,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
+    overflow: 'hidden',
+  },
+  detailStampImage: {
+    width: '100%',
+    height: '100%',
   },
   earnedDetail: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'transparent',
   },
   unearnedDetail: {
     backgroundColor: '#f0f0f0',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import FoodPassportScreen from './FoodPassportScreen';
@@ -70,16 +70,33 @@ class ErrorBoundary extends React.Component<
 type Route = {
   key: string;
   title: string;
-  icon: string;
+  activeIcon: any;
+  inactiveIcon: any;
 };
 
 const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [isLoading, setIsLoading] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
+  // We'll use require() for the default icons, but custom icons can be added to assets/icons/passport_tabs/
   const [routes] = useState<Route[]>([
-    { key: 'passport', title: 'My Meals', icon: 'restaurant-menu' },
-    { key: 'map', title: 'Map', icon: 'place' },
-    { key: 'stamps', title: 'Stamps', icon: 'emoji-events' },
+    { 
+      key: 'passport', 
+      title: 'My Meals', 
+      activeIcon: require('../assets/icons/passport_tabs/meals-active.png'), 
+      inactiveIcon: require('../assets/icons/passport_tabs/meals-inactive.png')
+    },
+    { 
+      key: 'map', 
+      title: 'Map', 
+      activeIcon: require('../assets/icons/passport_tabs/map-active.png'), 
+      inactiveIcon: require('../assets/icons/passport_tabs/map-inactive.png')
+    },
+    { 
+      key: 'stamps', 
+      title: 'Stamps', 
+      activeIcon: require('../assets/icons/passport_tabs/stamps-active.png'), 
+      inactiveIcon: require('../assets/icons/passport_tabs/stamps-inactive.png')
+    },
   ]);
   
   // Shared filter state for both tabs
@@ -150,7 +167,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     <SafeAreaView style={styles.container}>
       {/* App header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Food Passport</Text>
+        <Text style={styles.title}>My Food Passport</Text>
         <TouchableOpacity onPress={() => auth().signOut()} style={styles.signOutButton}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
@@ -167,20 +184,11 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             ]}
             onPress={() => setTabIndex(i)}
           >
-            <Icon 
-              name={route.icon} 
-              size={24} 
-              color={tabIndex === i ? '#ff6b6b' : '#999'} 
-              style={styles.tabIcon} 
+            <Image
+              source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
+              style={styles.tabIcon}
+              resizeMode="contain"
             />
-            <Text 
-              style={[
-                styles.tabLabel,
-                { color: tabIndex === i ? '#ff6b6b' : '#999' }
-              ]}
-            >
-              {route.title}
-            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -262,7 +270,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ff6b6b',
   },
   tabIcon: {
-    marginBottom: 4,
+    width: 28,
+    height: 28,
   },
   tabLabel: {
     fontSize: 12,

@@ -66,18 +66,22 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
     });
   };
 
-  // Determine which icon to use for the achievement
-  const getAchievementIcon = () => {
-    switch (achievement.id) {
-      case 'first_bite':
-        return 'restaurant';
-      case 'stubtown_starter':
-        return 'location-city';
-      case 'big_apple_bite':
-        return 'location-on';
-      default:
-        return 'emoji-events';
+  // Get the stamp image for the achievement
+  const getStampImage = () => {
+    // Use require statements for bundled images - these would need to be added in advance
+    const images = {
+      'first_bite': require('../assets/stamps/first_bite.png'),
+      'stubtown_starter': require('../assets/stamps/stubtown_starter.png'),
+      'big_apple_bite': require('../assets/stamps/big_apple_bite.png')
+    };
+    
+    // If we have a bundled image for this achievement, use it
+    if (images[achievement.id]) {
+      return images[achievement.id];
     }
+    
+    // Otherwise fall back to a default image
+    return require('../assets/stars/star-filled.png');
   };
 
   return (
@@ -91,7 +95,11 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
       ]}
     >
       <View style={styles.iconContainer}>
-        <Icon name={getAchievementIcon()} size={40} color="#fff" />
+        <Image 
+          source={getStampImage()} 
+          style={styles.stampImage} 
+          resizeMode="contain" 
+        />
       </View>
       
       <View style={styles.textContainer}>
@@ -131,10 +139,15 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
+    overflow: 'hidden',
+  },
+  stampImage: {
+    width: '100%',
+    height: '100%',
   },
   textContainer: {
     flex: 1,
