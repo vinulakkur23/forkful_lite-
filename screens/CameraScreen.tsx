@@ -66,6 +66,13 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       setIsLoading(true);
       setIsTakingPicture(false);
       
+      // IMPORTANT: Clear any global prefetched suggestions to prevent caching issues
+      if ((global as any).prefetchedSuggestions) {
+        console.log('!!! CLEARING GLOBAL PREFETCHED SUGGESTIONS IN CAMERA SCREEN !!!');
+        (global as any).prefetchedSuggestions = null;
+        delete (global as any).prefetchedSuggestions;
+      }
+      
       // Get location again
       getLocation();
       

@@ -512,20 +512,18 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
 
           console.log(`Navigating to Rating with fresh image: ${freshImageSource.uri}`);
 
-          // Check if we have prefetched suggestion data
-          let useSuggestionData = suggestionData;
-
-          // If we don't have suggestions yet, check if we have them in global context
-          if (!useSuggestionData && (global as any).prefetchedSuggestions) {
-            console.log('Using global prefetched suggestions in EditPhotoScreen');
-            useSuggestionData = (global as any).prefetchedSuggestions;
+          // IMPORTANT: Clear any global prefetched suggestions to prevent caching issues
+          if ((global as any).prefetchedSuggestions) {
+            console.log('!!! CLEARING GLOBAL PREFETCHED SUGGESTIONS IN EDITPHOTOSCREEN !!!');
+            (global as any).prefetchedSuggestions = null;
+            delete (global as any).prefetchedSuggestions;
           }
 
-          // Check if we have suggestions from the previous screen
-          if (!useSuggestionData && route.params.suggestionData) {
-            console.log('Using suggestions passed from previous screen');
-            useSuggestionData = route.params.suggestionData;
-          }
+          // Set useSuggestionData to null to force a fresh API call
+          let useSuggestionData = null;
+
+          // Force a fresh API call by not using any cached suggestions
+          console.log('Setting useSuggestionData to null to FORCE fresh API call in RatingScreen');
 
           // Log suggestion data status
           console.log('Suggestion data for Rating screen:', 
@@ -547,7 +545,8 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
             suggestionData: useSuggestionData,
             // Pass the EXIF data if available
             exifData: exifData,
-            _navigationKey: sessionId // This helps React Navigation identify this as a new navigation
+            _navigationKey: sessionId, // This helps React Navigation identify this as a new navigation
+            _uniqueKey: `rating_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` // Special key for RatingScreen2
           });
         } catch (error) {
           console.error('Error preparing image for Rating screen:', error);
