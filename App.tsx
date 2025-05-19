@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useState, useEffect, useRef } from 'react';
+import { NavigationContainer, NavigationState } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Icon import was duplicated, removed one. MaterialIcons is conventional.
@@ -10,6 +10,7 @@ import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getPhotoWithMetadata } from './services/photoLibraryService';
+import RNFS from 'react-native-fs';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -114,12 +115,114 @@ export type TabParamList = {
   MealDetail: RootStackParamList['MealDetail'];
 };
 
+// ResourceManager to track and clean temporary files and resources
+export const ResourceManager = {
+  _resources: new Map<string, () => void>(),
+  _tempFiles: new Set<string>(),
+  
+  trackResource(id: string, cleanup: () => void): void {
+    console.log(`[ResourceManager] Tracking resource: ${id}`);
+    this._resources.set(id, cleanup);
+  },
+  
+  releaseResource(id: string): void {
+    console.log(`[ResourceManager] Releasing resource: ${id}`);
+    const cleanup = this._resources.get(id);
+    if (cleanup && typeof cleanup === 'function') {
+      cleanup();
+    }
+    this._resources.delete(id);
+  },
+  
+  trackTempFile(filePath: string): void {
+    if (filePath && (
+      filePath.includes(RNFS.TemporaryDirectoryPath) || 
+      filePath.includes(RNFS.CachesDirectoryPath)
+    )) {
+      console.log(`[ResourceManager] Tracking temp file: ${filePath}`);
+      this._tempFiles.add(filePath);
+    }
+  },
+  
+  async cleanupTempFiles(): Promise<void> {
+    console.log(`[ResourceManager] Cleaning up ${this._tempFiles.size} temp files`);
+    
+    const currentTime = Date.now();
+    const FIVE_MINUTES = 5 * 60 * 1000; // 5 minutes in milliseconds
+    
+    // Files to keep (added within the last 5 minutes)
+    const recentFiles = new Set<string>();
+    
+    for (const filePath of this._tempFiles) {
+      try {
+        const exists = await RNFS.exists(filePath);
+        if (exists) {
+          // Check file stats to determine age
+          const stats = await RNFS.stat(filePath);
+          const fileAge = currentTime - new Date(stats.mtime).getTime();
+          
+          // Only delete files older than 5 minutes
+          if (fileAge > FIVE_MINUTES) {
+            await RNFS.unlink(filePath);
+            console.log(`[ResourceManager] Deleted old temp file: ${filePath}`);
+          } else {
+            recentFiles.add(filePath);
+            console.log(`[ResourceManager] Keeping recent file: ${filePath}`);
+          }
+        }
+      } catch (e) {
+        console.warn(`[ResourceManager] Error cleaning up file ${filePath}:`, e);
+      }
+    }
+    
+    // Update the set to only contain recent files
+    this._tempFiles = recentFiles;
+  },
+  
+  releaseAll(): void {
+    console.log(`[ResourceManager] Releasing all ${this._resources.size} resources`);
+    this._resources.forEach(cleanup => {
+      try {
+        cleanup();
+      } catch (e) {
+        console.warn('[ResourceManager] Error during cleanup:', e);
+      }
+    });
+    this._resources.clear();
+    
+    // Also clean temp files
+    this.cleanupTempFiles().catch(e => 
+      console.warn('[ResourceManager] Error cleaning temp files:', e)
+    );
+  }
+};
+
 // Create stack and tab navigators
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-// Custom tab bar component
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+// Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
+const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
+  // Pre-load and cache all tab bar icons using React.useMemo
+  const tabIcons = React.useMemo(() => ({
+    place: {
+      active: require('./assets/icons/place-active.png'),
+      inactive: require('./assets/icons/place-inactive.png')
+    },
+    camera: {
+      active: require('./assets/icons/camera-active.png'),
+      inactive: require('./assets/icons/camera-inactive.png')
+    },
+    upload: {
+      active: require('./assets/icons/upload-active.png'),
+      inactive: require('./assets/icons/upload-inactive.png')
+    },
+    passport: {
+      active: require('./assets/icons/passport-active.png'),
+      inactive: require('./assets/icons/passport-inactive.png')
+    }
+  }), []);
+
   // Updated Image Picker function to use PhotoGPSModule
     const openImagePicker = async () => {
       try {
@@ -167,31 +270,52 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     };
 
     const mainTabs = [
-      { name: 'Home', label: 'Nearby', icon: (focused: boolean) => (
-        focused ?
-          <Image source={require('./assets/icons/place-active.png')} style={{ width: 24, height: 24 }} /> :
-          <Image source={require('./assets/icons/place-inactive.png')} style={{ width: 24, height: 24 }} />
-      )},
-      { name: 'Camera', label: 'Take Photo', icon: (focused: boolean) => (
-        focused ?
-          <Image source={require('./assets/icons/camera-active.png')} style={{ width: 24, height: 24 }} /> :
-          <Image source={require('./assets/icons/camera-inactive.png')} style={{ width: 24, height: 24 }} />
-      )},
+      { 
+        name: 'Home', 
+        label: 'Nearby', 
+        icon: (focused: boolean) => (
+          <Image 
+            source={focused ? tabIcons.place.active : tabIcons.place.inactive} 
+            style={{ width: 24, height: 24 }}
+            // Force image to be reloaded properly
+            key={`home-icon-${focused ? 'active' : 'inactive'}`}
+          />
+        )
+      },
+      { 
+        name: 'Camera', 
+        label: 'Take Photo', 
+        icon: (focused: boolean) => (
+          <Image 
+            source={focused ? tabIcons.camera.active : tabIcons.camera.inactive} 
+            style={{ width: 24, height: 24 }}
+            key={`camera-icon-${focused ? 'active' : 'inactive'}`}
+          />
+        )
+      },
       {
         name: 'Upload', // This is a virtual tab
         label: 'Upload Photo',
         icon: (focused: boolean) => ( // focused will always be false for this button
-          focused ? // This case won't be hit, but kept for structure
-            <Image source={require('./assets/icons/upload-active.png')} style={{ width: 24, height: 24 }} /> :
-            <Image source={require('./assets/icons/upload-inactive.png')} style={{ width: 24, height: 24 }} />
+          <Image 
+            source={tabIcons.upload.inactive} 
+            style={{ width: 24, height: 24 }}
+            key="upload-icon-inactive"
+          />
         ),
         customAction: true
       },
-      { name: 'FoodPassport', label: 'My Passport', icon: (focused: boolean) => (
-        focused ?
-          <Image source={require('./assets/icons/passport-active.png')} style={{ width: 24, height: 24 }} /> :
-          <Image source={require('./assets/icons/passport-inactive.png')} style={{ width: 24, height: 24 }} />
-      )}
+      { 
+        name: 'FoodPassport', 
+        label: 'My Passport', 
+        icon: (focused: boolean) => (
+          <Image 
+            source={focused ? tabIcons.passport.active : tabIcons.passport.inactive} 
+            style={{ width: 24, height: 24 }}
+            key={`passport-icon-${focused ? 'active' : 'inactive'}`}
+          />
+        )
+      }
     ];
 
   return (
@@ -255,7 +379,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       })}
     </View>
   );
-}
+});
 
 // Tab Navigator component with custom tab bar
 function TabNavigator() {
@@ -345,6 +469,14 @@ const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
 
+  // Create a navigation reference to access navigation state
+  const navigationRef = useRef(null);
+  
+  // Track previous and current state to identify screen changes
+  const routeNameRef = useRef<string | undefined>();
+  const prevStateRef = useRef<NavigationState | null>(null);
+
+  // Configure Google Sign-In
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '476812977799-7dmlpm8g3plslrsftesst7op6ipm71a4.apps.googleusercontent.com',
@@ -352,6 +484,37 @@ const App: React.FC = () => {
       offlineAccess: true,
       forceCodeForRefreshToken: true,
     });
+  }, []);
+  
+  // Preload critical UI assets at startup to prevent memory-related disappearance
+  useEffect(() => {
+    console.log("Preloading app icons and assets...");
+    
+    // Preload all tab icons
+    const iconsToPreload = [
+      require('./assets/icons/place-active.png'),
+      require('./assets/icons/place-inactive.png'),
+      require('./assets/icons/camera-active.png'),
+      require('./assets/icons/camera-inactive.png'),
+      require('./assets/icons/upload-active.png'),
+      require('./assets/icons/upload-inactive.png'),
+      require('./assets/icons/passport-active.png'),
+      require('./assets/icons/passport-inactive.png'),
+      // Preload rating stars too since they have disappearance issues
+      require('./assets/stars/star-filled.png'),
+      require('./assets/stars/star-empty.png')
+    ];
+    
+    // Force immediate loading by resolving asset sources
+    iconsToPreload.forEach(icon => {
+      const resolved = Image.resolveAssetSource(icon);
+      console.log(`Preloaded asset: ${resolved.uri}`);
+    });
+    
+    // Return cleanup function
+    return () => {
+      console.log("Cleaning up preloaded assets");
+    };
   }, []);
 
   function onAuthStateChanged(user: any) {
@@ -365,6 +528,64 @@ const App: React.FC = () => {
     const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
     return subscriber;
   }, []);
+  
+  // Schedule periodic temp file cleanup
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      ResourceManager.cleanupTempFiles();
+    }, 60000); // Run every minute
+    
+    return () => {
+      clearInterval(cleanupInterval);
+      ResourceManager.releaseAll();
+    };
+  }, []);
+  
+  // Handle navigation state changes for memory cleanup
+  const onNavigationStateChange = (state: NavigationState | undefined) => {
+    if (!state) return;
+    
+    const previousState = prevStateRef.current;
+    const currentRouteName = getActiveRouteName(state);
+    
+    // Get previous route name
+    const previousRouteName = routeNameRef.current;
+    
+    // If the route has changed, run cleanup for previous screen
+    if (previousRouteName && previousRouteName !== currentRouteName) {
+      console.log(`Navigation changed from ${previousRouteName} to ${currentRouteName}`);
+      
+      // Clean up resources when leaving resource-intensive screens
+      if (['CropScreen', 'RatingScreen1', 'RatingScreen2', 'Result'].some(
+        screen => previousRouteName.includes(screen))
+      ) {
+        console.log(`Screen ${previousRouteName} was unmounted, cleaning up resources`);
+        
+        // Schedule cleanup for next tick to avoid interrupting navigation
+        setTimeout(() => {
+          ResourceManager.cleanupTempFiles();
+        }, 500);
+      }
+    }
+    
+    // Save the current navigation state for next comparison
+    routeNameRef.current = currentRouteName;
+    prevStateRef.current = state;
+  };
+  
+  // Helper to get the active route name from navigation state
+  const getActiveRouteName = (state: NavigationState): string => {
+    if (!state || !state.routes) return 'unknown';
+    
+    const route = state.routes[state.index];
+    
+    // Dive into nested navigators
+    if (route.state && (route.state as NavigationState).index !== undefined) {
+      return getActiveRouteName(route.state as NavigationState);
+    }
+    
+    return route.name;
+  };
 
   if (initializing) {
     return (
@@ -376,7 +597,10 @@ const App: React.FC = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onStateChange={onNavigationStateChange}
+    >
       <Stack.Navigator initialRouteName={user ? "MainTabs" : "Login"} screenOptions={{ headerShown: false }}>
         <Stack.Screen
           name="Login"

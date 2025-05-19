@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 
@@ -57,8 +57,14 @@ type Props = {
 const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   const { photo } = route.params;
 
+  // Pre-load star images using useMemo to prevent memory issues
+  const starImages = useMemo(() => ({
+    filled: require('../assets/stars/star-filled.png'),
+    empty: require('../assets/stars/star-empty.png')
+  }), []);
+
   // Initialize location with priority information
-  const initializeLocation = () => {
+  const initializeLocation = useCallback(() => {
     if (!route.params.location) return null;
 
     // Add priority based on source
@@ -75,13 +81,14 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
     console.log(`Initialized location with source ${loc.source}, priority ${loc.priority}`);
     return loc;
-  };
+  }, [route.params.location]);
 
   // Use state to manage location so we can update it when restaurant is selected
   const [location, setLocation] = useState(initializeLocation());
   const [rating, setRating] = useState<number>(0);
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [screenKey, setScreenKey] = useState(Date.now()); // Used to force re-render when needed
 
   // Comments for both liked and disliked
   const [likedComment, setLikedComment] = useState<string>('');
@@ -106,7 +113,41 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
     // Log location data for debugging
     console.log("Initial location data in RatingScreen1:", JSON.stringify(location));
+    
+    // Cleanup function for temporary resources
+    return () => {
+      // Clean up temporary images if they're in the temp directory
+      if (photo && photo.uri && (
+          photo.uri.includes(RNFS.TemporaryDirectoryPath) || 
+          photo.uri.includes(RNFS.CachesDirectoryPath)
+      )) {
+        RNFS.exists(photo.uri)
+          .then(exists => {
+            if (exists) {
+              RNFS.unlink(photo.uri)
+                .then(() => console.log('Temp file deleted from RatingScreen1:', photo.uri))
+                .catch(e => console.error('Error deleting temp file:', e));
+            }
+          })
+          .catch(err => console.error('Error checking file existence:', err));
+      }
+    };
   }, []);
+  
+  // Use useFocusEffect to refresh UI elements when the screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("RatingScreen1 gained focus - refreshing UI elements");
+      
+      // Force re-render of stars and other UI components by updating screenKey
+      setScreenKey(Date.now());
+      
+      return () => {
+        // Clean up when screen loses focus
+        console.log("RatingScreen1 lost focus");
+      };
+    }, [])
+  );
 
   // Add effect to log when location changes
   useEffect(() => {
@@ -129,16 +170,17 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const continueToMealDetails = async (): Promise<void> => {
+    let newFilePath = '';
     try {
       // Show loading indication
       setIsProcessing(true);
 
       // Generate a unique session ID for this result flow
-      const sessionId = route.params._uniqueKey || Math.random().toString(36).substring(2, 15);
+      const sessionId = route.params._uniqueKey || `rating_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       console.log(`Continuing session ${sessionId} to RatingScreen2`);
 
       // Create a clean copy of the image without query parameters for passing to next screen
-      const timestamp = new Date().getTime();
+      const timestamp = Date.now();
       const fileExt = 'jpg'; // Default to jpg
 
       // Create a path for the new clean image file
@@ -149,24 +191,44 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         ? `${RNFS.TemporaryDirectoryPath}/`
         : `${RNFS.CachesDirectoryPath}/`;
 
-      const newFilePath = `${dirPath}${newFilename}`;
+      newFilePath = `${dirPath}${newFilename}`;
       console.log('Creating clean image for RatingScreen2 at:', newFilePath);
 
-      // Copy the current image file to new location
-      await RNFS.copyFile(photo.uri, newFilePath);
-      console.log('File copied successfully for RatingScreen2');
+      // If the photo is already in the temp directory, avoid copying it again
+      if (photo.uri === newFilePath) {
+        console.log('Using existing file, no need to copy');
+      } else {
+        // First check if the target file already exists, and delete it if it does
+        try {
+          const exists = await RNFS.exists(newFilePath);
+          if (exists) {
+            await RNFS.unlink(newFilePath);
+            console.log('Deleted existing file before copying');
+          }
+        } catch (e) {
+          console.warn('Error checking/deleting existing file:', e);
+        }
+        
+        // Copy the current image file to new location
+        await RNFS.copyFile(photo.uri, newFilePath);
+        console.log('File copied successfully for RatingScreen2');
+      }
 
       // Create a fresh photo object to avoid any reference issues
       const freshPhoto = {
         uri: newFilePath,
         width: photo.width,
         height: photo.height,
-        sessionId: sessionId // Add session ID for tracking
+        sessionId: sessionId, // Add session ID for tracking
+        originalUri: photo.uri // Track the original URI for cleanup
       };
 
       console.log(`Navigating to RatingScreen2 with fresh image: ${freshPhoto.uri}`);
 
       // No need to format comments as we're using single text fields
+
+      // Ensure data is ready before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Navigate to RatingScreen2 with all collected data
       navigation.navigate('RatingScreen2', {
@@ -188,6 +250,20 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Error preparing data for RatingScreen2:', error);
+      
+      // Clean up the file if we were in the middle of creating it
+      if (newFilePath) {
+        try {
+          const exists = await RNFS.exists(newFilePath);
+          if (exists) {
+            await RNFS.unlink(newFilePath);
+            console.log('Cleaned up partially created file after error');
+          }
+        } catch (e) {
+          console.warn('Error cleaning up file after error:', e);
+        }
+      }
+      
       Alert.alert('Error', 'Failed to continue to meal details. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -238,19 +314,20 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
           {/* Rating Section */}
           <View style={styles.ratingSection}>
             <Text style={styles.ratingTitle}>Rate this meal</Text>
-            <View style={styles.ratingContainer}>
+            <View style={styles.ratingContainer} key={`stars-container-${screenKey}`}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity
-                  key={star}
+                  key={`star-${star}-${screenKey}`}
                   onPress={() => handleRating(star)}
                   style={styles.starTouchable}
+                  activeOpacity={0.7}
                 >
                   <Image
-                    source={star <= rating
-                      ? require('../assets/stars/star-filled.png')
-                      : require('../assets/stars/star-empty.png')}
+                    source={star <= rating ? starImages.filled : starImages.empty}
                     style={styles.star}
                     resizeMode="contain"
+                    // Force clear any cached rendering that might be stale
+                    key={`star-img-${star}-${rating}-${screenKey}`}
                   />
                 </TouchableOpacity>
               ))}
