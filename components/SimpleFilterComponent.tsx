@@ -6,39 +6,44 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firestore } from '../firebaseConfig';
 
+export interface FilterItem {
+  type: string;
+  value: string;
+}
+
 interface SimpleFilterComponentProps {
-  onFilterChange: (filter: { type: string, value: string } | null) => void;
-  initialFilter?: { type: string, value: string } | null;
+  onFilterChange: (filters: FilterItem[] | null) => void;
+  initialFilters?: FilterItem[] | null;
 }
 
 const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
   onFilterChange,
-  initialFilter = null
+  initialFilters = null
 }) => {
   // States
   const [searchText, setSearchText] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [filterOptions, setFilterOptions] = useState<Array<{type: string, value: string}>>([]);
+  const [filterOptions, setFilterOptions] = useState<FilterItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentFilter, setCurrentFilter] = useState<{type: string, value: string} | null>(initialFilter);
+  const [activeFilters, setActiveFilters] = useState<FilterItem[]>(initialFilters || []);
 
   // Fetch filter options on mount
   useEffect(() => {
     fetchFilterOptions();
   }, []);
 
-  // Set initial search text if a filter is provided
+  // Set initial filters if provided
   useEffect(() => {
-    if (initialFilter) {
-      setCurrentFilter(initialFilter);
-      setSearchText(initialFilter.value);
+    if (initialFilters && initialFilters.length > 0) {
+      setActiveFilters(initialFilters);
     }
-  }, [initialFilter]);
+  }, [initialFilters]);
 
   // Fetch available cuisine, food types, and cities from Firestore
   const fetchFilterOptions = async () => {
@@ -95,7 +100,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       });
       
       // Create combined options array
-      const options: Array<{type: string, value: string}> = [];
+      const options: FilterItem[] = [];
       
       // Add cuisine types
       Array.from(cuisineTypesSet).sort().forEach(cuisine => {
@@ -124,22 +129,52 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
   const getFilteredOptions = () => {
     if (!searchText) return [];
     
-    return filterOptions.filter(option => 
-      option.value.toLowerCase().includes(searchText.toLowerCase())
+    // Filter options that match the search text and are not already selected
+    const filteredOptions = filterOptions.filter(option => 
+      option.value.toLowerCase().includes(searchText.toLowerCase()) &&
+      !activeFilters.some(filter => 
+        filter.type === option.type && filter.value === option.value
+      )
     ).slice(0, 10); // Limit to 10 results
+    
+    return filteredOptions;
   };
 
-  // Handle option selection
-  const handleSelectOption = (option: {type: string, value: string}) => {
-    setCurrentFilter(option);
-    setSearchText(option.value);
+  // Handle option selection - now adds to the list of active filters
+  const handleSelectOption = (option: FilterItem) => {
+    // Check if this filter is already active
+    const filterExists = activeFilters.some(
+      filter => filter.type === option.type && filter.value === option.value
+    );
+    
+    if (!filterExists) {
+      console.log('Adding new filter:', option);
+      const newFilters = [...activeFilters, option];
+      setActiveFilters(newFilters);
+      console.log('New filters array:', newFilters);
+      onFilterChange(newFilters);
+    }
+    
+    setSearchText('');
     setShowDropdown(false);
-    onFilterChange(option);
   };
 
-  // Clear filter
-  const handleClearFilter = () => {
-    setCurrentFilter(null);
+  // Remove a specific filter
+  const handleRemoveFilter = (filterToRemove: FilterItem) => {
+    console.log('Removing filter:', filterToRemove);
+    const newFilters = activeFilters.filter(
+      filter => !(filter.type === filterToRemove.type && filter.value === filterToRemove.value)
+    );
+    
+    console.log('Remaining filters after removal:', newFilters);
+    setActiveFilters(newFilters);
+    onFilterChange(newFilters.length > 0 ? newFilters : null);
+  };
+
+  // Clear all filters
+  const handleClearAllFilters = () => {
+    console.log('Clearing all filters');
+    setActiveFilters([]);
     setSearchText('');
     onFilterChange(null);
   };
@@ -164,7 +199,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
         {searchText ? (
           <TouchableOpacity
             style={styles.clearButton}
-            onPress={handleClearFilter}
+            onPress={() => setSearchText('')}
           >
             <Icon name="close" size={20} color="#999" />
           </TouchableOpacity>
@@ -214,26 +249,43 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
         </View>
       )}
       
-      {currentFilter && !showDropdown && (
-        <View style={styles.selectedFilterContainer}>
-          <View style={styles.filterBadge}>
-            <Icon 
-              name={
-                currentFilter.type === 'cuisineType' ? 'restaurant' : 
-                currentFilter.type === 'foodType' ? 'fastfood' :
-                'location-city'
-              } 
-              size={12} 
-              color="#fff" 
-            />
-            <Text style={styles.filterBadgeText}>{currentFilter.value}</Text>
-            <TouchableOpacity
-              style={styles.filterBadgeCloseButton}
-              onPress={handleClearFilter}
-            >
-              <Icon name="close" size={12} color="#fff" />
-            </TouchableOpacity>
-          </View>
+      {activeFilters.length > 0 && !showDropdown && (
+        <View style={styles.selectedFiltersContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersScrollContent}
+          >
+            {activeFilters.map((filter, index) => (
+              <View key={`${filter.type}-${filter.value}-${index}`} style={styles.filterBadge}>
+                <Icon 
+                  name={
+                    filter.type === 'cuisineType' ? 'restaurant' : 
+                    filter.type === 'foodType' ? 'fastfood' :
+                    'location-city'
+                  } 
+                  size={12} 
+                  color="#fff" 
+                />
+                <Text style={styles.filterBadgeText}>{filter.value}</Text>
+                <TouchableOpacity
+                  style={styles.filterBadgeCloseButton}
+                  onPress={() => handleRemoveFilter(filter)}
+                >
+                  <Icon name="close" size={12} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            
+            {activeFilters.length > 1 && (
+              <TouchableOpacity 
+                style={styles.clearAllButton}
+                onPress={handleClearAllFilters}
+              >
+                <Text style={styles.clearAllText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -324,10 +376,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
   },
-  selectedFilterContainer: {
-    flexDirection: 'row',
+  selectedFiltersContainer: {
     marginTop: 8,
-    flexWrap: 'wrap',
+    width: '100%',
+  },
+  filtersScrollContent: {
+    paddingRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   filterBadge: {
     flexDirection: 'row',
@@ -346,6 +402,19 @@ const styles = StyleSheet.create({
   },
   filterBadgeCloseButton: {
     padding: 2,
+  },
+  clearAllButton: {
+    backgroundColor: '#666',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  clearAllText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

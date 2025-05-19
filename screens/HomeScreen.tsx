@@ -16,7 +16,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom StarRating component instead of FontAwesome
 import StarRating from '../components/StarRating';
-import SimpleFilterComponent from '../components/SimpleFilterComponent';
+import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
@@ -69,11 +69,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
   
-  // Simple filter state
-  const [activeFilter, setActiveFilter] = useState<{
-    type: string,
-    value: string
-  } | null>(null);
+  // Multi-filter state
+  const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
 
   // Get user's current location
   useEffect(() => {
@@ -107,10 +104,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [userLocation]);
   
-  // Apply filter whenever meals or active filter changes
+  // Apply filter whenever meals or active filters change
   useEffect(() => {
+    console.log('HomeScreen: activeFilters changed:', activeFilters);
     applyFilter();
-  }, [allNearbyMeals, activeFilter]);
+  }, [allNearbyMeals, activeFilters]);
 
   // Calculate distance between two coordinates in kilometers
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -178,13 +176,33 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           }
         }
         
+        // Make sure aiMetadata has the expected properties
+        const aiMetadata = data.aiMetadata || {};
+        
         meals.push({
           id: doc.id,
-          ...data,
+          photoUrl: data.photoUrl,
+          rating: data.rating,
+          restaurant: data.restaurant || '',
+          meal: data.meal || '',
+          userId: data.userId,
           userName,
           userPhoto,
+          city: data.city || '', // Include city for filtering
+          location: data.location,
           distance: distance,
-          createdAt: data.createdAt?.toDate?.() || new Date()
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          aiMetadata: {
+            cuisineType: aiMetadata.cuisineType || 'Unknown',
+            foodType: aiMetadata.foodType || 'Unknown',
+            mealType: aiMetadata.mealType || 'Unknown',
+            primaryProtein: aiMetadata.primaryProtein || 'Unknown',
+            dietType: aiMetadata.dietType || 'Unknown',
+            eatingMethod: aiMetadata.eatingMethod || 'Unknown',
+            setting: aiMetadata.setting || 'Unknown',
+            platingStyle: aiMetadata.platingStyle || 'Unknown',
+            beverageType: aiMetadata.beverageType || 'Unknown'
+          }
         });
       }
       
@@ -210,60 +228,118 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     fetchNearbyMeals();
   };
   
-  // Apply filter to all nearby meals
+  // Apply multiple filters to all nearby meals
   const applyFilter = () => {
     if (!allNearbyMeals.length) {
+      console.log('HomeScreen: No meals to filter');
       setNearbyMeals([]);
       return;
     }
     
-    // If no filter is active, show all meals
-    if (!activeFilter) {
+    // Check if we have meals with aiMetadata for debugging
+    const mealsWithMetadata = allNearbyMeals.filter(meal => meal.aiMetadata);
+    console.log(`HomeScreen: Found ${mealsWithMetadata.length} out of ${allNearbyMeals.length} meals with aiMetadata`);
+    
+    // Print some sample data to understand the structure
+    if (allNearbyMeals.length > 0) {
+      console.log('HomeScreen: Sample meal data (first meal):', {
+        id: allNearbyMeals[0].id,
+        meal: allNearbyMeals[0].meal,
+        restaurant: allNearbyMeals[0].restaurant,
+        city: allNearbyMeals[0].city,
+        locationCity: allNearbyMeals[0].location?.city,
+        aiMetadata: allNearbyMeals[0].aiMetadata
+      });
+    }
+    
+    // If no filters are active, show all meals
+    if (!activeFilters || activeFilters.length === 0) {
+      console.log('HomeScreen: No active filters, showing all meals');
       setNearbyMeals(allNearbyMeals);
       return;
     }
     
-    // Apply the active filter
+    console.log(`HomeScreen: Applying ${activeFilters.length} filters:`, JSON.stringify(activeFilters));
+    
+    // Start with all meals
     let result = [...allNearbyMeals];
     
-    if (activeFilter.type === 'cuisineType') {
-      result = result.filter(meal => 
-        meal.aiMetadata && 
-        meal.aiMetadata.cuisineType && 
-        meal.aiMetadata.cuisineType === activeFilter.value
-      );
-    } else if (activeFilter.type === 'foodType') {
-      result = result.filter(meal => 
-        meal.aiMetadata && 
-        meal.aiMetadata.foodType && 
-        meal.aiMetadata.foodType === activeFilter.value
-      );
-    } else if (activeFilter.type === 'city') {
-      result = result.filter(meal => {
-        // First check if city is stored in location.city
-        if (meal.location && meal.location.city) {
-          return meal.location.city.toLowerCase() === activeFilter.value.toLowerCase();
-        }
-        
-        // Fallback: Try to match city in restaurant field
-        if (meal.restaurant) {
-          const restaurantParts = meal.restaurant.split(',');
-          if (restaurantParts.length > 1) {
-            const city = restaurantParts[1].trim();
-            return city.toLowerCase() === activeFilter.value.toLowerCase();
+    // Apply each filter sequentially
+    activeFilters.forEach(filter => {
+      const countBefore = result.length;
+      console.log(`HomeScreen: Applying filter: ${filter.type} = ${filter.value}`);
+      
+      if (filter.type === 'cuisineType') {
+        result = result.filter(meal => {
+          const matches = meal.aiMetadata && 
+                        meal.aiMetadata.cuisineType && 
+                        meal.aiMetadata.cuisineType === filter.value;
+          if (matches) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType: ${filter.value}`);
           }
-        }
-        return false;
-      });
-    }
+          return matches;
+        });
+      } else if (filter.type === 'foodType') {
+        result = result.filter(meal => {
+          const matches = meal.aiMetadata && 
+                        meal.aiMetadata.foodType && 
+                        meal.aiMetadata.foodType === filter.value;
+          if (matches) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType: ${filter.value}`);
+          }
+          return matches;
+        });
+      } else if (filter.type === 'city') {
+        result = result.filter(meal => {
+          // First check if city is stored as top-level city property
+          if (meal.city) {
+            const matches = meal.city.toLowerCase() === filter.value.toLowerCase();
+            if (matches) {
+              console.log(`HomeScreen: Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
+            }
+            return matches;
+          }
+          
+          // Next check if city is stored in location.city
+          if (meal.location && meal.location.city) {
+            const matches = meal.location.city.toLowerCase() === filter.value.toLowerCase();
+            if (matches) {
+              console.log(`HomeScreen: Meal "${meal.meal}" matches city (location): ${filter.value}`);
+            }
+            return matches;
+          }
+          
+          // Fallback: Try to match city in restaurant field
+          if (meal.restaurant && meal.restaurant.includes(',')) {
+            const restaurantParts = meal.restaurant.split(',');
+            if (restaurantParts.length > 1) {
+              // Handle cases where city might be "Portland OR" format
+              const secondPart = restaurantParts[1].trim();
+              const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
+              
+              const matches = cityPart.toLowerCase() === filter.value.toLowerCase();
+              if (matches) {
+                console.log(`HomeScreen: Meal "${meal.meal}" matches city (restaurant): ${filter.value}`);
+              }
+              return matches;
+            }
+          }
+          return false;
+        });
+      }
+      console.log(`HomeScreen: After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
+    });
+    
+    console.log(`HomeScreen: Final filter results: ${result.length} meals match all filter criteria`);
     
     // Set filtered meals
     setNearbyMeals(result);
   };
   
   // Handle filter changes from SimpleFilterComponent
-  const handleFilterChange = (filter: { type: string, value: string } | null) => {
-    setActiveFilter(filter);
+  const handleFilterChange = (filters: FilterItem[] | null) => {
+    console.log('HomeScreen: Filters changed:', filters);
+    setActiveFilters(filters);
     // applyFilter will be called via useEffect
   };
 
@@ -354,12 +430,12 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.headerTitle}>DishItOut</Text>
       </View>
       
-      {/* Simple Filter Component */}
+      {/* Multi Filter Component */}
       <View style={styles.filterArea}>
         <SimpleFilterComponent 
           key="home-filter"
           onFilterChange={handleFilterChange}
-          initialFilter={activeFilter}
+          initialFilters={activeFilters}
         />
       </View>
 

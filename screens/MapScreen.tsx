@@ -20,10 +20,11 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
+import { FilterItem } from '../components/SimpleFilterComponent';
 
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
-  activeFilter: { type: string, value: string } | null;
+  activeFilters: FilterItem[] | null;
   isActive?: boolean; // Flag to indicate if this tab is currently active
 };
 
@@ -57,7 +58,7 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActive }) => {
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActive }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +96,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActiv
         const data = doc.data();
         // Only include meals that have location data
         if (data.location) {
+          // Make sure aiMetadata has the expected properties
+          const aiMetadata = data.aiMetadata || {};
+          
           fetchedMeals.push({
             id: doc.id,
             photoUrl: data.photoUrl,
@@ -104,13 +108,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActiv
             userId: data.userId,
             location: data.location,
             createdAt: data.createdAt?.toDate?.() || Date.now(),
-            aiMetadata: data.aiMetadata || null // Include aiMetadata for filtering
+            aiMetadata: {
+              cuisineType: aiMetadata.cuisineType || 'Unknown',
+              foodType: aiMetadata.foodType || 'Unknown',
+              mealType: aiMetadata.mealType || 'Unknown',
+              primaryProtein: aiMetadata.primaryProtein || 'Unknown',
+              dietType: aiMetadata.dietType || 'Unknown',
+              eatingMethod: aiMetadata.eatingMethod || 'Unknown',
+              setting: aiMetadata.setting || 'Unknown',
+              platingStyle: aiMetadata.platingStyle || 'Unknown',
+              beverageType: aiMetadata.beverageType || 'Unknown'
+            }
           });
         }
       });
 
       setAllMeals(fetchedMeals);
-      applyFilter(fetchedMeals, activeFilter);
+      applyFilter(fetchedMeals, activeFilters);
       setLoading(false);
       
       // Trigger map fitting after data is loaded
@@ -133,69 +147,77 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActiv
     setImageErrors(prev => ({ ...prev, [mealId]: true }));
   };
 
-  // Add function to apply filter
-  const applyFilter = (mealsToFilter: MealEntry[], filter: { type: string, value: string } | null) => {
-    console.log(`MapScreen: Applying filter to ${mealsToFilter.length} meals`);
+  // Add function to apply multiple filters
+  const applyFilter = (mealsToFilter: MealEntry[], filters: FilterItem[] | null) => {
+    console.log(`MapScreen: Applying filters to ${mealsToFilter.length} meals`);
     
-    if (!filter) {
-      console.log('MapScreen: No filter active, showing all meals');
+    if (!filters || filters.length === 0) {
+      console.log('MapScreen: No filters active, showing all meals');
       setFilteredMeals(mealsToFilter);
       return;
     }
     
-    console.log(`MapScreen: Filter active: ${filter.type} = ${filter.value}`);
+    console.log(`MapScreen: ${filters.length} filters active`);
     
     // Check if we have meals with metadata
     const mealsWithMetadata = mealsToFilter.filter(meal => meal.aiMetadata);
     console.log(`MapScreen: Found ${mealsWithMetadata.length} meals with aiMetadata`);
     
+    // Start with all meals
     let result = [...mealsToFilter];
     
-    if (filter.type === 'cuisineType') {
-      result = result.filter(meal => 
-        meal.aiMetadata && 
-        meal.aiMetadata.cuisineType && 
-        meal.aiMetadata.cuisineType === filter.value
-      );
-    } else if (filter.type === 'foodType') {
-      result = result.filter(meal => 
-        meal.aiMetadata && 
-        meal.aiMetadata.foodType && 
-        meal.aiMetadata.foodType === filter.value
-      );
-    } else if (filter.type === 'city') {
-      result = result.filter(meal => {
-        // First check if city is stored in location.city
-        if (meal.location && meal.location.city) {
-          return meal.location.city.toLowerCase() === filter.value.toLowerCase();
-        }
-        
-        // Fallback: Try to match city in restaurant field
-        if (meal.restaurant) {
-          const restaurantParts = meal.restaurant.split(',');
-          if (restaurantParts.length > 1) {
-            const city = restaurantParts[1].trim();
-            return city.toLowerCase() === filter.value.toLowerCase();
+    // Apply each filter sequentially
+    filters.forEach(filter => {
+      console.log(`MapScreen: Applying filter: ${filter.type} = ${filter.value}`);
+      
+      if (filter.type === 'cuisineType') {
+        result = result.filter(meal => 
+          meal.aiMetadata && 
+          meal.aiMetadata.cuisineType && 
+          meal.aiMetadata.cuisineType === filter.value
+        );
+      } else if (filter.type === 'foodType') {
+        result = result.filter(meal => 
+          meal.aiMetadata && 
+          meal.aiMetadata.foodType && 
+          meal.aiMetadata.foodType === filter.value
+        );
+      } else if (filter.type === 'city') {
+        result = result.filter(meal => {
+          // First check if city is stored in location.city
+          if (meal.location && meal.location.city) {
+            return meal.location.city.toLowerCase() === filter.value.toLowerCase();
           }
-        }
-        return false;
-      });
-    }
+          
+          // Fallback: Try to match city in restaurant field
+          if (meal.restaurant) {
+            const restaurantParts = meal.restaurant.split(',');
+            if (restaurantParts.length > 1) {
+              const city = restaurantParts[1].trim();
+              return city.toLowerCase() === filter.value.toLowerCase();
+            }
+          }
+          return false;
+        });
+      }
+      
+      console.log(`MapScreen: After filter ${filter.type}=${filter.value}, ${result.length} meals remain`);
+    });
     
-    console.log(`MapScreen: Filter results: ${result.length} meals match the filter criteria`);
+    console.log(`MapScreen: Final filter results: ${result.length} meals match all filter criteria`);
     setFilteredMeals(result);
   };
   
-  // Update the filter whenever activeFilter changes
+  // Update the filter whenever activeFilters changes
   useEffect(() => {
-    console.log('MapScreen: activeFilter changed:', activeFilter);
-    applyFilter(allMeals, activeFilter);
+    console.log('MapScreen: activeFilters changed:', activeFilters);
+    applyFilter(allMeals, activeFilters);
     
     // When filter changes and we have meals, fit the map to show them
     if (filteredMeals.length > 0 && mapRef.current && !loading) {
       setTimeout(() => fitMapToMarkers(), 500); // Small delay to ensure filteredMeals is updated
     }
-  }, [activeFilter, allMeals]);
+  }, [activeFilters, allMeals]);
   
   // Request location permission and get current position
   const requestLocationPermission = async () => {
@@ -432,11 +454,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilter, isActiv
     return (
       <View style={styles.emptyContainer}>
         <Icon name="place" size={64} color="#ddd" />
-        {activeFilter ? (
+        {activeFilters && activeFilters.length > 0 ? (
           <>
-            <Text style={styles.emptyText}>No meals match your filter</Text>
+            <Text style={styles.emptyText}>No meals match your filters</Text>
             <Text style={styles.emptySubtext}>
-              Try a different filter or clear your search
+              Try different filters or clear your search
             </Text>
           </>
         ) : (

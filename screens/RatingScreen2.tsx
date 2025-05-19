@@ -100,6 +100,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [restaurant, setRestaurant] = useState("");
   const [mealName, setMealName] = useState("");
+  // Add meal type selector state - default to "Restaurant"
+  const [mealType, setMealType] = useState<"Restaurant" | "Homemade">("Restaurant");
   const [suggestedRestaurants, setSuggestedRestaurants] = useState<Restaurant[]>([]);
   const [autocompleteRestaurants, setAutocompleteRestaurants] = useState<Restaurant[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -778,8 +780,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         photo: freshPhoto,
         location: location,
         rating: rating,
-        restaurant: restaurant,
+        restaurant: mealType === "Restaurant" ? restaurant : "", // Only include restaurant for Restaurant type
         meal: mealName,
+        mealType: mealType, // Include the meal type for saving to Firebase
         likedComment: likedComment,
         dislikedComment: dislikedComment,
         _uniqueKey: sessionId
@@ -810,10 +813,30 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.contentContainer}>
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>
-            {/* Restaurant Input */}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Restaurant:</Text>
-              <View style={styles.autocompleteContainer}>
+            {/* Meal Type Selector */}
+            <View style={styles.mealTypeContainer}>
+              <TouchableOpacity
+                style={[styles.mealTypeButton, mealType === "Restaurant" && styles.mealTypeButtonActive]}
+                onPress={() => {
+                  if (mealType !== "Restaurant") {
+                    setMealType("Restaurant");
+                  }
+                }}
+              >
+                <Text style={[styles.mealTypeText, mealType === "Restaurant" && styles.mealTypeTextActive]}>Restaurant</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mealTypeButton, mealType === "Homemade" && styles.mealTypeButtonActive]}
+                onPress={() => setMealType("Homemade")}
+              >
+                <Text style={[styles.mealTypeText, mealType === "Homemade" && styles.mealTypeTextActive]}>Homemade</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Restaurant Input - Only shown for Restaurant meal type */}
+            {mealType === "Restaurant" && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Restaurant:</Text>
+                <View style={styles.autocompleteContainer}>
                 <TextInput
                   style={styles.infoInput}
                   value={restaurant}
@@ -943,6 +966,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 <MaterialIcon name="restaurant" size={16} color="white" />
               </TouchableOpacity>
             </View>
+            )}
             
             {/* Meal Input with Button Container */}
             <View style={styles.infoRow}>
@@ -1206,6 +1230,34 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  // Meal Type Selector Styles
+  mealTypeContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 15,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  mealTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+  },
+  mealTypeButtonActive: {
+    backgroundColor: '#ff6b6b',
+  },
+  mealTypeText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  mealTypeTextActive: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8f8f8',

@@ -8,7 +8,7 @@ import StampsScreen from './StampsScreen';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth } from '../firebaseConfig';
-import SimpleFilterComponent from '../components/SimpleFilterComponent';
+import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -99,16 +99,18 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     },
   ]);
   
-  // Shared filter state for both tabs
-  const [activeFilter, setActiveFilter] = useState<{
-    type: string,
-    value: string
-  } | null>(null);
+  // Shared filter state for both tabs - now an array of filters
+  const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
   
   // Handle filter changes from SimpleFilterComponent
-  const handleFilterChange = (filter: { type: string, value: string } | null) => {
-    console.log('Filter changed in wrapper to:', filter);
-    setActiveFilter(filter);
+  const handleFilterChange = (filters: FilterItem[] | null) => {
+    console.log('FoodPassportWrapper: Filters changed to:', JSON.stringify(filters));
+    setActiveFilters(filters);
+    
+    // Log the new state on the next render
+    setTimeout(() => {
+      console.log('FoodPassportWrapper: Active filters after state update:', JSON.stringify(activeFilters));
+    }, 0);
   };
 
   React.useEffect(() => {
@@ -119,6 +121,11 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     
     return () => clearTimeout(timer);
   }, []);
+  
+  // Add a useEffect to log when activeFilters change
+  React.useEffect(() => {
+    console.log('FoodPassportWrapper: activeFilters changed in useEffect:', JSON.stringify(activeFilters));
+  }, [activeFilters]);
 
   // Scene renderer function for custom tab implementation
   const renderScene = ({ route }: { route: Route }) => {
@@ -128,7 +135,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           <ErrorBoundary navigation={props.navigation}>
             <FoodPassportScreen 
               navigation={props.navigation}
-              activeFilter={activeFilter}
+              activeFilters={activeFilters}
             />
           </ErrorBoundary>
         );
@@ -137,7 +144,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           <ErrorBoundary navigation={props.navigation}>
             <MapScreen 
               navigation={props.navigation}
-              activeFilter={activeFilter}
+              activeFilters={activeFilters}
               isActive={tabIndex === 1} // Pass whether this tab is active
             />
           </ErrorBoundary>
@@ -231,7 +238,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         <SimpleFilterComponent 
           key="shared-passport-filter"
           onFilterChange={handleFilterChange}
-          initialFilter={activeFilter}
+          initialFilters={activeFilters}
         />
       </View>
       

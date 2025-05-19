@@ -23,7 +23,7 @@ import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
 import StarRating from '../components/StarRating';
-import SimpleFilterComponent from '../components/SimpleFilterComponent';
+import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
@@ -33,7 +33,7 @@ type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 
 
 type Props = {
   navigation: FoodPassportScreenNavigationProp;
-  activeFilter: { type: string, value: string } | null;
+  activeFilters: FilterItem[] | null;
 };
 
 interface MealEntry {
@@ -79,7 +79,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -138,10 +138,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
         }
     }, []);
     
-    // Apply filter whenever meals or active filter changes
+    // Apply filter whenever meals or active filters change
     useEffect(() => {
+        console.log('FoodPassportScreen: activeFilters changed:', activeFilters);
         applyFilter();
-    }, [meals, activeFilter]);
+    }, [meals, activeFilters]);
     
     const fetchMealEntries = async () => {
         try {
@@ -164,6 +165,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
             
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
+                // Make sure aiMetadata has the expected properties
+                const aiMetadata = data.aiMetadata || {};
+                
                 fetchedMeals.push({
                     id: doc.id,
                     photoUrl: data.photoUrl,
@@ -174,7 +178,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
                     city: data.city || '',
                     location: data.location,
                     createdAt: data.createdAt?.toDate?.() || Date.now(),
-                    aiMetadata: data.aiMetadata || null, // Include aiMetadata for filtering
+                    aiMetadata: {
+                        cuisineType: aiMetadata.cuisineType || 'Unknown',
+                        foodType: aiMetadata.foodType || 'Unknown',
+                        mealType: aiMetadata.mealType || 'Unknown',
+                        primaryProtein: aiMetadata.primaryProtein || 'Unknown',
+                        dietType: aiMetadata.dietType || 'Unknown',
+                        eatingMethod: aiMetadata.eatingMethod || 'Unknown',
+                        setting: aiMetadata.setting || 'Unknown',
+                        platingStyle: aiMetadata.platingStyle || 'Unknown',
+                        beverageType: aiMetadata.beverageType || 'Unknown'
+                    },
                     mealType: data.mealType || 'Restaurant',
                     comments: data.comments || { liked: '', disliked: '' }
                 });
@@ -214,7 +228,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
         fetchMealEntries();
     };
     
-    // Apply filter to meals
+    // Apply filter to meals - now handles multiple filters
     const applyFilter = () => {
         if (!meals.length) {
             console.log('No meals to filter');
@@ -226,58 +240,97 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
         const mealsWithMetadata = meals.filter(meal => meal.aiMetadata);
         console.log(`Found ${mealsWithMetadata.length} out of ${meals.length} meals with aiMetadata`);
         
-        // If no filter is active, show all meals
-        if (!activeFilter) {
-            console.log('No active filter, showing all meals');
+        // Print some sample data to understand the structure
+        if (meals.length > 0) {
+            console.log('Sample meal data (first meal):', {
+                id: meals[0].id,
+                meal: meals[0].meal,
+                restaurant: meals[0].restaurant,
+                city: meals[0].city,
+                locationCity: meals[0].location?.city,
+                aiMetadata: meals[0].aiMetadata
+            });
+        }
+        
+        // If no filters are active, show all meals
+        if (!activeFilters || activeFilters.length === 0) {
+            console.log('No active filters, showing all meals');
             setFilteredMeals(meals);
             return;
         }
         
-        console.log(`Applying filter: ${activeFilter.type} = ${activeFilter.value}`);
+        console.log(`Applying ${activeFilters.length} filters:`, JSON.stringify(activeFilters));
         
-        // Apply the active filter
+        // Start with all meals
         let result = [...meals];
         
-        if (activeFilter.type === 'cuisineType') {
-            result = result.filter(meal => 
-                meal.aiMetadata && 
-                meal.aiMetadata.cuisineType && 
-                meal.aiMetadata.cuisineType === activeFilter.value
-            );
-        } else if (activeFilter.type === 'foodType') {
-            result = result.filter(meal => 
-                meal.aiMetadata && 
-                meal.aiMetadata.foodType && 
-                meal.aiMetadata.foodType === activeFilter.value
-            );
-        } else if (activeFilter.type === 'city') {
-            result = result.filter(meal => {
-                // First check if city is stored as top-level city property
-                if (meal.city) {
-                    return meal.city.toLowerCase() === activeFilter.value.toLowerCase();
-                }
-                
-                // Next check if city is stored in location.city
-                if (meal.location && meal.location.city) {
-                    return meal.location.city.toLowerCase() === activeFilter.value.toLowerCase();
-                }
-                
-                // Fallback: Try to match city in restaurant field
-                if (meal.restaurant && meal.restaurant.includes(',')) {
-                    const restaurantParts = meal.restaurant.split(',');
-                    if (restaurantParts.length > 1) {
-                        // Handle cases where city might be "Portland OR" format
-                        const secondPart = restaurantParts[1].trim();
-                        const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
-                        
-                        return cityPart.toLowerCase() === activeFilter.value.toLowerCase();
+        // Apply each filter sequentially
+        activeFilters.forEach(filter => {
+            const countBefore = result.length;
+            console.log(`Applying filter: ${filter.type} = ${filter.value}`);
+            
+            if (filter.type === 'cuisineType') {
+                result = result.filter(meal => {
+                    const matches = meal.aiMetadata && 
+                                  meal.aiMetadata.cuisineType && 
+                                  meal.aiMetadata.cuisineType === filter.value;
+                    if (matches) {
+                        console.log(`Meal "${meal.meal}" matches cuisineType: ${filter.value}`);
                     }
-                }
-                return false;
-            });
-        }
+                    return matches;
+                });
+            } else if (filter.type === 'foodType') {
+                result = result.filter(meal => {
+                    const matches = meal.aiMetadata && 
+                                  meal.aiMetadata.foodType && 
+                                  meal.aiMetadata.foodType === filter.value;
+                    if (matches) {
+                        console.log(`Meal "${meal.meal}" matches foodType: ${filter.value}`);
+                    }
+                    return matches;
+                });
+            } else if (filter.type === 'city') {
+                result = result.filter(meal => {
+                    // First check if city is stored as top-level city property
+                    if (meal.city) {
+                        const matches = meal.city.toLowerCase() === filter.value.toLowerCase();
+                        if (matches) {
+                            console.log(`Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
+                        }
+                        return matches;
+                    }
+                    
+                    // Next check if city is stored in location.city
+                    if (meal.location && meal.location.city) {
+                        const matches = meal.location.city.toLowerCase() === filter.value.toLowerCase();
+                        if (matches) {
+                            console.log(`Meal "${meal.meal}" matches city (location): ${filter.value}`);
+                        }
+                        return matches;
+                    }
+                    
+                    // Fallback: Try to match city in restaurant field
+                    if (meal.restaurant && meal.restaurant.includes(',')) {
+                        const restaurantParts = meal.restaurant.split(',');
+                        if (restaurantParts.length > 1) {
+                            // Handle cases where city might be "Portland OR" format
+                            const secondPart = restaurantParts[1].trim();
+                            const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
+                            
+                            const matches = cityPart.toLowerCase() === filter.value.toLowerCase();
+                            if (matches) {
+                                console.log(`Meal "${meal.meal}" matches city (restaurant): ${filter.value}`);
+                            }
+                            return matches;
+                        }
+                    }
+                    return false;
+                });
+            }
+            console.log(`After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
+        });
         
-        console.log(`Filter results: ${result.length} meals match the filter criteria`);
+        console.log(`Final filter results: ${result.length} meals match all filter criteria`);
         setFilteredMeals(result);
     };
     
@@ -568,11 +621,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilter }) => {
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Icon name="book" size={64} color="#ddd" />
-                                {activeFilter ? (
+                                {activeFilters && activeFilters.length > 0 ? (
                                     <>
-                                        <Text style={styles.emptyText}>No meals match your filter</Text>
+                                        <Text style={styles.emptyText}>No meals match your filters</Text>
                                         <Text style={styles.emptySubtext}>
-                                            Try a different filter or clear your search
+                                            Try different filters or clear your search
                                         </Text>
                                     </>
                                 ) : (
