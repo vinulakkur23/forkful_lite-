@@ -39,7 +39,7 @@ export interface Restaurant {
  */
 export const searchNearbyRestaurants = async (
   location: LocationData,
-  radius: number = 1000
+  radius: number = 100 // Changed default to 100 meters for a better range of nearby restaurants
 ): Promise<Restaurant[]> => {
   try {
     console.log(`Searching for restaurants near ${location.latitude}, ${location.longitude}`);

@@ -698,8 +698,36 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                   onFocus={() => {
                     logWithSession("User focused on restaurant input");
                     setIsUserEditingRestaurant(true);
-                    if (restaurant.length >= 2) {
-                      setShowAutocomplete(true);
+                    
+                    // Immediately show autocomplete with nearby restaurants when user focuses
+                    setShowAutocomplete(true);
+                    
+                    // If we already have suggestions from prefetch, display them
+                    if (suggestedRestaurants.length > 0) {
+                      logWithSession(`Showing ${suggestedRestaurants.length} prefetched restaurant suggestions as autocomplete`);
+                      setAutocompleteRestaurants(suggestedRestaurants);
+                    } 
+                    // Otherwise try to fetch nearby restaurants at a small radius
+                    else {
+                      const bestLocation = getBestAvailableLocation();
+                      if (bestLocation) {
+                        logWithSession(`Fetching nearby restaurants on field focus with location: ${bestLocation.source}`);
+                        setIsSearchingRestaurants(true);
+                        
+                        // Use a small radius (30 meters) to get very nearby restaurants
+                        searchNearbyRestaurants(bestLocation, 30)
+                          .then(restaurants => {
+                            logWithSession(`Found ${restaurants.length} nearby restaurants on field focus`);
+                            setAutocompleteRestaurants(restaurants);
+                            setSuggestedRestaurants(restaurants); // Also save for later use
+                          })
+                          .catch(error => {
+                            logWithSession(`Error fetching nearby restaurants on focus: ${error}`);
+                          })
+                          .finally(() => {
+                            setIsSearchingRestaurants(false);
+                          });
+                      }
                     }
                   }}
                   onBlur={() => {
@@ -750,14 +778,44 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 )}
               </View>
               
-              {/* Suggestions button */}
+              {/* Suggestions button - always enabled to help users find restaurants */}
               <TouchableOpacity
-                style={[
-                  styles.suggestButton,
-                  suggestedRestaurants.length === 0 ? styles.suggestButtonDisabled : {}
-                ]}
-                onPress={() => setShowRestaurantModal(true)}
-                disabled={suggestedRestaurants.length === 0}
+                style={styles.suggestButton}
+                onPress={() => {
+                  // If we already have suggestions, show them
+                  if (suggestedRestaurants.length > 0) {
+                    setShowRestaurantModal(true);
+                  } 
+                  // Otherwise try to fetch nearby restaurants
+                  else {
+                    const bestLocation = getBestAvailableLocation();
+                    if (bestLocation) {
+                      logWithSession(`Fetching nearby restaurants on button press with location: ${bestLocation.source}`);
+                      setIsLoadingSuggestions(true);
+                      
+                      // Use a 100-meter radius to find more restaurants on button press
+                      searchNearbyRestaurants(bestLocation, 100)
+                        .then(restaurants => {
+                          logWithSession(`Found ${restaurants.length} nearby restaurants on button press`);
+                          setSuggestedRestaurants(restaurants);
+                          if (restaurants.length > 0) {
+                            setShowRestaurantModal(true);
+                          } else {
+                            Alert.alert('No Restaurants Found', 'No restaurants found nearby. Try searching by name instead.');
+                          }
+                        })
+                        .catch(error => {
+                          logWithSession(`Error fetching nearby restaurants on button press: ${error}`);
+                          Alert.alert('Error', 'Failed to fetch nearby restaurants. Try searching by name instead.');
+                        })
+                        .finally(() => {
+                          setIsLoadingSuggestions(false);
+                        });
+                    } else {
+                      Alert.alert('Location Unavailable', 'Cannot find nearby restaurants without location data. Try searching by name instead.');
+                    }
+                  }
+                }}
               >
                 <MaterialIcon name="restaurant" size={16} color="white" />
               </TouchableOpacity>

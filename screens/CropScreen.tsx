@@ -18,6 +18,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import { searchNearbyRestaurants } from '../services/placesService';
+import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
 
 // Extend the TabParamList to include exifData in the Crop screen params
@@ -207,31 +208,88 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       const apiUri = photoUriToUse.split('?')[0];
       console.log(`Using cleaned URI for API call: ${apiUri}`);
       
-      // Only proceed if we have location data - no point calling Places API without location
-      if (enhancedLocation) {
-        console.log(`Using location data for Google Places API search: ${enhancedLocation.latitude}, ${enhancedLocation.longitude} (source: ${enhancedLocation.source})`);
+      // Try to get a location - with aggressive fallbacks to ensure we have data
+      let effectiveLocation = enhancedLocation;
+      
+      // If we don't have location data from PHAsset/EXIF, try to get device location as a last resort
+      if (!effectiveLocation) {
+        console.log('No PHAsset or EXIF location data, attempting to get device location as fallback');
+        try {
+          // Use Platform-specific APIs to get current device location
+          if (Platform.OS === 'ios') {
+            const deviceLocationPromise = new Promise<any>((resolve, reject) => {
+              // Add a timeout to ensure we don't wait too long
+              const timeoutId = setTimeout(() => {
+                reject(new Error('Device location request timed out'));
+              }, 3000); // 3 second timeout
+              
+              // Request location
+              Geolocation.getCurrentPosition(
+                (position) => {
+                  clearTimeout(timeoutId);
+                  resolve(position);
+                },
+                (error) => {
+                  clearTimeout(timeoutId);
+                  reject(error);
+                },
+                { enableHighAccuracy: true, timeout: 2500, maximumAge: 5000 }
+              );
+            });
+            
+            try {
+              const devicePosition = await deviceLocationPromise;
+              if (devicePosition && devicePosition.coords) {
+                effectiveLocation = {
+                  latitude: devicePosition.coords.latitude,
+                  longitude: devicePosition.coords.longitude,
+                  source: 'device'
+                };
+                console.log(`Got device location as fallback: ${effectiveLocation.latitude}, ${effectiveLocation.longitude}`);
+              }
+            } catch (locationError) {
+              console.log('Failed to get device location as fallback:', locationError);
+            }
+          }
+        } catch (fallbackError) {
+          console.log('Error during location fallback:', fallbackError);
+        }
+      }
+      
+      // Even if we don't have location data, we still want to proceed to the next screen
+      // We'll just store the photo URI to ensure it can be processed correctly
+      (global as any).prefetchedPhotoUri = photoUriToUse;
+      
+      // If we have either original or fallback location data, proceed with API call
+      if (effectiveLocation) {
+        console.log(`Using location data for Google Places API search: ${effectiveLocation.latitude}, ${effectiveLocation.longitude} (source: ${effectiveLocation.source})`);
 
-        // DIRECTLY call Google Places API instead of the dishitout API
-        const restaurants = await searchNearbyRestaurants(enhancedLocation);
-        
-        // Create suggestions object in the format expected by later screens
-        const suggestions = {
-          restaurants: restaurants,
-          menu_items: [],
-          // We're skipping meal suggestions completely
-          suggested_meal: null
-        };
+        try {
+          // DIRECTLY call Google Places API instead of the dishitout API
+          const restaurants = await searchNearbyRestaurants(effectiveLocation);
+          
+          // Create suggestions object in the format expected by later screens
+          const suggestions = {
+            restaurants: restaurants,
+            menu_items: [],
+            // We're skipping meal suggestions completely
+            suggested_meal: null
+          };
 
-        // Store the suggestion data in global scope for use in the Rating screen
-        // Also store the photo URI and location to validate in later screens
-        (global as any).prefetchedSuggestions = suggestions;
-        (global as any).prefetchedPhotoUri = photoUriToUse;
-        (global as any).prefetchedLocation = enhancedLocation;
+          // Store the suggestion data in global scope for use in the Rating screen
+          // Also store the photo URI and location to validate in later screens
+          (global as any).prefetchedSuggestions = suggestions;
+          (global as any).prefetchedLocation = effectiveLocation;
 
-        console.log('Successfully prefetched restaurant suggestions directly from Google Places API:',
-          suggestions.restaurants?.length || 0, 'restaurants');
+          console.log('Successfully prefetched restaurant suggestions directly from Google Places API:',
+            suggestions.restaurants?.length || 0, 'restaurants');
+        } catch (apiError) {
+          console.error('Error calling Places API:', apiError);
+          // Continue without suggestions - the RatingScreen will handle missing data
+        }
       } else {
-        console.log('No location data available, skipping restaurant suggestions prefetch');
+        console.log('No location data available after all fallbacks, proceeding without restaurant suggestions');
+        // We still continue to the next screen - the user will need to enter restaurant info manually
       }
     } catch (error) {
       console.error('Error prefetching restaurant suggestions:', error);
