@@ -18,6 +18,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import { searchNearbyRestaurants } from '../services/placesService';
+import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
 import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
 
@@ -312,8 +313,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           const suggestions = {
             restaurants: restaurants,
             menu_items: [],
-            // We're skipping meal suggestions completely
-            suggested_meal: null
+            suggested_meal: null,
+            suggested_meals: [] // Add array for multiple meal suggestions
           };
 
           // Store the suggestion data in global scope for use in the Rating screen
@@ -323,6 +324,37 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
 
           console.log('Successfully prefetched restaurant suggestions directly from Google Places API:',
             suggestions.restaurants?.length || 0, 'restaurants');
+            
+          // If we have restaurant suggestions, also prefetch meal suggestions for the first restaurant
+          if (restaurants.length > 0) {
+            try {
+              console.log(`Prefetching meal suggestions for restaurant: ${restaurants[0].name}`);
+              
+              // Call the meal suggestion API for the first restaurant
+              const mealSuggestions = await getMenuSuggestionsForRestaurant(
+                restaurants[0].name,
+                photoUriToUse,
+                effectiveLocation
+              );
+              
+              // Update the prefetched suggestions with meal data
+              if (mealSuggestions.menu_items && mealSuggestions.menu_items.length > 0) {
+                (global as any).prefetchedSuggestions.menu_items = mealSuggestions.menu_items;
+                console.log(`Successfully prefetched ${mealSuggestions.menu_items.length} menu items`);
+              }
+              
+              // Store the meal suggestions
+              if (mealSuggestions.suggested_meals && mealSuggestions.suggested_meals.length > 0) {
+                (global as any).prefetchedSuggestions.suggested_meals = mealSuggestions.suggested_meals;
+                // Also set the first suggestion as the main suggested meal for backward compatibility
+                (global as any).prefetchedSuggestions.suggested_meal = mealSuggestions.suggested_meals[0];
+                console.log(`Successfully prefetched ${mealSuggestions.suggested_meals.length} meal suggestions`);
+              }
+            } catch (mealError) {
+              console.error('Error prefetching meal suggestions:', mealError);
+              // Continue without meal suggestions - they will be fetched later if needed
+            }
+          }
         } catch (apiError) {
           console.error('Error calling Places API:', apiError);
           // Continue without suggestions - the RatingScreen will handle missing data

@@ -36,6 +36,7 @@ import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, Restaurant } from '../services/placesService';
+import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
@@ -103,10 +104,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [autocompleteRestaurants, setAutocompleteRestaurants] = useState<Restaurant[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [menuItems, setMenuItems] = useState<string[]>([]);
+  const [suggestedMeals, setSuggestedMeals] = useState<string[]>([]);
   const [showRestaurantModal, setShowRestaurantModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
+  const [showMealSuggestionsModal, setShowMealSuggestionsModal] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   const [isSearchingRestaurants, setIsSearchingRestaurants] = useState(false);
+  const [isLoadingMealSuggestions, setIsLoadingMealSuggestions] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -274,8 +278,31 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       setIsLoadingSuggestions(true);
       logWithSession(`Fetching restaurant suggestions using location source: ${locationData.source}`);
       
-      // Use direct Places API instead of backend
-      const restaurants = await searchNearbyRestaurants(locationData);
+      // First check if we have prefetched data from CropScreen
+      const hasPrefetchedSuggestions = (global as any).prefetchedSuggestions && 
+                                      (global as any).prefetchedPhotoUri === currentPhotoUri;
+      
+      let restaurants: Restaurant[] = [];
+      let prefetchedMenuItems: string[] = [];
+      let prefetchedMealSuggestions: string[] = [];
+      
+      if (hasPrefetchedSuggestions) {
+        logWithSession("Using prefetched restaurant suggestions from CropScreen");
+        restaurants = (global as any).prefetchedSuggestions.restaurants || [];
+        prefetchedMenuItems = (global as any).prefetchedSuggestions.menu_items || [];
+        prefetchedMealSuggestions = (global as any).prefetchedSuggestions.suggested_meals || [];
+        
+        if (prefetchedMealSuggestions.length === 0 && (global as any).prefetchedSuggestions.suggested_meal) {
+          // For backward compatibility with older prefetched data
+          prefetchedMealSuggestions = [(global as any).prefetchedSuggestions.suggested_meal];
+        }
+        
+        logWithSession(`Found ${restaurants.length} prefetched restaurants, ${prefetchedMenuItems.length} menu items, and ${prefetchedMealSuggestions.length} meal suggestions`);
+      } else {
+        // If no prefetched data, make a direct API call
+        logWithSession("No prefetched data, calling Places API directly");
+        restaurants = await searchNearbyRestaurants(locationData);
+      }
       
       // Verify we're still in the same photo session before updating state
       if (currentSession !== photoSessionRef.current) {
@@ -284,7 +311,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
       
       if (restaurants.length > 0) {
-        logWithSession(`Got ${restaurants.length} restaurant suggestions from Places API`);
+        logWithSession(`Got ${restaurants.length} restaurant suggestions ${hasPrefetchedSuggestions ? 'from prefetch' : 'from Places API'}`);
         logWithSession(`First restaurant: ${restaurants[0].name}`);
         
         setSuggestedRestaurants(restaurants);
@@ -307,24 +334,34 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             logWithSession(`Updated location from selected restaurant: ${JSON.stringify(restaurantLocation)}`);
             setLocation(restaurantLocation);
           }
-        }
-        
-        // For now, we're not getting menu items - using placeholder instead
-        // We'll restore menu suggestions in the future
-        setMenuItems([]);
-        
-        // Use restaurant name as meal name if user isn't editing
-        if (!isUserEditingMeal && !mealName) {
-          // Just provide a generic meal name at the selected restaurant
-          const mealAtRestaurant = `Meal at ${restaurants[0].name}`;
-          logWithSession(`Setting generic meal name: ${mealAtRestaurant}`);
-          setMealName(mealAtRestaurant);
+          
+          // Set prefetched menu items if available
+          if (prefetchedMenuItems.length > 0) {
+            logWithSession(`Setting ${prefetchedMenuItems.length} prefetched menu items`);
+            setMenuItems(prefetchedMenuItems);
+          }
+          
+          // Set prefetched meal suggestions if available
+          if (prefetchedMealSuggestions.length > 0) {
+            logWithSession(`Setting ${prefetchedMealSuggestions.length} prefetched meal suggestions`);
+            setSuggestedMeals(prefetchedMealSuggestions);
+            setIsLoadingMealSuggestions(false);
+          } else {
+            // If we don't have prefetched meal suggestions but we do have a restaurant, 
+            // fetch them now (as a fallback)
+            logWithSession("No prefetched meal suggestions, will try to fetch them now");
+            updateMealSuggestionsForRestaurant(restaurants[0].name);
+          }
+          
+          // Don't auto-populate the meal field anymore
+          // Instead we'll just rely on the suggestions button to show options
+          logWithSession("Not auto-filling meal field - user will select from suggestions");
         }
       } else {
-        logWithSession("No restaurant suggestions found via Places API");
+        logWithSession("No restaurant suggestions found");
       }
     } catch (error) {
-      logWithSession(`Error fetching restaurant suggestions from Places API: ${error}`);
+      logWithSession(`Error fetching restaurant suggestions: ${error}`);
     } finally {
       // Verify we're still in the same photo session before updating loading state
       if (currentSession === photoSessionRef.current) {
@@ -358,7 +395,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     return '';
   };
   
-  // Function for when restaurant changes - no longer fetches menu items
+  // Function for when restaurant changes - fetches menu items and meal suggestions
   const updateMealSuggestionsForRestaurant = async (restaurantName: string) => {
     if (!restaurantName) {
       logWithSession("No restaurant name provided");
@@ -369,25 +406,59 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     try {
       setIsLoadingSuggestions(true);
-      logWithSession(`Restaurant selected: ${restaurantName}`);
+      setIsLoadingMealSuggestions(true);
+      logWithSession(`Restaurant selected: ${restaurantName}, fetching menu items and meal suggestions`);
       
-      // For now, we're not getting menu items from the API
-      // This is a placeholder until we implement menu item retrieval via Places API
-      setMenuItems([]);
+      // Get the best available location for context
+      const bestLocation = getBestAvailableLocation();
       
-      // If user isn't editing meal name, set a generic one based on restaurant
-      if (!isUserEditingMeal && (!mealName || mealName.startsWith('Meal at '))) {
-        const newMealName = `Meal at ${restaurantName}`;
-        logWithSession(`Setting generic meal name: ${newMealName}`);
-        setMealName(newMealName);
+      // Get the current photo URI for context
+      const currentPhotoUri = photoUriRef.current;
+      
+      // Make an API call to get menu items and meal suggestions
+      const suggestions = await getMenuSuggestionsForRestaurant(
+        restaurantName,
+        currentPhotoUri,  // Pass the current photo URI
+        bestLocation      // Pass location context
+      );
+      
+      // Verify we're still in the same photo session
+      if (currentSession !== photoSessionRef.current) {
+        logWithSession('Session changed, discarding menu item results');
+        return;
       }
       
+      // Update menu items state
+      if (suggestions.menu_items && suggestions.menu_items.length > 0) {
+        logWithSession(`Got ${suggestions.menu_items.length} menu items for ${restaurantName}`);
+        setMenuItems(suggestions.menu_items);
+      } else {
+        logWithSession(`No menu items found for ${restaurantName}`);
+        setMenuItems([]);
+      }
+      
+      // Update suggested meals
+      if (suggestions.suggested_meals && suggestions.suggested_meals.length > 0) {
+        logWithSession(`Got ${suggestions.suggested_meals.length} meal suggestions for ${restaurantName}`);
+        setSuggestedMeals(suggestions.suggested_meals);
+      } else {
+        logWithSession(`No meal suggestions found for ${restaurantName}`);
+        setSuggestedMeals([]);
+      }
+      
+      // Unlike before, do NOT auto-set the meal name - let user select from suggestions instead
+      // Only show the button to select from suggested meals
+      
     } catch (error) {
-      logWithSession(`Error updating for restaurant ${restaurantName}: ${error}`);
+      logWithSession(`Error getting menu items for ${restaurantName}: ${error}`);
+      // Clear suggestions on error
+      setMenuItems([]);
+      setSuggestedMeals([]);
     } finally {
       // Verify we're still in the same photo session before updating loading state
       if (currentSession === photoSessionRef.current) {
         setIsLoadingSuggestions(false);
+        setIsLoadingMealSuggestions(false);
       }
     }
   };
@@ -444,6 +515,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       setLocation(restaurantLocation);
     }
     
+    // Always fetch menu items and meal suggestions for the selected restaurant
+    // Clear existing meal suggestions to avoid confusion
+    setSuggestedMeals([]);
+    setMenuItems([]);
+    setIsLoadingMealSuggestions(true);
+    
     // Fetch menu items for this restaurant
     updateMealSuggestionsForRestaurant(restaurant.name);
   };
@@ -488,12 +565,14 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setMealName("");
     setSuggestedRestaurants([]);
     setMenuItems([]);
+    setSuggestedMeals([]);
     setAutocompleteRestaurants([]);
     setShowAutocomplete(false);
     setIsUserEditingRestaurant(false);
     setIsUserEditingMeal(false);
     setIsLoadingSuggestions(false);
     setIsSearchingRestaurants(false);
+    setIsLoadingMealSuggestions(false);
     
     // Clear any global variables or timers that might be used
     if ((window as any).restaurantInputTimer) {
@@ -505,6 +584,23 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // the initializeLocationFromParams function will reject potentially stale location data
     const initialLocation = initializeLocationFromParams();
     setLocation(initialLocation);
+    
+    // Check for any prefetched meal suggestions
+    if ((global as any).prefetchedSuggestions && 
+        (global as any).prefetchedPhotoUri === photo.uri) {
+      // We have prefetched suggestions for this photo
+      const prefetchedSuggestions = (global as any).prefetchedSuggestions;
+      logWithSession("Found prefetched suggestion data during reset:");
+      
+      // Log prefetched data for debugging
+      logWithSession(`- Restaurants: ${prefetchedSuggestions.restaurants?.length || 0}`);
+      logWithSession(`- Menu items: ${prefetchedSuggestions.menu_items?.length || 0}`);
+      logWithSession(`- Meal suggestions: ${prefetchedSuggestions.suggested_meals?.length || 0}`);
+      
+      // Don't set anything yet - we'll handle this in fetchRestaurantSuggestions function
+    } else {
+      logWithSession("No prefetched suggestion data found during reset");
+    }
     
     // Always fetch device location as fallback
     getCurrentLocation();
@@ -804,8 +900,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                   </View>
                 )}
               </View>
-              
-              {/* Suggestions button - always enabled to help users find restaurants */}
+
+              {/* Suggestions button for restaurant */}
               <TouchableOpacity
                 style={styles.suggestButton}
                 onPress={() => {
@@ -848,7 +944,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
             
-            {/* Meal Input */}
+            {/* Meal Input with Button Container */}
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Meal:</Text>
               <TextInput
@@ -871,15 +967,41 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 placeholder="Enter meal name"
               />
               
-              {/* Menu items button */}
-              {menuItems.length > 0 && (
-                <TouchableOpacity
-                  style={styles.suggestButton}
-                  onPress={() => setShowMenuModal(true)}
-                >
-                  <MaterialIcon name="restaurant-menu" size={16} color="white" />
-                </TouchableOpacity>
-              )}
+              {/* Single button that changes state based on meal suggestions */}
+              <TouchableOpacity
+                style={[
+                  styles.suggestButton, 
+                  suggestedMeals.length > 0 ? styles.suggestButtonActive : styles.suggestButtonDisabled
+                ]}
+                onPress={() => {
+                  if (suggestedMeals.length > 0) {
+                    // If we have meal suggestions, show them
+                    setShowMealSuggestionsModal(true);
+                  } else if (restaurant) {
+                    // If no suggestions but we have a restaurant, try to fetch them
+                    updateMealSuggestionsForRestaurant(restaurant);
+                    // Show a loading toast to indicate we're fetching suggestions
+                    Alert.alert('Fetching Suggestions', 'Getting meal suggestions for ' + restaurant);
+                  } else {
+                    // If no restaurant selected yet
+                    Alert.alert('No Restaurant Selected', 'Please select a restaurant first to get meal suggestions.');
+                  }
+                }}
+                disabled={!restaurant}
+              >
+                {isLoadingMealSuggestions ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <>
+                    <MaterialIcon name="fastfood" size={16} color="white" />
+                    {suggestedMeals.length > 0 && (
+                      <View style={styles.badgeContainer}>
+                        <Text style={styles.badgeText}>{suggestedMeals.length}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
             
             {/* Loading indicator */}
@@ -1013,6 +1135,72 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+      
+      {/* Meal Suggestions Modal */}
+      <Modal
+        visible={showMealSuggestionsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMealSuggestionsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Top Meal Suggestions</Text>
+            <Text style={styles.modalSubtitle}>Based on the restaurant menu and your image</Text>
+            {suggestedMeals.length > 0 ? (
+              <FlatList
+                data={suggestedMeals}
+                keyExtractor={(item, index) => `suggestion-${index}`}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    style={[styles.menuItem, index === 0 ? styles.topSuggestion : {}]}
+                    onPress={() => {
+                      setMealName(item);
+                      setIsUserEditingMeal(false);
+                      setShowMealSuggestionsModal(false);
+                    }}
+                  >
+                    {index === 0 && (
+                      <View style={styles.topBadge}>
+                        <MaterialIcon name="star" size={12} color="#fff" />
+                        <Text style={styles.topBadgeText}>Best Match</Text>
+                      </View>
+                    )}
+                    <Text style={styles.menuItemText}>{item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <View>
+                <Text style={styles.noResultsText}>No meal suggestions available</Text>
+                {restaurant ? (
+                  <TouchableOpacity 
+                    style={[styles.reloadButton, isLoadingMealSuggestions ? styles.reloadButtonDisabled : {}]}
+                    onPress={() => {
+                      if (!isLoadingMealSuggestions) {
+                        updateMealSuggestionsForRestaurant(restaurant);
+                      }
+                    }}
+                    disabled={isLoadingMealSuggestions}
+                  >
+                    {isLoadingMealSuggestions ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.reloadButtonText}>Refresh Suggestions</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowMealSuggestionsModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1093,15 +1281,49 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     paddingHorizontal: 10,
     backgroundColor: 'white',
+    marginRight: 8, // Add margin to separate from the button
   },
   suggestButton: {
-    marginLeft: 10,
-    padding: 10,
-    backgroundColor: '#777',
+    width: 36,
+    height: 36,
     borderRadius: 5,
+    backgroundColor: '#777',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   suggestButtonDisabled: {
     backgroundColor: '#ccc',
+  },
+  suggestButtonLoading: {
+    backgroundColor: '#777',
+    opacity: 0.8,
+  },
+  suggestButtonActive: {
+    backgroundColor: '#ff6b6b',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#4caf50',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    zIndex: 2, // Ensure badge appears above button
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -1131,6 +1353,7 @@ const styles = StyleSheet.create({
   autocompleteContainer: {
     flex: 1,
     position: 'relative',
+    marginRight: 8,
   },
   autocompleteDropdown: {
     position: 'absolute',
@@ -1213,8 +1436,15 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 15,
     textAlign: 'center',
+    fontStyle: 'italic',
   },
   restaurantItem: {
     padding: 15,
@@ -1253,6 +1483,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 20,
     color: '#666',
+  },
+  topSuggestion: {
+    backgroundColor: '#fff8f8',
+    borderLeftWidth: 3,
+    borderLeftColor: '#ff6b6b',
+  },
+  topBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff6b6b',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+  },
+  topBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    marginLeft: 2,
+    fontWeight: '500',
+  },
+  reloadButton: {
+    backgroundColor: '#777',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 10,
+    marginHorizontal: 20,
+  },
+  reloadButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  reloadButtonText: {
+    color: 'white',
+    fontWeight: '500',
   }
 });
 

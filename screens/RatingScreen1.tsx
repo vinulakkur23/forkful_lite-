@@ -178,6 +178,14 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         suggestionData: route.params.suggestionData, // Pass along any suggestion data
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
+      
+      // Log if we're passing prefetched meal suggestions
+      if (route.params.suggestionData && 
+          (route.params.suggestionData.suggested_meals || route.params.suggestionData.menu_items)) {
+        console.log("Passing prefetched meal suggestions to RatingScreen2:", 
+          route.params.suggestionData.suggested_meals?.length || 0, "meal suggestions,",
+          route.params.suggestionData.menu_items?.length || 0, "menu items");
+      }
     } catch (error) {
       console.error('Error preparing data for RatingScreen2:', error);
       Alert.alert('Error', 'Failed to continue to meal details. Please try again.');
