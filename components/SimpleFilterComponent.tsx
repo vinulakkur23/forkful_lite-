@@ -201,7 +201,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
             style={styles.clearButton}
             onPress={() => setSearchText('')}
           >
-            <Icon name="close" size={20} color="#999" />
+            <Text style={[styles.closeButtonX, { color: '#999', fontSize: 20 }]}>×</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -222,16 +222,6 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
                   style={styles.optionItem}
                   onPress={() => handleSelectOption(item)}
                 >
-                  <Icon 
-                    name={
-                      item.type === 'cuisineType' ? 'restaurant' : 
-                      item.type === 'foodType' ? 'fastfood' :
-                      'location-city'
-                    } 
-                    size={16} 
-                    color="#666" 
-                    style={styles.optionIcon} 
-                  />
                   <Text style={styles.optionText}>{item.value}</Text>
                   <Text style={styles.optionType}>
                     {item.type === 'cuisineType' ? 'Cuisine' : 
@@ -258,21 +248,12 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
           >
             {activeFilters.map((filter, index) => (
               <View key={`${filter.type}-${filter.value}-${index}`} style={styles.filterBadge}>
-                <Icon 
-                  name={
-                    filter.type === 'cuisineType' ? 'restaurant' : 
-                    filter.type === 'foodType' ? 'fastfood' :
-                    'location-city'
-                  } 
-                  size={12} 
-                  color="#fff" 
-                />
                 <Text style={styles.filterBadgeText}>{filter.value}</Text>
                 <TouchableOpacity
                   style={styles.filterBadgeCloseButton}
                   onPress={() => handleRemoveFilter(filter)}
                 >
-                  <Icon name="close" size={12} color="#fff" />
+                  <Text style={styles.closeButtonX}>×</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -344,9 +325,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  optionIcon: {
-    marginRight: 8,
-  },
   optionText: {
     flex: 1,
     fontSize: 14,
@@ -398,7 +376,7 @@ const styles = StyleSheet.create({
   filterBadgeText: {
     color: '#fff',
     fontSize: 12,
-    marginHorizontal: 4,
+    marginRight: 4,
   },
   filterBadgeCloseButton: {
     padding: 2,
@@ -415,6 +393,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  closeButtonX: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    lineHeight: 16,
   },
 });
 

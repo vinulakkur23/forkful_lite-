@@ -13,6 +13,7 @@ import {
   Share,
   Platform,
   PermissionsAndroid,
+  ImageSourcePropType,
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
@@ -21,6 +22,12 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from '../components/SimpleFilterComponent';
+
+// Custom button icons - replace these with actual assets when available
+const MAP_ICONS = {
+  myLocation: require('../assets/icons/map/my-location.png'),
+  share: require('../assets/icons/map/share.png'),
+};
 
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
@@ -245,23 +252,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     }
   };
   
-  // Get current position
+  // Get current position and center map on it
   const getCurrentPosition = () => {
     Geolocation.getCurrentPosition(
       position => {
         const { latitude, longitude } = position.coords;
         setUserLocation({ latitude, longitude });
-        if (isActive && mapRef.current) {
+        
+        // Always center on user location when this function is called directly
+        if (mapRef.current) {
           mapRef.current.animateToRegion({
             latitude,
             longitude,
-            latitudeDelta: 0.05, // Close zoom level
-            longitudeDelta: 0.05,
+            latitudeDelta: 0.02, // Very close zoom level
+            longitudeDelta: 0.02,
           }, 1000); // Animation duration in ms
         }
       },
       error => {
         console.log('Error getting location:', error);
+        Alert.alert('Location Error', 'Could not get your current location. Please check your location settings.');
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
@@ -523,31 +533,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
 
       {/* Floating buttons */}
       <View style={styles.buttonContainer}>
-        {/* My Location button */}
+        {/* My Location button - to center on user's current location */}
         <TouchableOpacity
           style={[styles.floatingButton, styles.locationButton]}
-          onPress={() => {
-            if (filteredMeals.length > 0) {
-              fitMapToMarkers();
-            } else {
-              requestLocationPermission();
-            }
-          }}
+          onPress={requestLocationPermission}
         >
-          {filteredMeals.length > 0 ? (
-            <Icon name="zoom-out-map" size={20} color="#fff" />
-          ) : (
-            <Icon name="my-location" size={20} color="#fff" />
-          )}
+          <Image source={MAP_ICONS.myLocation} style={styles.buttonIcon} />
         </TouchableOpacity>
         
         {/* Share button */}
         <TouchableOpacity
-          style={[styles.floatingButton, styles.shareButton]}
+          style={[styles.floatingButton, styles.locationButton]}
           onPress={shareMapToGoogleMaps}
         >
-          <Icon name="share" size={20} color="#fff" />
-          <Text style={styles.shareText}>Share</Text>
+          <Image source={MAP_ICONS.share} style={styles.buttonIcon} />
         </TouchableOpacity>
       </View>
     </View>
@@ -614,15 +613,10 @@ const styles = StyleSheet.create({
   locationButton: {
     width: 48,
   },
-  shareButton: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-  },
-  shareText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
+  buttonIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
   callout: {
     width: 160,
