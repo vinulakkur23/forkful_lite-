@@ -189,9 +189,49 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           console.log("Passed EXIF data doesn't contain GPS coordinates");
         }
       }
-      // DO NOT use direct EXIF extraction as a fallback - we'll use device location if needed
+      // Immediate fallback to device location when PHAsset and EXIF fail
       else {
-        console.log("No location data available from PHAsset or EXIF, will rely on device location");
+        console.log("No location data available from PHAsset or EXIF, immediately getting device location");
+        
+        try {
+          // Get current device location with better timeout handling
+          const deviceLocationPromise = new Promise<any>((resolve, reject) => {
+            // Add a timeout to ensure we don't wait too long
+            const timeoutId = setTimeout(() => {
+              reject(new Error('Device location request timed out'));
+            }, 4000); // 4-second timeout
+            
+            // Request location with high accuracy
+            Geolocation.getCurrentPosition(
+              (position) => {
+                clearTimeout(timeoutId);
+                resolve(position);
+              },
+              (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+              },
+              { 
+                enableHighAccuracy: true, 
+                timeout: 3500,       // Less than our outer timeout 
+                maximumAge: 10000    // Accept cached results up to 10 seconds old
+              }
+            );
+          });
+          
+          const devicePosition = await deviceLocationPromise;
+          if (devicePosition && devicePosition.coords) {
+            enhancedLocation = {
+              latitude: devicePosition.coords.latitude,
+              longitude: devicePosition.coords.longitude,
+              source: 'device'
+            };
+            console.log(`Successfully got device location as fallback: ${enhancedLocation.latitude}, ${enhancedLocation.longitude}`);
+          }
+        } catch (locationError) {
+          console.log('Error getting device location:', locationError);
+          console.log('Will proceed without location data');
+        }
       }
       
       // Track the current photo URI in global state to prevent caching issues

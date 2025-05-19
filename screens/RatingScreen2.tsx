@@ -190,34 +190,61 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     return locationData;
   };
   
-  // Get current device location
+  // Get current device location with better timeout handling
   const getCurrentLocation = async () => {
     if (isLoadingDeviceLocation) return;
     
     setIsLoadingDeviceLocation(true);
-    logWithSession("Getting current device location");
+    logWithSession("Getting current device location with improved handling");
     
     try {
-      // Use Promise-based approach for cleaner code
-      const position = await new Promise<any>((resolve, reject) => {
+      // Use Promise-based approach with explicit timeout
+      const locationPromise = new Promise<any>((resolve, reject) => {
+        // Explicit timeout to ensure we don't get stuck
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Device location request timed out'));
+        }, 5000); // 5-second timeout
+        
         Geolocation.getCurrentPosition(
-          resolve,
-          reject,
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+          (position) => {
+            clearTimeout(timeoutId);
+            resolve(position);
+          },
+          (error) => {
+            clearTimeout(timeoutId);
+            reject(error);
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 4000,      // Slightly less than our outer timeout 
+            maximumAge: 15000   // Accept results up to 15 seconds old
+          }
         );
       });
+      
+      const position = await locationPromise;
       
       const deviceLocationData: LocationData = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         source: 'device',
-        priority: 3 // Lowest priority
+        priority: 4 // Lowest priority
       };
       
       logWithSession(`Got device location: ${deviceLocationData.latitude}, ${deviceLocationData.longitude}`);
       setDeviceLocation(deviceLocationData);
+      
+      // If we have no other location data, use device location immediately
+      if (!location) {
+        logWithSession("No other location data available, using device location as primary source");
+        setLocation(deviceLocationData);
+      }
     } catch (error) {
       logWithSession(`Error getting device location: ${error}`);
+      Alert.alert(
+        "Location Not Available", 
+        "Your device location could not be determined. You may need to manually search for restaurants."
+      );
     } finally {
       setIsLoadingDeviceLocation(false);
     }
