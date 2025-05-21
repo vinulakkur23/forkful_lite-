@@ -8,13 +8,21 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3C35C55452874781ACEA60ED /* Lobster.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7BCB9F5DEC034410B3B329B6 /* Lobster.ttf */; };
+		49391C90363E473E8CFB54ED /* Inter.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F8AA3B827EF6416AB0D853F6 /* Inter.ttf */; };
+		58CA74DDB05A41AEA1D107AB /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 3A9F7370A68945AE9EEF9647 /* README.md */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		7E573AC92DA4C396008880D5 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7E573AC82DA4C396008880D5 /* GoogleService-Info.plist */; };
 		7EBE54222DD68A30003CD5BD /* PhotoGPSModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */; };
 		7EBE54232DD68A30003CD5BD /* PhotoGPSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		8349962C3DDE44F898CA72B8 /* Inter-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 759D3BB7593B41B698A83ABA /* Inter-Regular.ttf */; };
+		CD0FDB150F274CD08157627A /* Lobster-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A8DCBFC5616545A9B28A8BEB /* Lobster-Regular.ttf */; };
 		D666F91C512C7F20FFD9ACAE /* Pods_MealRatingAppNew.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF0E33C5CF08DA26261AA448 /* Pods_MealRatingAppNew.framework */; };
 		EA074F54591B60E5413625FA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		F0C12F7E86DE4713A168462D /* Lobster.otf in Resources */ = {isa = PBXBuildFile; fileRef = 14B32B9D6A754443857C3464 /* Lobster.otf */; };
+		A4F323E6F5F849E4BFC41D1E /* Pacifico-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6A4614283F0A4680A7857B0E /* Pacifico-Regular.ttf */; };
+		D29E92551A8A482689FD34B3 /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,14 +31,22 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = MealRatingAppNew/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MealRatingAppNew/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = MealRatingAppNew/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		14B32B9D6A754443857C3464 /* Lobster.otf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = Lobster.otf; path = ../assets/fonts/Lobster.otf; sourceTree = "<group>"; };
+		3A9F7370A68945AE9EEF9647 /* README.md */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = README.md; path = ../assets/fonts/README.md; sourceTree = "<group>"; };
+		759D3BB7593B41B698A83ABA /* Inter-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Inter-Regular.ttf"; path = "../assets/fonts/Inter-Regular.ttf"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MealRatingAppNew/AppDelegate.swift; sourceTree = "<group>"; };
+		7BCB9F5DEC034410B3B329B6 /* Lobster.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = Lobster.ttf; path = ../assets/fonts/Lobster.ttf; sourceTree = "<group>"; };
 		7E573AC82DA4C396008880D5 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhotoGPSModule.m; sourceTree = "<group>"; };
 		7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGPSModule.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MealRatingAppNew/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A8DCBFC5616545A9B28A8BEB /* Lobster-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Lobster-Regular.ttf"; path = "../assets/fonts/Lobster-Regular.ttf"; sourceTree = "<group>"; };
 		E94B5F238C44D768C0CFB77F /* Pods-MealRatingAppNew.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MealRatingAppNew.debug.xcconfig"; path = "Target Support Files/Pods-MealRatingAppNew/Pods-MealRatingAppNew.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF0E33C5CF08DA26261AA448 /* Pods_MealRatingAppNew.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MealRatingAppNew.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		F8AA3B827EF6416AB0D853F6 /* Inter.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = Inter.ttf; path = ../assets/fonts/Inter.ttf; sourceTree = "<group>"; };
+		6A4614283F0A4680A7857B0E /* Pacifico-Regular.ttf */ = {isa = PBXFileReference; name = "Pacifico-Regular.ttf"; path = "../assets/fonts/Pacifico-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */ = {isa = PBXFileReference; name = "NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"; path = "../assets/fonts/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +84,22 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		4D4F6A006F8642558FBF7BA6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				14B32B9D6A754443857C3464 /* Lobster.otf */,
+				F8AA3B827EF6416AB0D853F6 /* Inter.ttf */,
+				3A9F7370A68945AE9EEF9647 /* README.md */,
+				A8DCBFC5616545A9B28A8BEB /* Lobster-Regular.ttf */,
+				7BCB9F5DEC034410B3B329B6 /* Lobster.ttf */,
+				759D3BB7593B41B698A83ABA /* Inter-Regular.ttf */,
+				6A4614283F0A4680A7857B0E /* Pacifico-Regular.ttf */,
+				FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */,
+			);
+			name = Resources;
+			path = "";
+			sourceTree = "<group>";
+		};
 		7EBE54212DD68A30003CD5BD /* PhotoGPSModule 2 */ = {
 			isa = PBXGroup;
 			children = (
@@ -92,6 +124,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				4D4F6A006F8642558FBF7BA6 /* Resources */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -180,6 +213,14 @@
 				7E573AC92DA4C396008880D5 /* GoogleService-Info.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				EA074F54591B60E5413625FA /* PrivacyInfo.xcprivacy in Resources */,
+				F0C12F7E86DE4713A168462D /* Lobster.otf in Resources */,
+				49391C90363E473E8CFB54ED /* Inter.ttf in Resources */,
+				58CA74DDB05A41AEA1D107AB /* README.md in Resources */,
+				CD0FDB150F274CD08157627A /* Lobster-Regular.ttf in Resources */,
+				3C35C55452874781ACEA60ED /* Lobster.ttf in Resources */,
+				8349962C3DDE44F898CA72B8 /* Inter-Regular.ttf in Resources */,
+				A4F323E6F5F849E4BFC41D1E /* Pacifico-Regular.ttf in Resources */,
+				D29E92551A8A482689FD34B3 /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -531,6 +531,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     color: '#666',
+    fontFamily: 'Inter-Regular',
   },
   errorContainer: {
     flex: 1,
@@ -582,6 +583,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
+    fontFamily: 'Inter-Regular',
   },
   detailsContainer: {
     padding: 20,
@@ -598,6 +600,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 15,
+    fontFamily: 'Inter-Regular',
   },
   infoRow: {
     flexDirection: 'row',
@@ -607,6 +610,7 @@ const styles = StyleSheet.create({
   restaurantName: {
     fontSize: 16,
     marginLeft: 8,
+    fontFamily: 'Inter-Regular',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -616,6 +620,7 @@ const styles = StyleSheet.create({
   ratingLabel: {
     fontSize: 16,
     marginRight: 10,
+    fontFamily: 'Inter-Regular',
   },
   starsContainer: {
     flexDirection: 'row',
@@ -635,11 +640,13 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: '#666',
+    fontFamily: 'Inter-Regular',
   },
   cityText: {
     fontSize: 14,
     color: '#333',
     marginTop: 4,
+    fontFamily: 'Inter-Regular',
   },
   cityLabel: {
     fontWeight: 'bold',
@@ -649,12 +656,14 @@ const styles = StyleSheet.create({
     color: '#888',
     fontStyle: 'italic',
     marginTop: 2,
+    fontFamily: 'Inter-Regular',
   },
   dateText: {
     fontSize: 14,
     color: '#999',
     marginTop: 10,
     textAlign: 'right',
+    fontFamily: 'Inter-Regular',
   },
   // Metadata styles
   metadataContainer: {
@@ -674,6 +683,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#333',
+    fontFamily: 'Inter-Regular',
   },
   metadataGrid: {
     flexDirection: 'row',
@@ -694,11 +704,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
+    fontFamily: 'Inter-Regular',
   },
   metadataValue: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
+    fontFamily: 'Inter-Regular',
   },
   metadataButtonsRow: {
     flexDirection: 'row',
@@ -747,6 +759,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginLeft: 8,
     fontWeight: '600',
+    fontFamily: 'Inter-Regular',
   },
   backButton: {
     flexDirection: 'row',

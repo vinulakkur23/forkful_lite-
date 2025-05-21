@@ -294,6 +294,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     height: '100%',
     paddingLeft: 5,
+    fontFamily: 'Inter-Regular',
   },
   clearButton: {
     padding: 4,
@@ -329,11 +330,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: '#333',
+    fontFamily: 'Inter-Regular',
   },
   optionType: {
     fontSize: 12,
     color: '#999',
     marginLeft: 4,
+    fontFamily: 'Inter-Regular',
   },
   loadingContainer: {
     padding: 12,
@@ -345,6 +348,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#666',
+    fontFamily: 'Inter-Regular',
   },
   noResultsContainer: {
     padding: 12,
@@ -353,6 +357,7 @@ const styles = StyleSheet.create({
   noResultsText: {
     fontSize: 14,
     color: '#999',
+    fontFamily: 'Inter-Regular',
   },
   selectedFiltersContainer: {
     marginTop: 8,
@@ -377,6 +382,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     marginRight: 4,
+    fontFamily: 'Inter-Regular',
   },
   filterBadgeCloseButton: {
     padding: 2,
@@ -393,12 +399,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+    fontFamily: 'Inter-Regular',
   },
   closeButtonX: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     lineHeight: 16,
+    fontFamily: 'Inter-Regular',
   },
 });
 

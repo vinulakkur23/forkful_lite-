@@ -20,6 +20,7 @@ import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterCom
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
+import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
@@ -397,7 +398,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           />
         ) : (
           <View style={[styles.mealImage, styles.placeholderContainer]}>
-            <Icon name="image-not-supported" size={32} color="#ddd" />
+            <Icon name="image-not-supported" size={32} color="#D8D6B8" />
           </View>
         )}
         
@@ -479,33 +480,32 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6', // Light off-white color
   },
   headerContainer: {
-    backgroundColor: '#ff8b8b', // Lighter color than before
-    paddingVertical: 15,
+    backgroundColor: 'transparent',
+    paddingTop: 20, // Keep space at the top
+    paddingBottom: 5, // Reduced from 10 to 5
     paddingHorizontal: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
     zIndex: 10,
+    alignItems: 'flex-start', // Align items to the left
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
+    paddingTop: 5, // Reduced top padding from 10 to 5
+    paddingBottom: 10, // Keep bottom padding
+    backgroundColor: '#FAF9F6', // Match the container background
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     zIndex: 5,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'left', // Align to the left instead of center
-    paddingLeft: 5, // Add a bit of padding
+    fontFamily: 'Lobster-Regular',
+    fontSize: 38, // Made even bigger
+    color: '#E63946', // Red color
+    textAlign: 'left', // Left-aligned text
+    fontWeight: undefined, // Clear any default weight that might interfere
+    marginBottom: 0, // Removed spacing below the title
   },
   loadingContainer: {
     flex: 1,
@@ -522,11 +522,12 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   mealCard: {
-    backgroundColor: 'white',
+    backgroundColor: '#FAF3E0',
     borderRadius: 12,
     overflow: 'hidden',
-    marginHorizontal: 10,
+    marginHorizontal: 16,
     marginTop: 12,
+    marginBottom: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -539,27 +540,28 @@ const styles = StyleSheet.create({
   },
   mealImage: {
     width: '100%',
-    height: 350, // Increased height for more prominent images
+    height: 320, // Decreased from 350 to 320
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
   },
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F9F8E5', // Light cream for placeholder
+    height: 320, // Match the image height
   },
   ratingOverlay: {
     position: 'absolute',
     bottom: 10,
     left: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 20,
     padding: 5,
     paddingHorizontal: 8,
   },
   mealCardContent: {
-    padding: 12,
-    paddingBottom: 14,
+    padding: 14,
+    paddingBottom: 16, // Restored to original
   },
   infoRow: {
     flexDirection: 'row',
@@ -568,14 +570,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   mealName: {
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     fontSize: 16,
     fontWeight: 'bold',
     flex: 1,
     marginRight: 8,
+    color: '#1D3557',
   },
   distanceText: {
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     fontSize: 13,
-    color: '#666',
+    color: '#1D3557',
     textAlign: 'right',
   },
   emptyContainer: {
@@ -585,13 +590,14 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyText: {
+    fontFamily: 'Inter-Regular',
     fontSize: 18,
-    fontWeight: '600',
     color: '#666',
     marginTop: 16,
     textAlign: 'center',
   },
   emptySubtext: {
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: '#999',
     marginTop: 8,
