@@ -299,62 +299,79 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   
   return (
     <ScrollView style={styles.container}>
-      {/* Meal image */}
-      <View style={styles.imageContainer}>
-        {meal.photoUrl && !imageError ? (
-          <Image
-            source={{ uri: meal.photoUrl }}
-            style={styles.image}
-            resizeMode="cover"
-            onError={handleImageError}
-          />
-        ) : (
-          <View style={styles.noImageContainer}>
-            <Icon name="no-photography" size={64} color="#ccc" />
-            <Text style={styles.noImageText}>No image available</Text>
-          </View>
-        )}
+      {/* Meal image card */}
+      <View style={styles.imageCard}>
+        <View style={styles.imageContainer}>
+          {meal.photoUrl && !imageError ? (
+            <Image
+              source={{ uri: meal.photoUrl }}
+              style={styles.image}
+              resizeMode="cover"
+              onError={handleImageError}
+            />
+          ) : (
+            <View style={styles.noImageContainer}>
+              <Icon name="no-photography" size={64} color="#ccc" />
+              <Text style={styles.noImageText}>No image available</Text>
+            </View>
+          )}
+        </View>
       </View>
       
       {/* Meal details */}
       <View style={styles.detailsContainer}>
         <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
         
+        <View style={styles.ratingContainer}>
+          <StarRating rating={meal.rating} starSize={22} />
+        </View>
+        
         {meal.restaurant && (
           <View style={styles.infoRow}>
-            <Icon name="restaurant" size={18} color="#666" />
+            <Image
+              source={require('../assets/icons/restaurant-icon.png')}
+              style={styles.restaurantIcon}
+            />
             <Text style={styles.restaurantName}>{meal.restaurant}</Text>
           </View>
         )}
         
-        <View style={styles.ratingContainer}>
-          <Text style={styles.ratingLabel}>Rating:</Text>
-          <StarRating rating={meal.rating} starSize={18} />
-        </View>
-        
-        {meal.location && (
-          <View style={styles.locationContainer}>
-            <Icon name="place" size={18} color="#666" />
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationText}>
-                {meal.location.source === 'exif' ? 'Location from photo metadata' : 
-                 meal.location.source === 'restaurant_selection' ? 'Location from restaurant' :
-                 'Location recorded from device'}
-              </Text>
-              {/* Check both location.city and top-level city field */}
-              {(meal.location?.city || meal.city) && (
-                <Text style={styles.cityText}>
-                  <Text style={styles.cityLabel}>City: </Text>
-                  {meal.location?.city || meal.city || ''}
-                </Text>
-              )}
-            </View>
+        {/* Liked and Didn't Like sections */}
+        {(meal.comments?.liked || meal.comments?.disliked) && (
+          <View style={styles.feedbackSection}>
+            {meal.comments?.liked && (
+              <View style={[styles.feedbackItem, !meal.comments?.disliked && {marginBottom: 0}]}>
+                <Text style={styles.feedbackLabel}>What was Good:</Text>
+                <Text style={styles.feedbackText}>{meal.comments.liked}</Text>
+              </View>
+            )}
+            
+            {meal.comments?.disliked && (
+              <View style={[styles.feedbackItem, {marginBottom: 0}]}>
+                <Text style={styles.feedbackLabel}>What could be Better:</Text>
+                <Text style={styles.feedbackText}>{meal.comments.disliked}</Text>
+              </View>
+            )}
           </View>
         )}
-        
-        <Text style={styles.dateText}>
-          {formatDate(meal.createdAt)}
-        </Text>
+
+        <View style={styles.bottomRow}>
+          {meal.location && (meal.location?.city || meal.city) && (
+            <View style={styles.cityContainer}>
+              <Image
+                source={require('../assets/icons/city-icon.png')}
+                style={styles.cityIcon}
+              />
+              <Text style={styles.cityText}>
+                {meal.location?.city || meal.city || ''}
+              </Text>
+            </View>
+          )}
+          
+          <Text style={styles.dateText}>
+            {formatDate(meal.createdAt)}
+          </Text>
+        </View>
       </View>
       
       {/* Action buttons */}
@@ -460,6 +477,10 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             meal.restaurant && meal.restaurant.includes(',') ? 
               meal.restaurant.split(',')[1].trim().split(' ')[0] : 'Not extractable'
           }</Text>
+          <Text>Feedback Debug:</Text>
+          <Text>Liked: {meal.comments?.liked || 'Not set'}</Text>
+          <Text>Didn't Like: {meal.comments?.disliked || 'Not set'}</Text>
+          <Text>All meal keys: {Object.keys(meal).join(', ')}</Text>
           <Text>Full data: {JSON.stringify({
             city: meal.city,
             locationCity: meal.location?.city,
@@ -515,30 +536,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     color: '#4682b4',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
     textAlign: 'center',
     color: '#666',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6',
   },
   errorTitle: {
     fontSize: 20,
@@ -563,10 +585,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
   },
+  imageCard: {
+    backgroundColor: '#FAF3E0',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   imageContainer: {
     width: '100%',
-    height: 300,
-    backgroundColor: '#eee',
+    height: 320,
+    backgroundColor: '#FAF3E0',
   },
   image: {
     width: '100%',
@@ -583,13 +618,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailsContainer: {
     padding: 20,
-    backgroundColor: 'white',
-    margin: 10,
-    borderRadius: 10,
+    backgroundColor: '#FAF3E0',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -599,28 +635,41 @@ const styles = StyleSheet.create({
   mealName: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 15,
-    fontFamily: 'Inter-Regular',
+    marginBottom: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
+  },
+  restaurantIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#666',
+    resizeMode: 'contain',
+  },
+  cityIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#666',
+    resizeMode: 'contain',
   },
   restaurantName: {
     fontSize: 16,
     marginLeft: 8,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
+    marginTop: -3,
   },
   ratingLabel: {
     fontSize: 16,
     marginRight: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   starsContainer: {
     flexDirection: 'row',
@@ -630,7 +679,7 @@ const styles = StyleSheet.create({
   },
   locationContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 15,
   },
   locationTextContainer: {
@@ -640,13 +689,13 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: '#666',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   cityText: {
     fontSize: 14,
-    color: '#333',
-    marginTop: 4,
-    fontFamily: 'Inter-Regular',
+    color: '#999',
+    marginLeft: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   cityLabel: {
     fontWeight: 'bold',
@@ -656,22 +705,55 @@ const styles = StyleSheet.create({
     color: '#888',
     fontStyle: 'italic',
     marginTop: 2,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  feedbackSection: {
+    marginTop: 12,
+    marginBottom: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 15,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFC008',
+  },
+  feedbackItem: {
+    marginBottom: 12,
+  },
+  feedbackLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a2b49',
+    marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  feedbackText: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  cityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   dateText: {
     fontSize: 14,
     color: '#999',
-    marginTop: 10,
-    textAlign: 'right',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Metadata styles
   metadataContainer: {
     padding: 20,
-    backgroundColor: 'white',
-    margin: 10,
-    marginTop: 0,
-    borderRadius: 10,
+    backgroundColor: '#FAF3E0',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -683,7 +765,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#333',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   metadataGrid: {
     flexDirection: 'row',
@@ -704,13 +786,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   metadataValue: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   metadataButtonsRow: {
     flexDirection: 'row',
@@ -759,7 +841,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginLeft: 8,
     fontWeight: '600',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   backButton: {
     flexDirection: 'row',

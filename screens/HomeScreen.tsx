@@ -572,15 +572,15 @@ const styles = StyleSheet.create({
   mealName: {
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: 'normal',
     flex: 1,
     marginRight: 8,
-    color: '#1D3557',
+    color: '#1a2b49',
   },
   distanceText: {
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     fontSize: 13,
-    color: '#1D3557',
+    color: '#1a2b49',
     textAlign: 'right',
   },
   emptyContainer: {
