@@ -97,6 +97,7 @@ export type RootStackParamList = {
   FoodPassport: undefined; // Kept for potential direct stack navigation
   MealDetail: {
     mealId: string;
+    previousScreen?: string;
   };
 };
 
@@ -330,9 +331,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               activeOpacity={0.7}
             >
               {tab.icon(false)}
-              <Text style={[styles.tabLabel, { color: '#999' }]}>
-                {tab.label}
-              </Text>
             </TouchableOpacity>
           );
         }
@@ -368,12 +366,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
             activeOpacity={0.7}
           >
             {tab.icon(isFocused)}
-            <Text style={[
-              styles.tabLabel,
-              { color: isFocused ? '#ff6b6b' : '#999' }
-            ]}>
-              {labelToDisplay as string}
-            </Text>
           </TouchableOpacity>
         );
       })}
@@ -456,8 +448,7 @@ function TabNavigator() {
         name="MealDetail"
         component={MealDetailScreen}
         options={{
-          title: 'Meal Details',
-          headerShown: true, // MealDetailScreen expects a header
+          headerShown: false, // Hide the header
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
@@ -631,10 +622,10 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    height: Platform.OS === 'ios' ? 90 : 80, // Adjusted for SafeAreaView on iOS
-    paddingBottom: Platform.OS === 'ios' ? 30 : 25, // More padding for home indicator
-    paddingTop: 10,
+    backgroundColor: '#FAF9F6',
+    height: Platform.OS === 'ios' ? 70 : 60, // Reduced height since no text labels
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15, // Reduced padding
+    paddingTop: 8, // Slightly reduced top padding
     borderTopWidth: 1,
     borderTopColor: '#ddd',
     shadowColor: '#000',

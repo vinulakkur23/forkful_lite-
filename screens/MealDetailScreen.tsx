@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -247,9 +247,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
-  // Navigate back
+  // Navigate back to the correct screen
   const goBack = () => {
-    navigation.goBack();
+    const previousScreen = route.params?.previousScreen;
+    if (previousScreen) {
+      navigation.navigate(previousScreen);
+    } else {
+      navigation.goBack();
+    }
   };
   
   // Show loading state
@@ -298,8 +303,35 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   return (
-    <ScrollView style={styles.container}>
-      {/* Meal image card */}
+    <SafeAreaView style={styles.safeArea}>
+      {/* Header with back button and title */}
+      <View style={styles.headerSection}>
+        <TouchableOpacity 
+          style={styles.backButtonHeader}
+          onPress={goBack}
+        >
+          <Image
+            source={require('../assets/icons/back-icon.png')}
+            style={styles.headerButtonIcon}
+          />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Meal Details</Text>
+        <TouchableOpacity 
+          style={styles.headerRightButton}
+          onPress={() => {
+            // Placeholder - will add functionality later
+            console.log('Header right button pressed');
+          }}
+        >
+          <Image
+            source={require('../assets/icons/menu-icon.png')}
+            style={styles.headerButtonIcon}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.container}>
+        {/* Meal image card */}
       <View style={styles.imageCard}>
         <View style={styles.imageContainer}>
           {meal.photoUrl && !imageError ? (
@@ -518,7 +550,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.buttonText}>Back</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -537,6 +570,42 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#4682b4',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FAF9F6',
+  },
+  headerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#FAF9F6',
+  },
+  backButtonHeader: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  headerRightButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  headerButtonIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#1a2b49',
+    resizeMode: 'contain',
   },
   container: {
     flex: 1,
@@ -590,7 +659,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginHorizontal: 16,
-    marginTop: 20,
+    marginTop: 0,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -637,6 +706,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   infoRow: {
     flexDirection: 'row',

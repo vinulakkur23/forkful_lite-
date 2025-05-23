@@ -10,7 +10,8 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
-  Platform
+  Platform,
+  SafeAreaView
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -28,6 +29,8 @@ import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterCom
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
 import MapView, { Marker, Callout } from 'react-native-maps';
+// Import achievement service
+import { getUserAchievements } from '../services/achievementService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -91,7 +94,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
     // State for profile stats
     const [profileStats, setProfileStats] = useState({
         totalMeals: 0,
-        averageRating: 0
+        averageRating: 0,
+        badgeCount: 0
     });
 
     // Tab view state
@@ -206,9 +210,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                 averageRating = totalRating / totalMeals;
             }
 
+            // Get badge count
+            const userAchievements = await getUserAchievements();
+            const badgeCount = userAchievements.length;
+
             setProfileStats({
                 totalMeals,
-                averageRating
+                averageRating,
+                badgeCount
             });
 
             // Reset image errors when fetching new data
@@ -338,7 +347,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
     
     const viewMealDetails = (meal: MealEntry) => {
         console.log("Navigating to meal detail with ID:", meal.id);
-        navigation.navigate('MealDetail', { mealId: meal.id });
+        navigation.navigate('MealDetail', { mealId: meal.id, previousScreen: 'FoodPassport' });
     };
     
     const handleImageError = (mealId: string) => {
@@ -523,16 +532,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                 <View style={styles.ratingContainer}>
                     <StarRating rating={item.rating} starSize={16} spacing={2} />
                 </View>
-                {item.restaurant && (
-                    <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
-                )}
             </View>
         </TouchableOpacity>
     );
     
     // Render the main screen
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
             {/* Filter is now in the wrapper component */}
 
             {loading && !refreshing ? (
@@ -572,47 +578,35 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                                                 />
                                             ) : (
                                                 <View style={styles.profilePhotoPlaceholder}>
-                                                    <Icon name="person" size={30} color="#fff" />
+                                                    <Icon name="person" size={22} color="#fff" />
                                                 </View>
                                             )}
                                             <View style={styles.profileInfo}>
                                                 <Text style={styles.profileName}>
                                                     {userInfo.displayName || "Food Enthusiast"}
                                                 </Text>
-                                                <Text style={styles.profileEmail} numberOfLines={1}>
-                                                    {userInfo.email || ""}
-                                                </Text>
                                             </View>
                                         </View>
                                         
                                         <View style={styles.profileStats}>
                                             <View style={styles.statItem}>
-                                                <Icon name="file-upload" size={18} color="#666" />
                                                 <Text style={styles.statValue}>{profileStats.totalMeals}</Text>
                                                 <Text style={styles.statLabel}>Uploads</Text>
                                             </View>
                                             <View style={styles.statDivider} />
                                             <View style={styles.statItem}>
-                                                <Image
-                                                    source={require('../assets/stars/star-filled.png')}
-                                                    style={styles.starIcon}
-                                                />
                                                 <Text style={styles.statValue}>
                                                     {profileStats.averageRating.toFixed(1)}
                                                 </Text>
                                                 <Text style={styles.statLabel}>Avg. Rating</Text>
                                             </View>
                                             <View style={styles.statDivider} />
-                                            <TouchableOpacity
-                                                style={styles.statItemButton}
-                                                onPress={openImagePicker}
-                                            >
-                                                <Icon name="add-circle" size={18} color="#ff6b6b" />
+                                            <View style={styles.statItem}>
                                                 <Text style={styles.statValue}>
-                                                    +
+                                                    {profileStats.badgeCount}
                                                 </Text>
-                                                <Text style={styles.statLabel}>New Entry</Text>
-                                            </TouchableOpacity>
+                                                <Text style={styles.statLabel}>Badges</Text>
+                                            </View>
                                         </View>
                                     </View>
                                 </View>
@@ -641,14 +635,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                     />
                 </>
             )}
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8f8f8',
+        backgroundColor: '#FAF9F6',
     },
     header: {
         flexDirection: 'row',
@@ -675,45 +669,46 @@ const styles = StyleSheet.create({
     },
     // Profile Card Styles
     profileCard: {
-        backgroundColor: 'white',
+        backgroundColor: '#FAF3E0',
         margin: 10,
-        marginTop: 15,
-        borderRadius: 10,
-        padding: 15,
+        marginTop: 10,
+        borderRadius: 12,
+        padding: 10,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 3,
+        shadowRadius: 4,
         elevation: 2,
     },
     profileHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 15,
+        marginBottom: 10,
     },
     profilePhoto: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        marginRight: 15,
+        width: 45,
+        height: 45,
+        borderRadius: 22.5,
+        marginRight: 12,
     },
     profilePhotoPlaceholder: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 45,
+        height: 45,
+        borderRadius: 22.5,
         backgroundColor: '#ddd',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: 12,
     },
     profileInfo: {
         flex: 1,
     },
     profileName: {
-        fontSize: 18,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4,
+        color: '#1a2b49',
+        marginBottom: 2,
     },
     profileEmail: {
         fontSize: 14,
@@ -722,8 +717,8 @@ const styles = StyleSheet.create({
     profileStats: {
         flexDirection: 'row',
         borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
-        paddingTop: 15,
+        borderTopColor: '#ffc008',
+        paddingTop: 10,
     },
     filterContainer: {
         marginVertical: 10,
@@ -760,18 +755,20 @@ const styles = StyleSheet.create({
     },
     statDivider: {
         width: 1,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#ffc008',
         marginHorizontal: 10,
     },
     statValue: {
-        fontSize: 18,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#333',
-        marginVertical: 4,
+        color: '#1a2b49',
+        marginVertical: 2,
     },
     statLabel: {
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
         fontSize: 12,
-        color: '#666',
+        color: '#1a2b49',
     },
     // Styles for the standalone button removed and integrated into profile stats
     loadingContainer: {
@@ -794,10 +791,10 @@ const styles = StyleSheet.create({
     mealCard: {
         width: itemWidth,
         marginBottom: 20,
-        backgroundColor: '#fff',
-        borderRadius: 10,
+        backgroundColor: '#FAF3E0',
+        borderRadius: 12,
         overflow: 'hidden',
-        elevation: 3,
+        elevation: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -819,8 +816,10 @@ const styles = StyleSheet.create({
         padding: 10,
     },
     mealName: {
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: 'normal',
+        color: '#1a2b49',
         marginBottom: 5,
     },
     ratingContainer: {
@@ -828,8 +827,9 @@ const styles = StyleSheet.create({
         marginBottom: 5,
     },
     restaurantName: {
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
         fontSize: 14,
-        color: '#666',
+        color: '#1a2b49',
     },
     emptyContainer: {
         alignItems: 'center',

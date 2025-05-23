@@ -173,9 +173,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* App header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>My Food Passport</Text>
+      {/* Header with title and sign out */}
+      <View style={styles.headerSection}>
+        <Text style={styles.headerTitle}>Food Passport</Text>
         <TouchableOpacity 
           onPress={async () => {
             console.log("Sign out button pressed");
@@ -253,55 +253,49 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6',
   },
-  header: {
+  headerSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
-    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#FAF9F6',
   },
-  title: {
-    fontSize: 20,
+  headerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   signOutButton: {
-    padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   signOutText: {
-    color: '#fff',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
     fontWeight: '500',
     fontSize: 14,
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: 'white',
+    backgroundColor: '#FAF9F6',
     paddingTop: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
+    paddingTop: 5,
+    paddingBottom: 10,
+    backgroundColor: '#FAF9F6',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    zIndex: 100,
-    position: 'relative',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    zIndex: 5,
   },
   tabButton: {
     flex: 1,

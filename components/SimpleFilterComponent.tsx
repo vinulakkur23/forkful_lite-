@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   filterBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ffc008',
     borderRadius: 16,
     paddingVertical: 4,
     paddingHorizontal: 8,

@@ -346,7 +346,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const viewMealDetails = (meal: MealEntry) => {
     console.log("Navigating to meal detail with ID:", meal.id);
-    navigation.navigate('MealDetail', { mealId: meal.id });
+    navigation.navigate('MealDetail', { mealId: meal.id, previousScreen: 'Home' });
   };
 
   const handleImageError = (mealId: string) => {

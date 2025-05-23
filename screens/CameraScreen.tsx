@@ -7,7 +7,8 @@ import {
   Alert,
   StatusBar,
   Platform,
-  Dimensions
+  Dimensions,
+  Image
 } from 'react-native';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
@@ -503,24 +504,15 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
       
-      <View style={styles.overlay}>
-        <Text style={styles.overlayText}>Position your meal in the frame</Text>
-      </View>
       
       <TouchableOpacity style={styles.closeButton} onPress={goBack}>
-        <Icon name="close" size={24} color="white" />
+        <Image
+          source={require('../assets/icons/back-icon.png')}
+          style={styles.backIcon}
+        />
       </TouchableOpacity>
       
       <View style={styles.buttonContainer}>
-        {/* Gallery button */}
-        <TouchableOpacity 
-          onPress={selectFromGallery}
-          style={styles.galleryButton}
-          disabled={isTakingPicture}
-        >
-          <Icon name="photo-library" size={28} color="white" />
-        </TouchableOpacity>
-        
         {/* Capture button */}
         <TouchableOpacity
           onPress={takePicture}
@@ -529,9 +521,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         >
           <View style={styles.captureButtonInner} />
         </TouchableOpacity>
-        
-        {/* Empty view for balance (to center the capture button) */}
-        <View style={styles.galleryButton} />
       </View>
     </View>
   );
@@ -633,13 +622,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  backIcon: {
+    width: 24,
+    height: 24,
+    tintColor: 'white',
+    resizeMode: 'contain',
+  },
   buttonContainer: {
     position: 'absolute',
     bottom: 50,
     left: 0,
     right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
