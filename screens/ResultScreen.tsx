@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Alert, ActivityIndicator, Platform, SafeAreaView, ScrollView } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { CompositeNavigationProp } from '@react-navigation/native';
@@ -554,18 +554,23 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Achievement notification */}
+    <SafeAreaView style={styles.safeArea}>
       {currentAchievement && (
-        <AchievementNotification 
+        <AchievementNotification
           achievement={currentAchievement}
           onDismiss={handleDismissAchievement}
         />
       )}
-      <Text style={styles.title}>Your Rating Has Been Saved!</Text>
+      
+      {/* Header with title */}
+      <View style={styles.headerSection}>
+        <Text style={styles.headerTitle}>Rating Saved</Text>
+      </View>
 
-      <View style={styles.resultCard}>
-        <View style={styles.imageContainer}>
+      <ScrollView style={styles.container}>
+        {/* Meal image card */}
+        <View style={styles.imageCard}>
+          <View style={styles.imageContainer}>
           {!imageError && photo && photo.uri ? (
             <Image
               source={{ uri: photo.uri }}
@@ -574,9 +579,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               onError={handleImageError}
             />
           ) : (
-            <View style={styles.errorImageContainer}>
-              <MaterialIcon name="broken-image" size={64} color="#ccc" />
-              <Text style={styles.errorImageText}>Image not available</Text>
+            <View style={styles.noImageContainer}>
+              <MaterialIcon name="no-photography" size={64} color="#ccc" />
+              <Text style={styles.noImageText}>No image available</Text>
             </View>
           )}
           {saving && (
@@ -585,112 +590,86 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.savingText}>Saving your meal...</Text>
             </View>
           )}
+          </View>
         </View>
 
-        <View style={styles.infoContainer}>
+        {/* Meal details */}
+        <View style={styles.detailsCard}>
+          <Text style={styles.mealName}>{meal || 'Untitled Meal'}</Text>
+          
           <View style={styles.ratingContainer}>
-            <Text style={styles.ratingLabel}>Your Rating:</Text>
-            <StarRating rating={rating} starSize={20} />
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Type:</Text>
-            <Text style={styles.infoValue}>{mealType || "Restaurant"}</Text>
-            <MaterialIcon
-              name={mealType === "Homemade" ? "home" : "restaurant"}
-              size={16}
-              color="#666"
-              style={{marginLeft: 5}}
-            />
+            <StarRating rating={rating} starSize={22} />
           </View>
 
           {mealType === "Restaurant" && restaurant && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Restaurant:</Text>
-              <View style={styles.restaurantInfoContainer}>
-                <Text style={styles.infoValue}>{restaurant}</Text>
-                <MaterialIcon name="restaurant" size={16} color="#666" style={{marginLeft: 5}} />
+            <View style={styles.restaurantRow}>
+              <Image
+                source={require('../assets/icons/restaurant-icon.png')}
+                style={styles.restaurantIcon}
+              />
+              <Text style={styles.restaurantName}>{restaurant}</Text>
+            </View>
+          )}
 
-                {/* Show additional restaurants if multiple were selected */}
-                {location && location.selectedRestaurants && location.selectedRestaurants.length > 1 && (
-                  <View style={styles.additionalRestaurants}>
-                    <Text style={styles.additionalRestaurantsLabel}>
-                      +{location.selectedRestaurants.length - 1} more options
-                    </Text>
-                    <View style={styles.additionalRestaurantsList}>
-                      {location.selectedRestaurants.slice(1).map((name, index) => (
-                        <Text key={index} style={styles.additionalRestaurantName}>• {name}</Text>
-                      ))}
-                    </View>
-                  </View>
-                )}
+          {mealType === "Homemade" && (
+            <View style={styles.restaurantRow}>
+              <MaterialIcon name="home" size={18} color="#1a2b49" style={styles.infoIcon} />
+              <Text style={styles.restaurantName}>Homemade</Text>
+            </View>
+          )}
+
+          <View style={styles.locationRow}>
+            {location && location?.city && (
+              <View style={styles.cityContainer}>
+                <MaterialIcon name="location-on" size={18} color="#1a2b49" style={styles.infoIcon} />
+                <Text style={styles.cityText}>
+                  {location.city || ''}
+                </Text>
               </View>
-            </View>
-          )}
-
-          {meal && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Meal:</Text>
-              <Text style={styles.infoValue}>{meal}</Text>
-            </View>
-          )}
-
-          <View style={styles.locationContainer}>
-            <Text style={styles.locationLabel}>Location:</Text>
-            <Text style={styles.locationText}>
-              {location ? (
-                <>
-                  {location.source === 'restaurant_selection'
-                    ? `Location from restaurant: ${restaurant}`
-                    : location.source === 'exif'
-                      ? 'Location from photo metadata (EXIF)'
-                      : 'Using your current location'}
-                </>
-              ) : (
-                'Location data not available'
-              )}
+            )}
+            
+            <Text style={styles.dateText}>
+              {new Date().toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
             </Text>
           </View>
 
-          {/* Show user comments if provided */}
+          {/* Liked and Didn't Like sections */}
           {(likedComment || dislikedComment) && (
-            <View style={styles.commentsContainer}>
+            <View style={styles.feedbackSection}>
               {likedComment && (
-                <View style={styles.commentSection}>
-                  <Text style={styles.commentSectionTitle}>What you liked:</Text>
-                  <View style={styles.commentItem}>
-                    <Text style={styles.commentText}>{likedComment.trim()}</Text>
-                  </View>
+                <View style={styles.feedbackCard}>
+                  <Text style={styles.feedbackTitle}>What was Good:</Text>
+                  <Text style={styles.feedbackText}>{likedComment.trim()}</Text>
                 </View>
               )}
-
+              
               {dislikedComment && (
-                <View style={styles.commentSection}>
-                  <Text style={styles.commentSectionTitle}>What you didn't like:</Text>
-                  <View style={styles.commentItem}>
-                    <Text style={styles.commentText}>{dislikedComment.trim()}</Text>
-                  </View>
+                <View style={styles.feedbackCard}>
+                  <Text style={styles.feedbackTitle}>What could be Better:</Text>
+                  <Text style={styles.feedbackText}>{dislikedComment.trim()}</Text>
                 </View>
               )}
             </View>
           )}
         </View>
-      </View>
+      </ScrollView>
 
-      <View style={styles.buttonsContainer}>
-        <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-          <FontAwesome name="share-alt" size={20} color="white" />
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={handleShare}
+        >
+          <MaterialIcon name="share" size={18} color="white" />
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
 
-        {auth().currentUser ? (
-          <TouchableOpacity style={styles.passportButton} onPress={viewPassport}>
-            <MaterialIcon name="menu-book" size={20} color="white" />
-            <Text style={styles.buttonText}>Food Passport</Text>
-          </TouchableOpacity>
-        ) : (
+        {!auth().currentUser && (
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: saved ? '#4CAF50' : '#3498db' }]}
+            style={[styles.saveButton, saving || saved ? styles.disabledButton : {}]}
             onPress={saveToFirebase}
             disabled={saving || saved}
           >
@@ -698,70 +677,83 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               <ActivityIndicator size="small" color="white" />
             ) : (
               <>
-                <MaterialIcon name={saved ? "check" : "save"} size={20} color="white" />
-                <Text style={styles.buttonText}>{saved ? 'Saved' : 'Save to Passport'}</Text>
+                <MaterialIcon name={saved ? "check" : "save"} size={18} color="white" />
+                <Text style={styles.buttonText}>{saved ? 'Saved' : 'Save'}</Text>
               </>
             )}
           </TouchableOpacity>
         )}
-
-        <TouchableOpacity style={styles.homeButton} onPress={goHome}>
-          <FontAwesome name="home" size={20} color="white" />
-          <Text style={styles.buttonText}>New Rating</Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FAF9F6',
+  },
+  headerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#FAF9F6',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
-    padding: 20,
-    alignItems: 'center',
+    backgroundColor: '#FAF9F6',
+    paddingHorizontal: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginVertical: 20,
     textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
-  resultCard: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 15,
-    width: '100%',
+  imageCard: {
+    backgroundColor: '#FAF3E0',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   imageContainer: {
     width: '100%',
-    height: 200,
-    borderRadius: 10,
+    height: 320, // Increased height to match MealDetailScreen
+    backgroundColor: '#FAF3E0', // Card background color
     overflow: 'hidden',
-    backgroundColor: '#eee',
-    marginBottom: 15,
     position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  errorImageContainer: {
+  noImageContainer: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
   },
-  errorImageText: {
+  noImageText: {
     marginTop: 10,
     color: '#999',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   savingOverlay: {
     position: 'absolute',
@@ -778,18 +770,36 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  infoContainer: {
+  detailsCard: {
+    backgroundColor: '#FAF3E0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mealName: {
+    fontSize: 24,
+    fontWeight: 'bold',
     marginBottom: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  ratingLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 10,
+  restaurantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoIcon: {
+    marginRight: 8,
   },
   starsContainer: {
     flexDirection: 'row',
@@ -799,15 +809,32 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 10,
     alignItems: 'center',
+    marginBottom: 10,
+  },
+  restaurantIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#1a2b49',
+    marginRight: 8,
+    resizeMode: 'contain',
+  },
+  restaurantName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   infoLabel: {
     fontWeight: '600',
     marginRight: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   infoValue: {
     flex: 1,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   restaurantInfoContainer: {
     flex: 1,
@@ -833,112 +860,110 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-  locationContainer: {
-    marginBottom: 10,
-  },
-  locationLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  locationSource: {
-    fontSize: 12,
-    color: '#888',
-    fontStyle: 'italic',
-  },
-  // Comments display styles
-  commentsContainer: {
-    width: '100%',
-    marginTop: 10,
-    marginBottom: 5,
-  },
-  commentSection: {
-    marginBottom: 12,
-  },
-  commentSectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#444',
-    marginBottom: 6,
-  },
-  commentItem: {
-    flexDirection: 'row',
-    marginBottom: 5,
-    paddingHorizontal: 5,
-  },
-  commentBullet: {
-    fontSize: 16,
-    marginRight: 8,
-    color: '#666',
-  },
-  commentText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 18,
-  },
-  buttonsContainer: {
+  locationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 30,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  cityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cityIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#666',
+    resizeMode: 'contain',
+  },
+  cityText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  feedbackSection: {
+    marginTop: 8,
+  },
+  feedbackCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffc008',
+  },
+  feedbackTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 6,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  feedbackText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
   shareButton: {
-    backgroundColor: '#3498db',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffc008',
     paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 10,
-    marginBottom: 10,
+    paddingHorizontal: 30,
+    borderRadius: 12,
   },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffc008',
     paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 10,
-    marginBottom: 10,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    marginLeft: 10,
   },
   passportButton: {
-    backgroundColor: '#9C27B0',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffc008',
     paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 10,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
   },
   homeButton: {
-    backgroundColor: '#ff6b6b',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ff6b6b',
     paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    flex: 1,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   buttonText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#1a2b49',
+    marginLeft: 8,
     fontWeight: '600',
-    marginLeft: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

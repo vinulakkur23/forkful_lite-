@@ -313,7 +313,6 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Rating Section */}
           <View style={styles.ratingSection}>
-            <Text style={styles.ratingTitle}>Rate this meal</Text>
             <View style={styles.ratingContainer} key={`stars-container-${screenKey}`}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity
@@ -379,7 +378,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              { backgroundColor: rating > 0 ? '#ff6b6b' : '#cccccc' }
+              { backgroundColor: rating > 0 ? '#ffc008' : '#cccccc' }
             ]}
             onPress={continueToMealDetails}
             disabled={rating === 0 || isProcessing}
@@ -399,7 +398,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6', // Light off-white color matching HomeScreen
   },
   scrollContainer: {
     flexGrow: 1,
@@ -408,15 +407,21 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 15,
     alignItems: 'center',
+    backgroundColor: '#FAF9F6', // Light off-white background
   },
   imageContainer: {
     width: '100%',
     height: 180,
-    borderRadius: 10,
+    borderRadius: 12, // Matching card radius from HomeScreen
     overflow: 'hidden',
-    backgroundColor: '#eee',
+    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
     marginBottom: 10,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   image: {
     width: '100%',
@@ -433,6 +438,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   processingOverlay: {
     position: 'absolute',
@@ -448,6 +454,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: 10,
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingSection: {
     width: '100%',
@@ -458,12 +465,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#1a2b49', // Updated to match text color in HomeScreen
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 5,
+    marginVertical: 10,
   },
   starTouchable: {
     padding: 5,
@@ -484,14 +492,16 @@ const styles = StyleSheet.create({
   commentTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#1a2b49', // Updated text color
     marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentSubtitle: {
     fontSize: 12,
-    color: '#666',
+    color: '#1a2b49', // Updated text color
     marginBottom: 10,
     fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   bulletContainer: {
     flexDirection: 'row',
@@ -526,14 +536,15 @@ const styles = StyleSheet.create({
     minHeight: 80,
     fontSize: 14,
     backgroundColor: 'white',
-    color: '#333',
+    color: '#1a2b49',
     textAlignVertical: 'top',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   continueButton: {
     width: '100%',
     paddingHorizontal: 40,
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
   },
@@ -541,6 +552,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

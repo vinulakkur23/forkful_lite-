@@ -889,7 +889,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 {showAutocomplete && autocompleteRestaurants.length > 0 && (
                   <View style={styles.autocompleteDropdown}>
                     {isSearchingRestaurants && (
-                      <ActivityIndicator size="small" color="#ff6b6b" style={styles.autocompleteLoading} />
+                      <ActivityIndicator size="small" color="#ffc008" style={styles.autocompleteLoading} />
                     )}
                     <FlatList
                       data={autocompleteRestaurants}
@@ -1031,7 +1031,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             {/* Loading indicator */}
             {isLoadingSuggestions && (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#ff6b6b" />
+                <ActivityIndicator size="small" color="#ffc008" />
                 <Text style={styles.loadingText}>Getting suggestions...</Text>
               </View>
             )}
@@ -1066,7 +1066,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: mealName.trim() ? '#ff6b6b' : '#cccccc' }
+              { backgroundColor: mealName.trim() ? '#ffc008' : '#cccccc' }
             ]}
             onPress={saveRating}
             disabled={!mealName.trim() || isProcessing}
@@ -1247,12 +1247,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   mealTypeButtonActive: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ffc008',
   },
   mealTypeText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#666',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   mealTypeTextActive: {
     color: 'white',
@@ -1260,24 +1261,31 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6', // Light off-white color matching HomeScreen
   },
   scrollContainer: {
     flexGrow: 1,
     paddingBottom: 40,
+    backgroundColor: '#FAF9F6', // Light off-white background
   },
   contentContainer: {
     padding: 15,
     alignItems: 'center',
+    backgroundColor: '#FAF9F6', // Light off-white background
   },
   imageContainer: {
     width: '100%',
-    height: 200,
-    borderRadius: 10,
+    height: 300, // Increased height from 200 to 300
+    borderRadius: 12, // Matching card radius from HomeScreen
     overflow: 'hidden',
-    backgroundColor: '#eee',
+    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
     marginVertical: 15,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   image: {
     width: '100%',
@@ -1294,6 +1302,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   processingOverlay: {
     position: 'absolute',
@@ -1314,6 +1323,14 @@ const styles = StyleSheet.create({
   infoSection: {
     width: '100%',
     marginBottom: 10,
+    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
+    borderRadius: 12,
+    padding: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   infoRow: {
     flexDirection: 'row',
@@ -1324,6 +1341,8 @@ const styles = StyleSheet.create({
     width: 100,
     fontSize: 16,
     fontWeight: '500',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   infoInput: {
     flex: 1,
@@ -1334,12 +1353,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: 'white',
     marginRight: 8, // Add margin to separate from the button
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   suggestButton: {
     width: 36,
     height: 36,
-    borderRadius: 5,
-    backgroundColor: '#777',
+    borderRadius: 8,
+    backgroundColor: '#ffc008',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -1352,7 +1373,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   suggestButtonActive: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ffc008',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -1392,7 +1413,7 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 40,
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
   },
@@ -1400,6 +1421,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Autocomplete styles
   autocompleteContainer: {
@@ -1452,7 +1474,7 @@ const styles = StyleSheet.create({
   locationBadgeSmall: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ffc008',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1481,15 +1503,22 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '80%',
     maxHeight: '70%',
-    backgroundColor: 'white',
-    borderRadius: 10,
+    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
+    borderRadius: 12,
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 5,
     textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   modalSubtitle: {
     fontSize: 14,
@@ -1506,11 +1535,14 @@ const styles = StyleSheet.create({
   restaurantName: {
     fontSize: 16,
     fontWeight: '500',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   restaurantAddress: {
     fontSize: 14,
-    color: '#666',
+    color: '#1a2b49',
     marginTop: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   menuItem: {
     padding: 15,
@@ -1519,32 +1551,36 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
   closeButton: {
     marginTop: 20,
     padding: 12,
-    backgroundColor: '#ff6b6b',
-    borderRadius: 5,
+    backgroundColor: '#ffc008',
+    borderRadius: 12,
     alignItems: 'center',
   },
   closeButtonText: {
-    color: 'white',
+    color: '#1a2b49',
     fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   noResultsText: {
     textAlign: 'center',
     padding: 20,
-    color: '#666',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   topSuggestion: {
-    backgroundColor: '#fff8f8',
+    backgroundColor: '#FAF3E0',
     borderLeftWidth: 3,
-    borderLeftColor: '#ff6b6b',
+    borderLeftColor: '#ffc008',
   },
   topBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#ffc008',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1558,9 +1594,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   reloadButton: {
-    backgroundColor: '#777',
+    backgroundColor: '#ffc008',
     padding: 10,
-    borderRadius: 5,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
     marginHorizontal: 20,
@@ -1571,6 +1607,7 @@ const styles = StyleSheet.create({
   reloadButtonText: {
     color: 'white',
     fontWeight: '500',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   }
 });
 
