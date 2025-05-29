@@ -100,6 +100,7 @@ export type RootStackParamList = {
     mealId: string;
     previousScreen?: string;
     justEdited?: boolean;
+    savedStatus?: boolean;
   };
   EditMeal: {
     mealId: string;

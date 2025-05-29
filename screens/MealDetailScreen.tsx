@@ -39,6 +39,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [imageError, setImageError] = useState(false);
   const [processingMetadata, setProcessingMetadata] = useState(false);
   const [justEdited, setJustEdited] = useState(false); // Track if meal was just edited
+  const [isSaved, setIsSaved] = useState(false); // Track if meal is saved by current user
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
@@ -112,6 +113,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           setJustEdited(false);
         }, 3000);
       }
+      
+      // Check if this meal is saved by the current user
+      checkIfMealIsSaved();
     }
   }, [isFocused, fetchMealDetails, route.params?.justEdited]);
   
@@ -193,6 +197,64 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       console.error('Error deleting meal:', error);
       Alert.alert('Error', 'Failed to delete meal entry');
       setLoading(false);
+    }
+  };
+  
+  // Check if meal is saved by current user
+  const checkIfMealIsSaved = async () => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser || !mealId) return;
+      
+      const savedMealsRef = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('savedMeals');
+      
+      const savedMealDoc = await savedMealsRef.doc(mealId).get();
+      
+      setIsSaved(savedMealDoc.exists);
+    } catch (error) {
+      console.error('Error checking if meal is saved:', error);
+    }
+  };
+  
+  // Toggle save/unsave meal
+  const toggleSaveMeal = async () => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser || !meal) {
+        Alert.alert('Error', 'You need to be logged in to save meals');
+        return;
+      }
+      
+      const savedMealsRef = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('savedMeals');
+      
+      if (isSaved) {
+        // Unsave the meal
+        await savedMealsRef.doc(mealId).delete();
+        setIsSaved(false);
+        Alert.alert('Success', 'Meal removed from your saved collection');
+      } else {
+        // Save the meal - store only the reference to avoid duplication
+        await savedMealsRef.doc(mealId).set({
+          mealId: mealId,
+          savedAt: firestore.FieldValue.serverTimestamp(),
+          // Include minimal meal data for quick reference
+          mealName: meal.meal || 'Untitled Meal',
+          restaurant: meal.restaurant || '',
+          photoUrl: meal.photoUrl || '',
+          rating: meal.rating || 0
+        });
+        setIsSaved(true);
+        Alert.alert('Success', 'Meal saved to your collection');
+      }
+    } catch (error) {
+      console.error('Error toggling saved meal:', error);
+      Alert.alert('Error', 'Failed to update saved meal status');
     }
   };
   
@@ -344,14 +406,12 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         <Text style={styles.headerTitle}>Meal Details</Text>
         <TouchableOpacity 
           style={styles.headerRightButton}
-          onPress={() => {
-            // Placeholder - will add functionality later
-            console.log('Header right button pressed');
-          }}
+          onPress={toggleSaveMeal}
         >
-          <Image
-            source={require('../assets/icons/menu-icon.png')}
-            style={styles.headerButtonIcon}
+          <Icon 
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={isSaved ? "#ffc008" : "#1a2b49"}
           />
         </TouchableOpacity>
       </View>

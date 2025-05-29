@@ -5,6 +5,7 @@ import { RootStackParamList } from '../App';
 import FoodPassportScreen from './FoodPassportScreen';
 import MapScreen from './MapScreen';
 import StampsScreen from './StampsScreen';
+import SavedMealsScreen from './SavedMealsScreen';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth } from '../firebaseConfig';
@@ -86,6 +87,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       inactiveIcon: require('../assets/icons/passport_tabs/meals-inactive.png')
     },
     { 
+      key: 'saved', 
+      title: 'Saved', 
+      activeIcon: { uri: 'BookmarkActive' },  // We'll render a custom icon
+      inactiveIcon: { uri: 'BookmarkInactive' }
+    },
+    { 
       key: 'map', 
       title: 'Map', 
       activeIcon: require('../assets/icons/passport_tabs/map-active.png'), 
@@ -139,13 +146,22 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             />
           </ErrorBoundary>
         );
+      case 'saved':
+        return (
+          <ErrorBoundary navigation={props.navigation}>
+            <SavedMealsScreen 
+              navigation={props.navigation}
+              activeFilters={activeFilters}
+            />
+          </ErrorBoundary>
+        );
       case 'map':
         return (
           <ErrorBoundary navigation={props.navigation}>
             <MapScreen 
               navigation={props.navigation}
               activeFilters={activeFilters}
-              isActive={tabIndex === 1} // Pass whether this tab is active
+              isActive={tabIndex === 2} // Updated index since we added a new tab
             />
           </ErrorBoundary>
         );
@@ -224,11 +240,19 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             ]}
             onPress={() => setTabIndex(i)}
           >
-            <Image
-              source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
-              style={styles.tabIcon}
-              resizeMode="contain"
-            />
+            {route.key === 'saved' ? (
+              <Icon 
+                name={tabIndex === i ? "bookmark" : "bookmark-outline"}
+                size={28}
+                color={tabIndex === i ? "#ff6b6b" : "#666"}
+              />
+            ) : (
+              <Image
+                source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
+                style={styles.tabIcon}
+                resizeMode="contain"
+              />
+            )}
           </TouchableOpacity>
         ))}
       </View>
