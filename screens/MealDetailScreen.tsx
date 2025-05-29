@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -37,62 +38,87 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [processingMetadata, setProcessingMetadata] = useState(false);
+  const [justEdited, setJustEdited] = useState(false); // Track if meal was just edited
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
   console.log("Meal ID:", mealId);
   
-  // Fetch the meal data when the component mounts
-  useEffect(() => {
-    const fetchMealDetails = async () => {
-      try {
-        setLoading(true);
-        
-        if (!mealId) {
-          setError('No meal ID provided');
-          setLoading(false);
-          return;
-        }
-        
-        // Get the meal document from Firestore
-        console.log("Fetching meal document with ID:", mealId);
-        const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
-        
-        if (!mealDoc.exists) {
-          console.log("Meal document not found");
-          setError('Meal not found');
-          setLoading(false);
-          return;
-        }
-        
-        const mealData = mealDoc.data();
-        // Log full meal data for debugging
-        console.log("Meal data retrieved:", JSON.stringify(mealData, null, 2));
-        
-        // Check if location and city exists
-        if (mealData.location) {
-          console.log("Location data:", JSON.stringify(mealData.location, null, 2));
-        }
-        
-        // Check for city data
-        console.log("City data check:", {
-          topLevelCity: mealData.city,
-          locationCity: mealData.location?.city,
-          hasTopLevelCity: !!mealData.city,
-          hasLocationCity: !!(mealData.location && mealData.location.city)
-        });
-        
-        setMeal(mealData);
-      } catch (err) {
-        console.error('Error fetching meal details:', err);
-        setError('Failed to load meal details');
-      } finally {
+  // Use the useIsFocused hook to detect when the screen comes into focus
+  const isFocused = useIsFocused();
+  
+  // Create a fetchMealDetails function that can be called when needed
+  const fetchMealDetails = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      if (!mealId) {
+        setError('No meal ID provided');
         setLoading(false);
+        return;
       }
-    };
-    
-    fetchMealDetails();
+      
+      // Get the meal document from Firestore
+      console.log("Fetching meal document with ID:", mealId);
+      const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+      
+      if (!mealDoc.exists) {
+        console.log("Meal document not found");
+        setError('Meal not found');
+        setLoading(false);
+        return;
+      }
+      
+      const mealData = mealDoc.data();
+      // Log full meal data for debugging
+      console.log("Meal data retrieved:", JSON.stringify(mealData, null, 2));
+      
+      // Check if location and city exists
+      if (mealData.location) {
+        console.log("Location data:", JSON.stringify(mealData.location, null, 2));
+      }
+      
+      // Check for city data
+      console.log("City data check:", {
+        topLevelCity: mealData.city,
+        locationCity: mealData.location?.city,
+        hasTopLevelCity: !!mealData.city,
+        hasLocationCity: !!(mealData.location && mealData.location.city)
+      });
+      
+      setMeal(mealData);
+    } catch (err) {
+      console.error('Error fetching meal details:', err);
+      setError('Failed to load meal details');
+    } finally {
+      setLoading(false);
+    }
   }, [mealId]);
+  
+  // Fetch the meal data when the component mounts or when returning to this screen
+  useEffect(() => {
+    if (isFocused) {
+      // Re-fetch meal details when the screen comes into focus
+      fetchMealDetails();
+      
+      // Check if we're coming back from the edit screen
+      const prevScreen = route.params?.previousScreen;
+      const comeFromEdit = route.params?.justEdited;
+      
+      if (comeFromEdit) {
+        setJustEdited(true);
+        // Automatically hide the edited indicator after 3 seconds
+        setTimeout(() => {
+          setJustEdited(false);
+        }, 3000);
+      }
+    }
+  }, [isFocused, fetchMealDetails, route.params?.justEdited]);
+  
+  // Initial data fetch on mount - only runs once
+  useEffect(() => {
+    fetchMealDetails();
+  }, []);
   
   // Handle image load error
   const handleImageError = () => {
@@ -352,7 +378,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       
       {/* Meal details */}
       <View style={styles.detailsContainer}>
-        <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+          {justEdited && (
+            <View style={styles.editedBadge}>
+              <Text style={styles.editedText}>Updated</Text>
+            </View>
+          )}
+        </View>
         
         <View style={styles.ratingContainer}>
           <StarRating rating={meal.rating} starSize={22} />
@@ -533,13 +566,22 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* Only show delete button if the user is the owner */}
         {meal.userId === auth().currentUser?.uid && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDeleteMeal}
-          >
-            <Icon name="delete" size={18} color="white" />
-            <Text style={styles.buttonText}>Delete</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => navigation.navigate('EditMeal', { mealId: mealId, meal })}
+            >
+              <Icon name="edit" size={18} color="white" />
+              <Text style={styles.buttonText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDeleteMeal}
+            >
+              <Icon name="delete" size={18} color="white" />
+              <Text style={styles.buttonText}>Delete</Text>
+            </TouchableOpacity>
+          </>
         )}
 
         <TouchableOpacity
@@ -701,12 +743,32 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   mealName: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     color: '#1a2b49',
+    flex: 1,
+    marginRight: 10,
+  },
+  editedBadge: {
+    backgroundColor: '#ffc008',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  editedText: {
+    color: '#1a2b49',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   infoRow: {
     flexDirection: 'row',
@@ -930,6 +992,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 5,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3498db',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    marginRight: 10,
   },
 });
 

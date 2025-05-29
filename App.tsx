@@ -21,6 +21,7 @@ import RatingScreen2 from './screens/RatingScreen2';
 import ResultScreen from './screens/ResultScreen';
 import LoginScreen from './screens/LoginScreen';
 import MealDetailScreen from './screens/MealDetailScreen';
+import EditMealScreen from './screens/EditMealScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
 import * as ImagePicker from 'react-native-image-picker';
@@ -98,6 +99,11 @@ export type RootStackParamList = {
   MealDetail: {
     mealId: string;
     previousScreen?: string;
+    justEdited?: boolean;
+  };
+  EditMeal: {
+    mealId: string;
+    meal: any;
   };
 };
 
@@ -114,6 +120,7 @@ export type TabParamList = {
   RatingScreen2: RootStackParamList['RatingScreen2'];
   Result: RootStackParamList['Result'];
   MealDetail: RootStackParamList['MealDetail'];
+  EditMeal: RootStackParamList['EditMeal'];
 };
 
 // ResourceManager to track and clean temporary files and resources
@@ -449,6 +456,14 @@ function TabNavigator() {
         component={MealDetailScreen}
         options={{
           headerShown: false, // Hide the header
+          tabBarButton: () => null, // Hide from tab bar
+        }}
+      />
+      <Tab.Screen
+        name="EditMeal"
+        component={EditMealScreen}
+        options={{
+          headerShown: false, // Hide the header since we add our own
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
