@@ -255,6 +255,7 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 10,
+    paddingTop: 5, // Reduced top padding to match FoodPassportScreen
     paddingBottom: 30,
   },
   row: {

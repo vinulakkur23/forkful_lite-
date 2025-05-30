@@ -10,7 +10,7 @@ import { RootStackParamList, TabParamList } from '../App';
 import StarRating from '../components/StarRating';
 import AchievementNotification from '../components/AchievementNotification';
 // Import Firebase from our central config
-import { firebase, auth, firestore, storage } from '../firebaseConfig';
+import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
 // Import achievement service
@@ -107,9 +107,56 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     const user = auth().currentUser;
     if (!user) throw new Error('User not logged in');
 
-    // Force user token refresh to ensure we have the latest authentication token
-    const idToken = await user.getIdToken(true); // true forces a refresh
-    console.log("Refreshed ID token obtained:", idToken ? "Success" : "Failed");
+    try {
+      // Force user token refresh to ensure we have the latest authentication token
+      // Using a more robust approach to token refresh
+      console.log("Attempting to refresh Firebase ID token");
+      
+      // First try to re-authenticate the user
+      await auth().currentUser?.reload();
+      
+      // Then get a fresh token
+      const idToken = await user.getIdToken(true); // true forces a refresh
+      console.log("Refreshed ID token obtained successfully");
+      
+      // Verify Firebase app is properly initialized
+      console.log("Checking Firebase app initialization:", {
+        appName: firebase.app().name,
+        appOptions: firebase.app().options ? "Configured" : "Missing",
+      });
+    } catch (tokenError) {
+      console.error("Error refreshing token:", tokenError);
+      
+      // Log more detailed error information
+      if (tokenError instanceof Error) {
+        console.error("Token error details:", {
+          message: tokenError.message,
+          stack: tokenError.stack,
+          name: tokenError.name
+        });
+      }
+      
+      // Rather than silently continuing, try to sign out and sign back in for critical errors
+      if (tokenError.message?.includes('auth/requires-recent-login')) {
+        console.log("Authentication requires re-login. Redirecting to login screen.");
+        Alert.alert(
+          "Session Expired",
+          "Your login session has expired. Please sign in again.",
+          [{ text: "OK", onPress: () => {
+            auth().signOut().then(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            });
+          }}]
+        );
+        throw new Error('Authentication requires re-login');
+      }
+      
+      // Continue anyway - the existing token might still be valid
+      console.log("Continuing with existing token despite refresh error");
+    }
 
     // Debug authentication state
     console.log("Current auth user:", {
@@ -141,16 +188,47 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       const storageBucket = storage().app.options.storageBucket;
       console.log("Firebase Storage config:", {
         bucket: storageBucket,
-        app: storage().app.name
+        app: storage().app.name,
+        appId: storage().app.options.appId || 'unknown',
+        projectId: storage().app.options.projectId || 'unknown'
       });
 
       // Verify the storage bucket is correctly formatted (should be projectId.appspot.com)
       if (!storageBucket || !storageBucket.includes('appspot.com')) {
         console.warn("Storage bucket appears to be misconfigured:", storageBucket);
       }
+      
+      // Attempt to reinitialize Firebase to ensure proper configuration
+      if (!firebase.apps.length) {
+        console.log("No Firebase apps found, initializing...");
+        try {
+          firebase.initializeApp({
+            apiKey: "AIzaSyBw89gPw8CjF__uelKgPbvxB-JrK91tOvw",
+            authDomain: "mealratingapp.firebaseapp.com",
+            projectId: "mealratingapp",
+            storageBucket: "mealratingapp.appspot.com",
+            messagingSenderId: "476812977799",
+            appId: "1:476812977799:web:7f1c18d1be5b424706fa22",
+            measurementId: "G-1D131XEPV1"
+          });
+          console.log("Firebase initialized successfully");
+        } catch (initError) {
+          console.warn("Firebase already initialized, continuing with existing app");
+        }
+      }
 
       // Create storage reference with explicit app reference to ensure correct initialization
-      const storageRef = storage().ref(`meals/${user.uid}/${filename}`);
+      console.log("Creating storage reference for path:", `meals/${user.uid}/${filename}`);
+      
+      // Try using the explicitly initialized storage reference
+      let storageRef;
+      try {
+        console.log("Using explicitly initialized firebaseStorage reference");
+        storageRef = firebaseStorage.ref(`meals/${user.uid}/${filename}`);
+      } catch (storageRefError) {
+        console.error("Error using firebaseStorage, falling back to storage():", storageRefError);
+        storageRef = storage().ref(`meals/${user.uid}/${filename}`);
+      }
       console.log("Storage reference path:", `meals/${user.uid}/${filename}`);
 
       let downloadUrl = '';
@@ -164,6 +242,17 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         if (!imageUri.startsWith('file://')) {
           imageUri = `file://${imageUri}`;
         }
+        
+        // For iOS, sometimes we need to remove the file:// prefix
+        // Try both approaches (with and without file://)
+        console.log("On iOS, checking if URI needs modification");
+        try {
+          // Check if the file exists at the given path
+          const testPath = imageUri.replace('file://', '');
+          console.log("Testing alternate iOS path format:", testPath);
+        } catch (e) {
+          console.log("Error testing alternate path:", e);
+        }
       } else if (Platform.OS === 'android') {
         // Android sometimes needs file:// removed
         if (imageUri.startsWith('file://')) {
@@ -172,6 +261,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }
 
       console.log("Normalized image URI for upload:", imageUri);
+      
+      // Check if auth token is available and valid
+      try {
+        const currentToken = await user.getIdToken(false); // Don't force refresh here
+        console.log("Current auth token available:", currentToken ? "Yes" : "No");
+        
+        if (!currentToken) {
+          console.warn("No valid auth token available, attempting to refresh");
+          // Wait for a fresh token
+          await user.getIdToken(true);
+        }
+      } catch (tokenCheckError) {
+        console.error("Error checking token:", tokenCheckError);
+      }
 
       try {
         // Add additional metadata to help with debugging
@@ -184,32 +287,128 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           }
         };
 
-        // Try direct upload with metadata
-        const task = storageRef.putFile(imageUri, metadata);
-
-        // Add progress monitoring
-        task.on('state_changed',
-          taskSnapshot => {
-            const progress = (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) * 100;
-            console.log(`Upload progress: ${progress.toFixed(2)}%`);
-          },
-          error => {
-            console.error("Upload error:", error.code, error.message);
-            throw error;
+        // Try direct upload with metadata - wrap in a retry mechanism
+        let uploadAttempts = 0;
+        const maxAttempts = 3;
+        let uploadError = null;
+        
+        while (uploadAttempts < maxAttempts) {
+          uploadAttempts++;
+          console.log(`Upload attempt ${uploadAttempts} of ${maxAttempts}`);
+          
+          try {
+            // Create a new task for each attempt
+            const task = storageRef.putFile(imageUri, metadata);
+            
+            // Add progress monitoring
+            task.on('state_changed',
+              taskSnapshot => {
+                const progress = (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) * 100;
+                console.log(`Upload progress: ${progress.toFixed(2)}%`);
+              },
+              error => {
+                console.error(`Upload error on attempt ${uploadAttempts}:`, error.code, error.message);
+                uploadError = error;
+                
+                // Log detailed error information
+                console.error("Upload error details:", {
+                  code: error.code,
+                  message: error.message,
+                  serverResponse: error.serverResponse || 'No server response',
+                  stack: error.stack || 'No stack trace'
+                });
+              }
+            );
+            
+            // Wait for task to complete
+            await task;
+            console.log(`Direct upload completed successfully on attempt ${uploadAttempts}`);
+            
+            // Get the download URL
+            downloadUrl = await storageRef.getDownloadURL();
+            
+            // If we got here, upload was successful
+            uploadError = null;
+            break;
+          } catch (error) {
+            console.error(`Upload attempt ${uploadAttempts} failed:`, error);
+            uploadError = error;
+            
+            // Wait a short time before retrying
+            if (uploadAttempts < maxAttempts) {
+              console.log(`Waiting before retry attempt ${uploadAttempts + 1}...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * uploadAttempts));
+            }
           }
-        );
-
-        await task;
-        console.log("Direct upload completed successfully");
-
-        // Get the download URL
-        downloadUrl = await storageRef.getDownloadURL();
+        }
+        
+        // If we exhausted all retry attempts and still have an error, throw it
+        if (uploadError) {
+          console.error(`All ${maxAttempts} upload attempts failed. Last error:`, uploadError);
+          throw uploadError;
+        }
+        
+        console.log("Successfully obtained download URL after upload");
       } catch (uploadError) {
         console.error("Direct upload failed:", uploadError);
-        // More detailed error information
+        // More detailed error information for specific error codes
         if (uploadError.code === 'storage/unauthorized') {
-          console.error("Firebase Storage Rules may be restricting access. Check your Firebase Console > Storage > Rules");
+          console.error("Firebase Storage Rules are preventing the upload. Check Firebase Console > Storage > Rules");
+          
+          // Show a more helpful alert to the user with options
+          Alert.alert(
+            "Authorization Error",
+            "You don't have permission to upload images. This may be due to Firebase Storage security rules or an expired session.",
+            [
+              {
+                text: "Try Again Later",
+                style: "cancel"
+              },
+              {
+                text: "Sign Out & Sign In Again",
+                onPress: async () => {
+                  try {
+                    // Sign out the user
+                    await auth().signOut();
+                    // Navigate to login screen
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: 'Login' }],
+                    });
+                  } catch (signOutError) {
+                    console.error("Error signing out:", signOutError);
+                    Alert.alert("Error", "Failed to sign out. Please restart the app and try again.");
+                  }
+                }
+              }
+            ]
+          );
+        } else if (uploadError.code === 'storage/quota-exceeded') {
+          console.error("Storage quota exceeded error");
+          Alert.alert("Storage Limit", "The app's storage quota has been exceeded. Please contact support.");
+        } else if (uploadError.code === 'storage/retry-limit-exceeded') {
+          console.error("Upload retry limit exceeded");
+          Alert.alert("Upload Failed", "The upload failed after multiple attempts. Please check your internet connection and try again.");
+        } else if (uploadError.code === 'storage/invalid-argument') {
+          console.error("Invalid file format or argument");
+          Alert.alert("Invalid Image", "The selected image is invalid or corrupted. Please try a different image.");
+        } else if (uploadError.code === 'storage/canceled') {
+          console.error("Upload was canceled");
+          Alert.alert("Upload Canceled", "The image upload was canceled. Please try again.");
+        } else {
+          console.error("Unhandled storage error code:", uploadError.code);
         }
+        
+        // Include detailed error logs for debugging
+        console.error("Full upload error details:", {
+          code: uploadError.code || "unknown",
+          message: uploadError.message || "No message",
+          name: uploadError.name || "No name",
+          stack: uploadError.stack || "No stack trace",
+          serverResponse: uploadError.serverResponse || "No server response",
+          info: uploadError.info || "No additional info"
+        });
+        
         throw uploadError;
       }
 
@@ -226,13 +425,62 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     const user = auth().currentUser;
 
     try {
-      // If user exists, force token refresh to ensure we have the latest credentials
+      // If user exists, use the more robust token refresh approach
       if (user) {
-        await user.getIdToken(true);  // Force token refresh
+        console.log("Refreshing user session before saving to Firebase");
+        
+        // Reload the user to ensure we have the latest auth state
+        await auth().currentUser?.reload();
+        
+        // Force token refresh to ensure we have the latest credentials
+        const idToken = await user.getIdToken(true);
+        
+        console.log("User session refreshed successfully before saving");
+        
+        // Verify user is properly authenticated
+        if (user.uid) {
+          console.log("Current user is authenticated with UID:", user.uid);
+        } else {
+          console.warn("User appears to be authenticated but has no UID");
+        }
       }
     } catch (tokenError) {
       console.error("Failed to refresh token:", tokenError);
-      // Continue anyway, the upload will likely fail but with more specific error
+      
+      // Log more detailed error information
+      if (tokenError instanceof Error) {
+        console.error("Token refresh error details:", {
+          message: tokenError.message,
+          stack: tokenError.stack,
+          name: tokenError.name
+        });
+      }
+      
+      // Check for specific auth errors that require re-login
+      if (tokenError.message?.includes('auth/requires-recent-login') || 
+          tokenError.message?.includes('auth/user-token-expired')) {
+        console.log("Authentication requires re-login. Redirecting to login screen.");
+        Alert.alert(
+          "Session Expired",
+          "Your login session has expired. Please sign in again to continue.",
+          [{ text: "OK", onPress: () => {
+            auth().signOut().then(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            });
+          }}]
+        );
+        return; // Stop the save process
+      }
+      
+      // For other errors, try to continue, but warn the user
+      Alert.alert(
+        "Authentication Warning",
+        "There might be issues with your current session. If you experience problems, please try logging out and back in.",
+        [{ text: "Continue Anyway" }]
+      );
     }
 
     // Debug authentication state

@@ -72,14 +72,112 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [showWishlist, setShowWishlist] = useState<boolean>(false); // Toggle between user's meals and saved meals
   
   // Map view reference
   const mapRef = useRef<MapView | null>(null);
 
   useEffect(() => {
-    fetchMealEntries();
-  }, []);
+    if (showWishlist) {
+      fetchSavedMeals();
+    } else {
+      fetchMealEntries();
+    }
+  }, [showWishlist]); // Re-fetch when toggling between modes
 
+  const fetchSavedMeals = async () => {
+    try {
+      setLoading(true);
+      const userId = auth().currentUser?.uid;
+      
+      if (!userId) {
+        setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+      
+      // Get list of saved meal IDs first
+      const savedMealsRef = firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('savedMeals');
+      
+      const savedMealsSnapshot = await savedMealsRef.get();
+      const savedMealIds = savedMealsSnapshot.docs.map(doc => doc.data().mealId);
+      
+      if (savedMealIds.length === 0) {
+        // No saved meals
+        setAllMeals([]);
+        setFilteredMeals([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Fetch full meal details for each saved meal ID
+      const fetchedMeals: MealEntry[] = [];
+      
+      // Process in batches to avoid potential issues with large arrays
+      const batchSize = 10;
+      for (let i = 0; i < savedMealIds.length; i += batchSize) {
+        const batch = savedMealIds.slice(i, i + batchSize);
+        
+        // For each batch, get the actual meal data
+        for (const mealId of batch) {
+          try {
+            const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+            
+            if (mealDoc.exists) {
+              const data = mealDoc.data();
+              
+              // Only include meals that have location data
+              if (data.location) {
+                // Make sure aiMetadata has the expected properties
+                const aiMetadata = data.aiMetadata || {};
+                
+                fetchedMeals.push({
+                  id: mealDoc.id,
+                  photoUrl: data.photoUrl,
+                  rating: data.rating,
+                  restaurant: data.restaurant || '',
+                  meal: data.meal || '',
+                  userId: data.userId,
+                  location: data.location,
+                  createdAt: data.createdAt?.toDate?.() || Date.now(),
+                  aiMetadata: {
+                    cuisineType: aiMetadata.cuisineType || 'Unknown',
+                    foodType: aiMetadata.foodType || 'Unknown',
+                    mealType: aiMetadata.mealType || 'Unknown',
+                    primaryProtein: aiMetadata.primaryProtein || 'Unknown',
+                    dietType: aiMetadata.dietType || 'Unknown',
+                    eatingMethod: aiMetadata.eatingMethod || 'Unknown',
+                    setting: aiMetadata.setting || 'Unknown',
+                    platingStyle: aiMetadata.platingStyle || 'Unknown',
+                    beverageType: aiMetadata.beverageType || 'Unknown'
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`Error fetching meal ${mealId}:`, err);
+          }
+        }
+      }
+      
+      setAllMeals(fetchedMeals);
+      applyFilter(fetchedMeals, activeFilters);
+      setLoading(false);
+      
+      // Trigger map fitting after data is loaded
+      if (fetchedMeals.length > 0 && mapRef.current) {
+        setTimeout(() => fitMapToMarkers(), 500);
+      }
+    } catch (err: any) {
+      console.error('Error fetching saved meals:', err);
+      setError(`Failed to load saved meals: ${err.message}`);
+      setLoading(false);
+    }
+  };
+  
   const fetchMealEntries = async () => {
     try {
       setLoading(true);
@@ -215,16 +313,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     setFilteredMeals(result);
   };
   
-  // Update the filter whenever activeFilters changes
+  // Update the filter whenever activeFilters changes or when switching between modes
   useEffect(() => {
-    console.log('MapScreen: activeFilters changed:', activeFilters);
+    console.log('MapScreen: activeFilters changed or showWishlist toggled');
     applyFilter(allMeals, activeFilters);
     
     // When filter changes and we have meals, fit the map to show them
     if (filteredMeals.length > 0 && mapRef.current && !loading) {
       setTimeout(() => fitMapToMarkers(), 500); // Small delay to ensure filteredMeals is updated
     }
-  }, [activeFilters, allMeals]);
+  }, [activeFilters, allMeals, showWishlist]);
   
   // Request location permission and get current position
   const requestLocationPermission = async () => {
@@ -277,7 +375,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     );
   };
   
-  // Effect to handle tab activation
+  // Effect to handle tab activation or switching between My Meals and Wishlist
   useEffect(() => {
     if (isActive && mapRef.current) {
       // If we have filtered meals, fit map to those pins
@@ -288,7 +386,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
         requestLocationPermission();
       }
     }
-  }, [isActive, filteredMeals.length]);
+  }, [isActive, filteredMeals.length, showWishlist]);
   
   // Function to fit map to all markers
   const fitMapToMarkers = () => {
@@ -463,7 +561,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   if (filteredMeals.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Icon name="place" size={64} color="#ddd" />
+        <Icon name={showWishlist ? "bookmark" : "place"} size={64} color="#ddd" />
         {activeFilters && activeFilters.length > 0 ? (
           <>
             <Text style={styles.emptyText}>No meals match your filters</Text>
@@ -473,10 +571,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
           </>
         ) : (
           <>
-            <Text style={styles.emptyText}>No meals with location data</Text>
-            <Text style={styles.emptySubtext}>
-              Add meals with location information to see them on the map
-            </Text>
+            {showWishlist ? (
+              <>
+                <Text style={styles.emptyText}>No saved meals with location data</Text>
+                <Text style={styles.emptySubtext}>
+                  Save meals by tapping the bookmark icon on the meal details screen
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyText}>No meals with location data</Text>
+                <Text style={styles.emptySubtext}>
+                  Add meals with location information to see them on the map
+                </Text>
+              </>
+            )}
           </>
         )}
       </View>
@@ -501,7 +610,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
             }}
             title={meal.meal || 'Untitled meal'}
             description={meal.restaurant || ''}
-            pinColor="#ff6b6b"
+            pinColor={showWishlist ? "#ffc008" : "#ff6b6b"}
           >
             <Callout
               tooltip
@@ -524,6 +633,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
                 {meal.restaurant && (
                   <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
                 )}
+                {showWishlist && (
+                  <View style={styles.calloutSavedBadge}>
+                    <Icon name="bookmark" size={10} color="#fff" />
+                    <Text style={styles.calloutSavedText}>Saved</Text>
+                  </View>
+                )}
                 <Text style={styles.calloutTapText}>Tap to view details</Text>
               </View>
             </Callout>
@@ -531,6 +646,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
         ))}
       </MapView>
 
+      {/* Wishlist Toggle Button */}
+      <View style={styles.wishlistToggleContainer}>
+        <TouchableOpacity
+          style={[styles.wishlistToggleButton, showWishlist && styles.wishlistActive]}
+          onPress={() => setShowWishlist(!showWishlist)}
+        >
+          <Image
+            source={showWishlist 
+              ? require('../assets/icons/wishlist-active.png')
+              : require('../assets/icons/wishlist-inactive.png')}
+            style={styles.wishlistButtonIcon}
+            resizeMode="contain"
+          />
+          <Text style={styles.wishlistToggleText}>
+            {showWishlist ? `Wishlist (${filteredMeals.length})` : `My Meals (${filteredMeals.length})`}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      
       {/* Floating buttons */}
       <View style={styles.buttonContainer}>
         {/* My Location button - to center on user's current location */}
@@ -665,6 +799,57 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 5,
+  },
+  wishlistToggleContainer: {
+    position: 'absolute',
+    top: 10, // Reduced from 16 to 10 for less space at the top
+    left: 16,
+    zIndex: 1,
+  },
+  wishlistToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  wishlistActive: {
+    backgroundColor: '#ffc008',
+  },
+  wishlistToggleText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: 5,
+    fontSize: 14,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  calloutSavedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffc008',
+    paddingVertical: 2,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  calloutSavedText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 3,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  wishlistButtonIcon: {
+    width: 18,
+    height: 18,
+    tintColor: 'white',
   },
 });
 

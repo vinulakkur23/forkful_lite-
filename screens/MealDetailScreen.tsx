@@ -408,10 +408,12 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.headerRightButton}
           onPress={toggleSaveMeal}
         >
-          <Icon 
-            name={isSaved ? "bookmark" : "bookmark-outline"}
-            size={24}
-            color={isSaved ? "#ffc008" : "#1a2b49"}
+          <Image
+            source={isSaved 
+              ? require('../assets/icons/wishlist-active.png')
+              : require('../assets/icons/wishlist-inactive.png')}
+            style={styles.wishlistIcon}
+            resizeMode="contain"
           />
         </TouchableOpacity>
       </View>
@@ -707,6 +709,11 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     tintColor: '#1a2b49',
+    resizeMode: 'contain',
+  },
+  wishlistIcon: {
+    width: 28,
+    height: 28,
     resizeMode: 'contain',
   },
   container: {

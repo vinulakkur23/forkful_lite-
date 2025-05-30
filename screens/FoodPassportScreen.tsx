@@ -671,7 +671,8 @@ const styles = StyleSheet.create({
     profileCard: {
         backgroundColor: '#FAF3E0',
         margin: 10,
-        marginTop: 10,
+        marginTop: 0,  // Reduced from 10 to 0 to move card up
+        marginBottom: 8, // Slightly reduced bottom margin 
         borderRadius: 12,
         padding: 10,
         shadowColor: '#000',
@@ -783,6 +784,7 @@ const styles = StyleSheet.create({
     },
     list: {
         padding: 10,
+        paddingTop: 5, // Reduced top padding
         paddingBottom: 30,
     },
     row: {

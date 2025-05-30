@@ -24,8 +24,10 @@ The following achievements are defined in the app, and their image files should 
 | Achievement ID      | Image Filename          | Description                       |
 |--------------------|-----------------------|-----------------------------------|
 | `first_bite`       | `first_bite.png`      | Earned after posting first meal   |
-| `stubtown_starter` | `stubtown_starter.png`| Earned after posting in Portland  |
+| `stumptown_starter` | `stumptown_starter.png`| Earned after posting in Portland  |
 | `big_apple_bite`   | `big_apple_bite.png`  | Earned after posting in NYC       |
+| `catch_of_the_day` | `catch_of_the_day.png`| Earned after posting seafood meal |
+| `plant_curious`    | `plant_curious.png`   | Earned after posting vegetarian meal |
 
 ## Important Notes
 

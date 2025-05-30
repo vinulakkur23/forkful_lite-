@@ -71,7 +71,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
     // Use require statements for bundled images - these would need to be added in advance
     const images = {
       'first_bite': require('../assets/stamps/first_bite.png'),
-      'stubtown_starter': require('../assets/stamps/stubtown_starter.png'),
+      'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
       'big_apple_bite': require('../assets/stamps/big_apple_bite.png')
     };
     

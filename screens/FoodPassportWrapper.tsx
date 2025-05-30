@@ -89,8 +89,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     { 
       key: 'saved', 
       title: 'Saved', 
-      activeIcon: { uri: 'BookmarkActive' },  // We'll render a custom icon
-      inactiveIcon: { uri: 'BookmarkInactive' }
+      activeIcon: require('../assets/icons/wishlist-active.png'),
+      inactiveIcon: require('../assets/icons/wishlist-inactive.png')
     },
     { 
       key: 'map', 
@@ -240,19 +240,11 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             ]}
             onPress={() => setTabIndex(i)}
           >
-            {route.key === 'saved' ? (
-              <Icon 
-                name={tabIndex === i ? "bookmark" : "bookmark-outline"}
-                size={28}
-                color={tabIndex === i ? "#ff6b6b" : "#666"}
-              />
-            ) : (
-              <Image
-                source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
-                style={styles.tabIcon}
-                resizeMode="contain"
-              />
-            )}
+            <Image
+              source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
+              style={styles.tabIcon}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         ))}
       </View>
@@ -314,8 +306,8 @@ const styles = StyleSheet.create({
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingTop: 5,
-    paddingBottom: 10,
+    paddingTop: 3, // Reduced from 5 to 3
+    paddingBottom: 8, // Reduced from 10 to 8
     backgroundColor: '#FAF9F6',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',

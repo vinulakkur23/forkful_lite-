@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   selectedFiltersContainer: {
-    marginTop: 8,
+    marginTop: 5, // Reduced from 8 to 5
     width: '100%',
   },
   filtersScrollContent: {
@@ -373,10 +373,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffc008',
     borderRadius: 16,
-    paddingVertical: 4,
+    paddingVertical: 3, // Reduced from 4 to 3
     paddingHorizontal: 8,
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 6, // Reduced from 8 to 6
   },
   filterBadgeText: {
     color: '#fff',
@@ -390,10 +390,10 @@ const styles = StyleSheet.create({
   clearAllButton: {
     backgroundColor: '#666',
     borderRadius: 16,
-    paddingVertical: 4,
+    paddingVertical: 3, // Reduced from 4 to 3
     paddingHorizontal: 10,
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 6, // Reduced from 8 to 6
   },
   clearAllText: {
     color: '#fff',

@@ -18,10 +18,10 @@ const achievementDefinitions: AchievementDefinition[] = [
     }
   },
   {
-    id: 'stubtown_starter',
-    name: 'Stubtown Starter',
+    id: 'stumptown_starter',
+    name: 'Stumptown Starter',
     description: 'Your first meal in Portland!',
-    image: 'stubtown_starter.png',
+    image: 'stumptown_starter.png',
     criteria: {
       type: 'location_based',
       location: {
@@ -38,7 +38,7 @@ const achievementDefinitions: AchievementDefinition[] = [
       if (!mealEntry.location) return false;
       
       // Check if user already has this achievement
-      const hasAchievement = userAchievements.some(a => a.achievementId === 'stubtown_starter');
+      const hasAchievement = userAchievements.some(a => a.achievementId === 'stumptown_starter');
       if (hasAchievement) return false;
       
       // Calculate distance from Portland coordinates
@@ -93,6 +93,129 @@ const achievementDefinitions: AchievementDefinition[] = [
       
       // Check if within 30km radius
       return distance <= 30;
+    }
+  },
+  {
+    id: 'catch_of_the_day',
+    name: 'Catch of the Day',
+    description: 'Your first seafood meal!',
+    image: 'catch_of_the_day.png',
+    criteria: {
+      type: 'food_type',
+      foodType: {
+        type: 'seafood'
+      }
+    },
+    evaluate: (mealEntry, userAchievements) => {
+      // Check if user already has this achievement
+      const hasAchievement = userAchievements.some(a => a.achievementId === 'catch_of_the_day');
+      if (hasAchievement) return false;
+      
+      // Check if meal has AI metadata
+      if (!mealEntry.aiMetadata) return false;
+      
+      // Look for seafood indicators in the AI metadata
+      const seafoodKeywords = ['seafood', 'fish', 'shrimp', 'crab', 'lobster', 'salmon', 'tuna', 'sushi', 'shellfish', 'prawn', 'clam', 'mussel', 'oyster', 'scallop'];
+      
+      // Check primary protein
+      if (mealEntry.aiMetadata.primaryProtein) {
+        const protein = mealEntry.aiMetadata.primaryProtein.toLowerCase();
+        if (seafoodKeywords.some(keyword => protein.includes(keyword))) {
+          return true;
+        }
+      }
+      
+      // Check food type
+      if (mealEntry.aiMetadata.foodType) {
+        const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
+        if (seafoodKeywords.some(keyword => foodType.includes(keyword))) {
+          return true;
+        }
+      }
+      
+      // Check cuisine type for seafood indicators
+      if (mealEntry.aiMetadata.cuisineType) {
+        const cuisine = mealEntry.aiMetadata.cuisineType.toLowerCase();
+        if (cuisine.includes('seafood') || cuisine.includes('sushi') || cuisine.includes('fish')) {
+          return true;
+        }
+      }
+      
+      // Also check the meal name itself
+      if (mealEntry.meal) {
+        const mealName = mealEntry.meal.toLowerCase();
+        if (seafoodKeywords.some(keyword => mealName.includes(keyword))) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+  },
+  {
+    id: 'plant_curious',
+    name: 'Plant Curious',
+    description: 'Your first vegetarian meal!',
+    image: 'plant_curious.png',
+    criteria: {
+      type: 'food_type',
+      foodType: {
+        type: 'vegetarian'
+      }
+    },
+    evaluate: (mealEntry, userAchievements) => {
+      // Check if user already has this achievement
+      const hasAchievement = userAchievements.some(a => a.achievementId === 'plant_curious');
+      if (hasAchievement) return false;
+      
+      // Check if meal has AI metadata
+      if (!mealEntry.aiMetadata) return false;
+      
+      // Look for vegetarian indicators in the AI metadata
+      
+      // Check diet type directly
+      if (mealEntry.aiMetadata.dietType) {
+        const dietType = mealEntry.aiMetadata.dietType.toLowerCase();
+        if (dietType.includes('vegetarian') || dietType.includes('vegan') || dietType.includes('plant-based')) {
+          return true;
+        }
+      }
+      
+      // Check primary protein for plant-based options
+      if (mealEntry.aiMetadata.primaryProtein) {
+        const protein = mealEntry.aiMetadata.primaryProtein.toLowerCase();
+        const vegProteinKeywords = ['tofu', 'tempeh', 'seitan', 'legume', 'bean', 'lentil', 'chickpea', 'plant-based', 'vegetable', 'none', 'soy', 'nuts'];
+        
+        // If a clear vegetarian protein is identified
+        if (vegProteinKeywords.some(keyword => protein.includes(keyword))) {
+          return true;
+        }
+        
+        // If explicitly states "no meat"
+        if (protein.includes('no meat') || protein === 'none' || protein === 'n/a') {
+          return true;
+        }
+      }
+      
+      // Check food type
+      if (mealEntry.aiMetadata.foodType) {
+        const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
+        const vegFoodKeywords = ['salad', 'vegetable', 'vegetarian', 'vegan', 'plant-based'];
+        if (vegFoodKeywords.some(keyword => foodType.includes(keyword))) {
+          return true;
+        }
+      }
+      
+      // Also check the meal name itself
+      if (mealEntry.meal) {
+        const mealName = mealEntry.meal.toLowerCase();
+        const vegMealKeywords = ['vegetarian', 'vegan', 'plant-based', 'veggie', 'meatless'];
+        if (vegMealKeywords.some(keyword => mealName.includes(keyword))) {
+          return true;
+        }
+      }
+      
+      return false;
     }
   }
 ];
