@@ -272,6 +272,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Show follow user coming soon message
+  const showFollowMessage = () => {
+    Alert.alert(
+      "Coming Soon",
+      "Soon you'll be able to follow and explore your friends' and favorite foodie's food passport."
+    );
+  };
+
   // Process or update meal metadata using AI
   const handleProcessMetadata = async () => {
     try {
@@ -465,6 +473,26 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
         
+        {/* User who posted this meal */}
+        <TouchableOpacity 
+          style={[styles.infoRow, {marginTop: 4, marginBottom: 8}]} 
+          onPress={showFollowMessage}
+        >
+          <View style={styles.userIconContainer}>
+            {meal.userPhoto ? (
+              <Image 
+                source={{uri: meal.userPhoto}} 
+                style={styles.userAvatar}
+              />
+            ) : (
+              <Icon name="person" size={16} color="#1a2b49" />
+            )}
+          </View>
+          <Text style={styles.usernameText}>
+            {meal.userName || 'Anonymous User'}
+          </Text>
+        </TouchableOpacity>
+        
         {/* Liked and Didn't Like sections */}
         {(meal.comments?.liked || meal.comments?.disliked) && (
           <View style={styles.feedbackSection}>
@@ -547,11 +575,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={styles.shareButton}
               onPress={handleShare}
             >
-              {hasCustomIcons.SHARE ? (
-                <Image source={BUTTON_ICONS.SHARE} style={styles.buttonIcon} />
-              ) : (
-                <Icon name="share" size={20} color="white" />
-              )}
               <Text style={styles.buttonText}>Share</Text>
             </TouchableOpacity>
 
@@ -559,11 +582,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={styles.editButton}
               onPress={() => navigation.navigate('EditMeal', { mealId: mealId, meal })}
             >
-              {hasCustomIcons.EDIT ? (
-                <Image source={BUTTON_ICONS.EDIT} style={styles.buttonIcon} />
-              ) : (
-                <Icon name="edit" size={20} color="white" />
-              )}
               <Text style={styles.buttonText}>Edit</Text>
             </TouchableOpacity>
             
@@ -571,11 +589,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={styles.deleteButton}
               onPress={handleDeleteMeal}
             >
-              {hasCustomIcons.DELETE ? (
-                <Image source={BUTTON_ICONS.DELETE} style={styles.buttonIcon} />
-              ) : (
-                <Icon name="delete" size={20} color="white" />
-              )}
               <Text style={styles.buttonText}>Delete</Text>
             </TouchableOpacity>
           </>
@@ -586,11 +599,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={[styles.shareButton, styles.wideShareButton]}
               onPress={handleShare}
             >
-              {hasCustomIcons.SHARE ? (
-                <Image source={BUTTON_ICONS.SHARE} style={styles.buttonIcon} />
-              ) : (
-                <Icon name="share" size={20} color="white" />
-              )}
               <Text style={styles.buttonText}>Share</Text>
             </TouchableOpacity>
           </View>
@@ -801,6 +809,27 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
+  usernameText: {
+    fontSize: 16,
+    marginLeft: 8,
+    color: '#1a2b49',
+    textDecorationLine: 'underline',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  userIconContainer: {
+    width: 24, 
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  userAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -968,29 +997,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-evenly', // Changed from space-around to space-evenly
     padding: 20,
+    paddingTop: 10, // Reduced top padding to pull buttons higher
     alignItems: 'center', // Ensure vertical alignment
   },
   shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFC008', // Changed to orange color used for stars
+    backgroundColor: 'transparent', // Changed to transparent background
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 5,
     flex: 1, // Make all buttons take equal space
     maxWidth: '30%', // Limit maximum width
+    borderWidth: 1,
+    borderColor: '#1a2b49', // Navy blue outline
   },
   buttonText: {
-    color: 'white',
-    marginLeft: 8,
+    color: '#1a2b49', // Navy blue text
     fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   buttonIcon: {
     width: 20,
     height: 20,
-    tintColor: 'white', // Makes the icon white
+    tintColor: '#1a2b49', // Changed to navy blue
     resizeMode: 'contain',
   },
   backButton: {
@@ -1006,29 +1037,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFC008', // Changed to orange color used for stars
+    backgroundColor: 'transparent', // Changed to transparent background
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 5,
     flex: 1, // Make all buttons take equal space
     maxWidth: '30%', // Limit maximum width
+    borderWidth: 1,
+    borderColor: '#1a2b49', // Navy blue outline
   },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFC008', // Changed to orange color used for stars
+    backgroundColor: 'transparent', // Changed to transparent background
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 5,
     flex: 1, // Make all buttons take equal space
     maxWidth: '30%', // Limit maximum width
+    borderWidth: 1,
+    borderColor: '#1a2b49', // Navy blue outline
   },
   wideShareButton: {
     width: '70%', // Make the button wider when it's the only one
     maxWidth: '70%', // Override the maxWidth constraint from shareButton
     paddingHorizontal: 40, // Increase horizontal padding
     paddingVertical: 15, // Make the button taller
+    borderWidth: 1,
+    borderColor: '#1a2b49', // Navy blue outline
   },
   singleButtonContainer: {
     width: '100%',

@@ -592,6 +592,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Save meal data to Firestore, ensuring location data is preserved
         const mealData = {
           userId: user.uid,
+          // Add user name and photo from the authenticated user
+          userName: user.displayName || 'Anonymous User',
+          userPhoto: user.photoURL || null,
           photoUrl: imageUrl,
           rating,
           restaurant: restaurant || '',
@@ -657,6 +660,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             const mealEntry = {
               id: docRef.id,
               userId: user.uid,
+              // Include user name and photo for consistency
+              userName: user.displayName || 'Anonymous User',
+              userPhoto: user.photoURL || null,
               photoUrl: imageUrl,
               rating,
               restaurant: restaurant || '',

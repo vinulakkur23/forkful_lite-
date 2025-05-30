@@ -475,8 +475,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     };
   }, [filteredMeals]);
 
-  // Function to share map locations via Google Maps
+  // Function to share map locations - currently showing a coming soon message
   const shareMapToGoogleMaps = async () => {
+    // Show an overlay message about the upcoming share feature
+    Alert.alert(
+      "Coming Soon",
+      "Once the app is released, you will be able to share a Google Map with saved pins and meal cards with friends, so they can see your favorite meals in Paris, or your favorite burritos in Santa Fe. It will also prompt them to download the app via the App Store so they can explore your passport on their own.",
+      [
+        {
+          text: "OK",
+          style: "default"
+        }
+      ]
+    );
+
+    /* Original implementation commented out for future reference
     try {
       // Use filtered meals for sharing
       const mealsToShare = filteredMeals;
@@ -548,6 +561,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       console.error('Error creating share link:', error);
       Alert.alert('Error', 'Could not create share link');
     }
+    */
   };
 
   if (loading) {
