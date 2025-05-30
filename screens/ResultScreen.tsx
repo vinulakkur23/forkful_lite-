@@ -646,47 +646,46 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Store the meal ID so we can use it for achievement checking
         setMealId(docRef.id);
 
-        // Process image metadata in the background - don't wait for it to complete
-        setTimeout(() => {
-          processImageMetadata(docRef.id, imageUrl)
-            .then(metadata => {
-              console.log("AI metadata processed successfully:", metadata);
-            })
-            .catch(metadataError => {
-              console.error("Error processing AI metadata:", metadataError);
-              // Don't show an error to the user - this happens in the background
-            });
-        }, 1000);
-        
-        // Check for achievements
-        // We need to create the full meal object for achievement checking
-        const mealEntry = {
-          id: docRef.id,
-          userId: user.uid,
-          photoUrl: imageUrl,
-          rating,
-          restaurant: restaurant || '',
-          meal: meal || '',
-          mealType: mealType || 'Restaurant',
-          // Include top-level city field for consistency with saved data
-          city: cityInfo || '',
-          comments: {
-            liked: likedComment || '',
-            disliked: dislikedComment || ''
-          },
-          location: location ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            source: location.source || 'unknown',
-            city: (location.city || cityInfo || '')
-          } : null,
-          createdAt: new Date().getTime()
-        };
-        
-        // Check for achievements
-        checkAchievements(mealEntry)
+        // Process image metadata and then check for achievements
+        // This ensures we have metadata before checking for food-type based achievements
+        console.log("Starting metadata processing and achievement check flow...");
+        processImageMetadata(docRef.id, imageUrl)
+          .then(metadata => {
+            console.log("AI metadata processed successfully:", metadata);
+            
+            // Now that we have metadata, create a complete meal entry with it
+            const mealEntry = {
+              id: docRef.id,
+              userId: user.uid,
+              photoUrl: imageUrl,
+              rating,
+              restaurant: restaurant || '',
+              meal: meal || '',
+              mealType: mealType || 'Restaurant',
+              // Include top-level city field for consistency with saved data
+              city: cityInfo || '',
+              comments: {
+                liked: likedComment || '',
+                disliked: dislikedComment || ''
+              },
+              location: location ? {
+                latitude: location.latitude,
+                longitude: location.longitude,
+                source: location.source || 'unknown',
+                city: (location.city || cityInfo || '')
+              } : null,
+              createdAt: new Date().getTime(),
+              // IMPORTANT: Include the AI metadata in the achievement check
+              aiMetadata: metadata
+            };
+            
+            console.log("Checking achievements with complete metadata...");
+            
+            // Check for achievements with the metadata included
+            return checkAchievements(mealEntry);
+          })
           .then(achievements => {
-            if (achievements.length > 0) {
+            if (achievements && achievements.length > 0) {
               console.log(`Unlocked ${achievements.length} achievements:`, 
                 achievements.map(a => a.name).join(', '));
               
@@ -695,7 +694,60 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               
               // Show the first achievement notification
               if (achievements.length > 0) {
+                console.log("Setting current achievement:", achievements[0].name);
                 setCurrentAchievement(achievements[0]);
+                
+                // Force update notification visibility
+                setTimeout(() => {
+                  console.log("Achievement notification should be visible now");
+                }, 500);
+              }
+            } else {
+              console.log("No achievements unlocked for this meal");
+            }
+          })
+          .catch(error => {
+            console.error("Error in metadata/achievement flow:", error);
+            
+            // Still try to check achievements even if metadata processing failed
+            const basicMealEntry = {
+              id: docRef.id,
+              userId: user.uid,
+              photoUrl: imageUrl,
+              rating,
+              restaurant: restaurant || '',
+              meal: meal || '',
+              mealType: mealType || 'Restaurant',
+              city: cityInfo || '',
+              comments: {
+                liked: likedComment || '',
+                disliked: dislikedComment || ''
+              },
+              location: location ? {
+                latitude: location.latitude,
+                longitude: location.longitude,
+                source: location.source || 'unknown',
+                city: (location.city || cityInfo || '')
+              } : null,
+              createdAt: new Date().getTime()
+              // No aiMetadata here, but non-metadata achievements might still trigger
+            };
+            
+            console.log("Trying fallback achievement check without metadata...");
+            return checkAchievements(basicMealEntry);
+          })
+          .then(fallbackAchievements => {
+            // Handle any achievements from fallback check
+            if (fallbackAchievements && fallbackAchievements.length > 0) {
+              console.log(`Unlocked ${fallbackAchievements.length} achievements from fallback check:`, 
+                fallbackAchievements.map(a => a.name).join(', '));
+              
+              // Store the unlocked achievements
+              setUnlockedAchievements(fallbackAchievements);
+              
+              // Show the first achievement notification
+              if (fallbackAchievements.length > 0) {
+                setCurrentAchievement(fallbackAchievements[0]);
               }
             }
           })
@@ -940,6 +992,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#FAF9F6',
+    position: 'relative', // Make sure relative positioning is set for absolute children
   },
   headerSection: {
     flexDirection: 'row',

@@ -133,6 +133,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLoading(true);
       
+      // Get the current user's ID
+      const currentUserId = auth().currentUser?.uid;
+      console.log('Current user ID:', currentUserId);
+      
       // Get all meals from Firestore - we'll filter locally for nearby ones
       const querySnapshot = await firestore()
         .collection('mealEntries')
@@ -148,6 +152,12 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         
         // Skip entries without location
         if (!data.location) continue;
+        
+        // Skip entries that belong to the current user for the HomeScreen
+        if (currentUserId && data.userId === currentUserId) {
+          console.log(`Skipping own meal: ${data.meal} (${doc.id})`);
+          continue;
+        }
         
         // Calculate distance if user location is available
         let distance = null;
@@ -212,6 +222,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         ? meals.sort((a, b) => (a.distance || 9999) - (b.distance || 9999))
         : meals;
       
+      console.log(`Found ${sortedMeals.length} meals from other users`);
       setAllNearbyMeals(sortedMeals);
       // Filtered meals will be updated via the useEffect
     } catch (error) {
@@ -464,10 +475,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.emptyText}>
                 {locationError
                   ? "Couldn't access your location. Please check your settings."
-                  : "No meals found nearby"}
+                  : activeFilters && activeFilters.length > 0
+                    ? "No meals match your current filters"
+                    : "No meals from other users found nearby"}
               </Text>
               <Text style={styles.emptySubtext}>
-                Be the first to add a meal in this area!
+                {activeFilters && activeFilters.length > 0
+                  ? "Try adjusting your filters or exploring a new area"
+                  : "Share the app with friends to see their meals in your feed!"}
               </Text>
             </View>
           }

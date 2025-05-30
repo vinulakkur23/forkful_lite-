@@ -1,0 +1,6 @@
+These are placeholder files that should be replaced with proper PNG icon files.
+
+When replacing these files:
+1. Create white PNG icons with transparent backgrounds
+2. Name them exactly as specified: share-icon.png, edit-icon.png, delete-icon.png
+3. Use a consistent design style across all icons

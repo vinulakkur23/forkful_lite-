@@ -26,6 +26,8 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    console.log("AchievementNotification mounted for:", achievement.name);
+    
     // Slide in animation
     Animated.parallel([
       Animated.timing(translateY, {
@@ -38,14 +40,20 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
         duration: 500,
         useNativeDriver: true,
       })
-    ]).start();
+    ]).start(() => {
+      console.log("Achievement animation completed for:", achievement.name);
+    });
 
-    // Auto dismiss after 5 seconds
+    // Auto dismiss after 8 seconds (increased from 5)
     const timer = setTimeout(() => {
+      console.log("Auto-dismissing achievement after timeout");
       dismiss();
-    }, 5000);
+    }, 8000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      console.log("AchievementNotification unmounting");
+      clearTimeout(timer);
+    };
   }, []);
 
   const dismiss = () => {
@@ -68,20 +76,32 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 
   // Get the stamp image for the achievement
   const getStampImage = () => {
-    // Use require statements for bundled images - these would need to be added in advance
-    const images = {
-      'first_bite': require('../assets/stamps/first_bite.png'),
-      'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
-      'big_apple_bite': require('../assets/stamps/big_apple_bite.png')
-    };
-    
-    // If we have a bundled image for this achievement, use it
-    if (images[achievement.id]) {
-      return images[achievement.id];
+    try {
+      console.log("Getting stamp image for achievement:", achievement.id);
+      
+      // Use require statements for bundled images - these would need to be added in advance
+      const images = {
+        'first_bite': require('../assets/stamps/first_bite.png'),
+        'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
+        'big_apple_bite': require('../assets/stamps/big_apple_bite.png'),
+        'catch_of_the_day': require('../assets/stamps/catch_of_the_day.png'),
+        'plant_curious': require('../assets/stamps/plant_curious.png')
+      };
+      
+      // If we have a bundled image for this achievement, use it
+      if (images[achievement.id]) {
+        console.log("Found matching stamp image for:", achievement.id);
+        return images[achievement.id];
+      }
+      
+      // Otherwise fall back to a default image
+      console.log("No matching stamp image found, using default");
+      return require('../assets/stars/star-filled.png');
+    } catch (error) {
+      console.error("Error loading achievement image:", error);
+      // If there's an error (e.g., image not found), fall back to default
+      return require('../assets/stars/star-filled.png');
     }
-    
-    // Otherwise fall back to a default image
-    return require('../assets/stars/star-filled.png');
   };
 
   return (
@@ -109,7 +129,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
       </View>
 
       <TouchableOpacity style={styles.closeButton} onPress={dismiss}>
-        <Icon name="close" size={20} color="#999" />
+        <Text style={styles.closeButtonX}>×</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -118,27 +138,27 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 0,
+    top: 30,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    marginHorizontal: 10,
+    backgroundColor: '#FAF3E0', // Changed to match food card background color
+    borderRadius: 12, // Match food card radius
+    marginHorizontal: 16,
     marginTop: 10,
-    padding: 15,
+    padding: 18, // Increased padding for a bigger card
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 2, // Match food card elevation
     zIndex: 1000,
   },
   iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80, // Increased from 60
+    height: 80, // Increased from 60
+    borderRadius: 40,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
@@ -155,21 +175,36 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ff6b6b',
+    color: '#E63946', // Changed to Lobster red for DishItOut
     marginBottom: 3,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   achievementName: {
-    fontSize: 16,
+    fontSize: 18, // Increased from 16
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1a2b49', // Match HomeScreen text color
     marginBottom: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   description: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 14, // Increased from 12
+    color: '#1a2b49', // Match HomeScreen text color
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   closeButton: {
-    padding: 5,
+    padding: 8,
+    height: 30,
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonX: {
+    fontSize: 24,
+    color: '#1a2b49',
+    fontWeight: 'bold',
+    lineHeight: 24,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

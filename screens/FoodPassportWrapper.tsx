@@ -89,8 +89,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     { 
       key: 'saved', 
       title: 'Saved', 
-      activeIcon: require('../assets/icons/wishlist-active.png'),
-      inactiveIcon: require('../assets/icons/wishlist-inactive.png')
+      activeIcon: require('../assets/icons/passport_tabs/wishlist-active.png'),
+      inactiveIcon: require('../assets/icons/passport_tabs/wishlist-inactive.png')
     },
     { 
       key: 'map', 
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomColor: '#ff6b6b',
+    borderBottomColor: '#E63946', // Changed to DishItOut Lobster font red color
   },
   tabIcon: {
     width: 28,

@@ -14,6 +14,8 @@ import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { processImageMetadata, AIMetadata } from '../services/aiMetadataService';
 // Import API test
 import { testMetadataApi } from '../services/apiTest';
+// Import button icons
+import { BUTTON_ICONS, hasCustomIcons } from '../config/buttonIcons';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -502,89 +504,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
       
       {/* Action buttons */}
-      {/* AI Metadata Section */}
-      {meal.aiMetadata && (
-        <View style={styles.metadataContainer}>
-          <Text style={styles.metadataTitle}>AI Analysis</Text>
 
-          <View style={styles.metadataGrid}>
-            {meal.aiMetadata.cuisineType !== 'Unknown' && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>Cuisine</Text>
-                <Text style={styles.metadataValue}>{meal.aiMetadata.cuisineType}</Text>
-              </View>
-            )}
-
-            {meal.aiMetadata.foodType !== 'Unknown' && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>Food Type</Text>
-                <Text style={styles.metadataValue}>{meal.aiMetadata.foodType}</Text>
-              </View>
-            )}
-
-            {meal.aiMetadata.mealType !== 'Unknown' && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>Meal</Text>
-                <Text style={styles.metadataValue}>{meal.aiMetadata.mealType}</Text>
-              </View>
-            )}
-
-            {meal.aiMetadata.primaryProtein !== 'Unknown' && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>Protein</Text>
-                <Text style={styles.metadataValue}>{meal.aiMetadata.primaryProtein}</Text>
-              </View>
-            )}
-
-            {meal.aiMetadata.dietType !== 'Unknown' && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>Diet</Text>
-                <Text style={styles.metadataValue}>{meal.aiMetadata.dietType}</Text>
-              </View>
-            )}
-            
-            {/* Display city in the metadata section if available */}
-            {(meal.location?.city || meal.city) && (
-              <View style={styles.metadataItem}>
-                <Text style={styles.metadataLabel}>City</Text>
-                <Text style={styles.metadataValue}>{meal.location?.city || meal.city}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.metadataButtonsRow}>
-            <TouchableOpacity
-              style={[
-                styles.metadataButton,
-                processingMetadata && styles.disabledButton
-              ]}
-              onPress={handleProcessMetadata}
-              disabled={processingMetadata}
-            >
-              <Icon name="refresh" size={16} color="white" />
-              <Text style={styles.buttonText}>
-                {processingMetadata ? 'Processing...' : 'Update Analysis'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.apiTestButton,
-                processingMetadata && styles.disabledButton
-              ]}
-              onPress={handleTestApi}
-              disabled={processingMetadata}
-            >
-              <Icon name="api" size={16} color="white" />
-              <Text style={styles.buttonText}>
-                Test API
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Debug View for Location */}
+      {/* Debug View for Location - Commented out for production but kept for future troubleshooting
       <View style={styles.debugContainer}>
         <Text style={styles.debugTitle}>Location Debug Info:</Text>
         <View>
@@ -616,43 +537,64 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           })}</Text>
         </View>
       </View>
+      */}
       
       <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={handleShare}
-        >
-          <Icon name="share" size={18} color="white" />
-          <Text style={styles.buttonText}>Share</Text>
-        </TouchableOpacity>
-
-        {/* Only show delete button if the user is the owner */}
-        {meal.userId === auth().currentUser?.uid && (
+        {meal.userId === auth().currentUser?.uid ? (
+          // If user is the owner, show all buttons with equal sizing and spacing
           <>
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={handleShare}
+            >
+              {hasCustomIcons.SHARE ? (
+                <Image source={BUTTON_ICONS.SHARE} style={styles.buttonIcon} />
+              ) : (
+                <Icon name="share" size={20} color="white" />
+              )}
+              <Text style={styles.buttonText}>Share</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => navigation.navigate('EditMeal', { mealId: mealId, meal })}
             >
-              <Icon name="edit" size={18} color="white" />
+              {hasCustomIcons.EDIT ? (
+                <Image source={BUTTON_ICONS.EDIT} style={styles.buttonIcon} />
+              ) : (
+                <Icon name="edit" size={20} color="white" />
+              )}
               <Text style={styles.buttonText}>Edit</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={handleDeleteMeal}
             >
-              <Icon name="delete" size={18} color="white" />
+              {hasCustomIcons.DELETE ? (
+                <Image source={BUTTON_ICONS.DELETE} style={styles.buttonIcon} />
+              ) : (
+                <Icon name="delete" size={20} color="white" />
+              )}
               <Text style={styles.buttonText}>Delete</Text>
             </TouchableOpacity>
           </>
+        ) : (
+          // If not the owner, only show a centered, wider Share button
+          <View style={styles.singleButtonContainer}>
+            <TouchableOpacity
+              style={[styles.shareButton, styles.wideShareButton]}
+              onPress={handleShare}
+            >
+              {hasCustomIcons.SHARE ? (
+                <Image source={BUTTON_ICONS.SHARE} style={styles.buttonIcon} />
+              ) : (
+                <Icon name="share" size={20} color="white" />
+              )}
+              <Text style={styles.buttonText}>Share</Text>
+            </TouchableOpacity>
+          </View>
         )}
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={goBack}
-        >
-          <Icon name="arrow-back" size={18} color="white" />
-          <Text style={styles.buttonText}>Back</Text>
-        </TouchableOpacity>
       </View>
       </ScrollView>
     </SafeAreaView>
@@ -1024,23 +966,32 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-evenly', // Changed from space-around to space-evenly
     padding: 20,
+    alignItems: 'center', // Ensure vertical alignment
   },
   shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3498db',
+    backgroundColor: '#FFC008', // Changed to orange color used for stars
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     borderRadius: 5,
+    flex: 1, // Make all buttons take equal space
+    maxWidth: '30%', // Limit maximum width
   },
   buttonText: {
     color: 'white',
     marginLeft: 8,
     fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  buttonIcon: {
+    width: 20,
+    height: 20,
+    tintColor: 'white', // Makes the icon white
+    resizeMode: 'contain',
   },
   backButton: {
     flexDirection: 'row',
@@ -1055,20 +1006,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e74c3c',
+    backgroundColor: '#FFC008', // Changed to orange color used for stars
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     borderRadius: 5,
+    flex: 1, // Make all buttons take equal space
+    maxWidth: '30%', // Limit maximum width
   },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3498db',
+    backgroundColor: '#FFC008', // Changed to orange color used for stars
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     borderRadius: 5,
-    marginRight: 10,
+    flex: 1, // Make all buttons take equal space
+    maxWidth: '30%', // Limit maximum width
+  },
+  wideShareButton: {
+    width: '70%', // Make the button wider when it's the only one
+    maxWidth: '70%', // Override the maxWidth constraint from shareButton
+    paddingHorizontal: 40, // Increase horizontal padding
+    paddingVertical: 15, // Make the button taller
+  },
+  singleButtonContainer: {
+    width: '100%',
+    alignItems: 'center', // Center the single button
+    justifyContent: 'center',
   },
 });
 

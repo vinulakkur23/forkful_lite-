@@ -107,20 +107,33 @@ const achievementDefinitions: AchievementDefinition[] = [
       }
     },
     evaluate: (mealEntry, userAchievements) => {
+      console.log("Evaluating 'Catch of the Day' achievement...");
+      
       // Check if user already has this achievement
       const hasAchievement = userAchievements.some(a => a.achievementId === 'catch_of_the_day');
-      if (hasAchievement) return false;
+      if (hasAchievement) {
+        console.log("User already has 'Catch of the Day' achievement - skipping");
+        return false;
+      }
       
       // Check if meal has AI metadata
-      if (!mealEntry.aiMetadata) return false;
+      if (!mealEntry.aiMetadata) {
+        console.log("Meal is missing AI metadata for 'Catch of the Day' check");
+        console.log("Meal entry data:", JSON.stringify(mealEntry, null, 2));
+        return false;
+      }
       
       // Look for seafood indicators in the AI metadata
+      console.log("Checking for seafood indicators in metadata:", JSON.stringify(mealEntry.aiMetadata, null, 2));
+      
       const seafoodKeywords = ['seafood', 'fish', 'shrimp', 'crab', 'lobster', 'salmon', 'tuna', 'sushi', 'shellfish', 'prawn', 'clam', 'mussel', 'oyster', 'scallop'];
       
       // Check primary protein
       if (mealEntry.aiMetadata.primaryProtein) {
         const protein = mealEntry.aiMetadata.primaryProtein.toLowerCase();
+        console.log(`Primary protein: "${protein}"`);
         if (seafoodKeywords.some(keyword => protein.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood protein detected: ${protein}`);
           return true;
         }
       }
@@ -128,7 +141,9 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Check food type
       if (mealEntry.aiMetadata.foodType) {
         const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
+        console.log(`Food type: "${foodType}"`);
         if (seafoodKeywords.some(keyword => foodType.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood food type detected: ${foodType}`);
           return true;
         }
       }
@@ -136,7 +151,9 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Check cuisine type for seafood indicators
       if (mealEntry.aiMetadata.cuisineType) {
         const cuisine = mealEntry.aiMetadata.cuisineType.toLowerCase();
+        console.log(`Cuisine type: "${cuisine}"`);
         if (cuisine.includes('seafood') || cuisine.includes('sushi') || cuisine.includes('fish')) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood cuisine detected: ${cuisine}`);
           return true;
         }
       }
@@ -144,11 +161,14 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Also check the meal name itself
       if (mealEntry.meal) {
         const mealName = mealEntry.meal.toLowerCase();
+        console.log(`Meal name: "${mealName}"`);
         if (seafoodKeywords.some(keyword => mealName.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood keyword in meal name: ${mealName}`);
           return true;
         }
       }
       
+      console.log("No seafood indicators found - 'Catch of the Day' achievement not unlocked");
       return false;
     }
   },
@@ -164,19 +184,31 @@ const achievementDefinitions: AchievementDefinition[] = [
       }
     },
     evaluate: (mealEntry, userAchievements) => {
+      console.log("Evaluating 'Plant Curious' achievement...");
+      
       // Check if user already has this achievement
       const hasAchievement = userAchievements.some(a => a.achievementId === 'plant_curious');
-      if (hasAchievement) return false;
+      if (hasAchievement) {
+        console.log("User already has 'Plant Curious' achievement - skipping");
+        return false;
+      }
       
       // Check if meal has AI metadata
-      if (!mealEntry.aiMetadata) return false;
+      if (!mealEntry.aiMetadata) {
+        console.log("Meal is missing AI metadata for 'Plant Curious' check");
+        console.log("Meal entry data:", JSON.stringify(mealEntry, null, 2));
+        return false;
+      }
       
       // Look for vegetarian indicators in the AI metadata
+      console.log("Checking for vegetarian indicators in metadata:", JSON.stringify(mealEntry.aiMetadata, null, 2));
       
       // Check diet type directly
       if (mealEntry.aiMetadata.dietType) {
         const dietType = mealEntry.aiMetadata.dietType.toLowerCase();
+        console.log(`Diet type: "${dietType}"`);
         if (dietType.includes('vegetarian') || dietType.includes('vegan') || dietType.includes('plant-based')) {
+          console.log("ACHIEVEMENT UNLOCKED: 'Plant Curious' - Diet type indicates vegetarian");
           return true;
         }
       }
@@ -184,15 +216,18 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Check primary protein for plant-based options
       if (mealEntry.aiMetadata.primaryProtein) {
         const protein = mealEntry.aiMetadata.primaryProtein.toLowerCase();
+        console.log(`Primary protein: "${protein}"`);
         const vegProteinKeywords = ['tofu', 'tempeh', 'seitan', 'legume', 'bean', 'lentil', 'chickpea', 'plant-based', 'vegetable', 'none', 'soy', 'nuts'];
         
         // If a clear vegetarian protein is identified
         if (vegProteinKeywords.some(keyword => protein.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - Plant-based protein detected: ${protein}`);
           return true;
         }
         
         // If explicitly states "no meat"
         if (protein.includes('no meat') || protein === 'none' || protein === 'n/a') {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - No meat protein detected: ${protein}`);
           return true;
         }
       }
@@ -200,8 +235,10 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Check food type
       if (mealEntry.aiMetadata.foodType) {
         const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
+        console.log(`Food type: "${foodType}"`);
         const vegFoodKeywords = ['salad', 'vegetable', 'vegetarian', 'vegan', 'plant-based'];
         if (vegFoodKeywords.some(keyword => foodType.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - Vegetarian food type detected: ${foodType}`);
           return true;
         }
       }
@@ -209,12 +246,15 @@ const achievementDefinitions: AchievementDefinition[] = [
       // Also check the meal name itself
       if (mealEntry.meal) {
         const mealName = mealEntry.meal.toLowerCase();
+        console.log(`Meal name: "${mealName}"`);
         const vegMealKeywords = ['vegetarian', 'vegan', 'plant-based', 'veggie', 'meatless'];
         if (vegMealKeywords.some(keyword => mealName.includes(keyword))) {
+          console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - Vegetarian keyword in meal name: ${mealName}`);
           return true;
         }
       }
       
+      console.log("No vegetarian indicators found - 'Plant Curious' achievement not unlocked");
       return false;
     }
   }

@@ -180,10 +180,6 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
         {item.restaurant && (
           <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
         )}
-        {/* Saved badge */}
-        <View style={styles.savedBadge}>
-          <Icon name="bookmark" size={12} color="#fff" />
-        </View>
       </View>
     </TouchableOpacity>
   );
@@ -272,7 +268,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    position: 'relative', // For positioning the saved badge
   },
   mealImage: {
     width: '100%',
@@ -324,14 +319,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 5,
   },
-  savedBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#ffc008',
-    borderBottomLeftRadius: 8,
-    padding: 4,
-  }
 });
 
 export default SavedMealsScreen;

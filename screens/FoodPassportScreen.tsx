@@ -605,7 +605,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                                                 <Text style={styles.statValue}>
                                                     {profileStats.badgeCount}
                                                 </Text>
-                                                <Text style={styles.statLabel}>Badges</Text>
+                                                <Text style={styles.statLabel}>Stamps</Text>
                                             </View>
                                         </View>
                                     </View>
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
     },
     // Profile Card Styles
     profileCard: {
-        backgroundColor: '#FAF3E0',
+        backgroundColor: '#fff',
         margin: 10,
         marginTop: 0,  // Reduced from 10 to 0 to move card up
         marginBottom: 8, // Slightly reduced bottom margin 
@@ -680,6 +680,8 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
+        borderWidth: 1,
+        borderColor: '#FAF3E0',
     },
     profileHeader: {
         flexDirection: 'row',
@@ -718,7 +720,7 @@ const styles = StyleSheet.create({
     profileStats: {
         flexDirection: 'row',
         borderTopWidth: 1,
-        borderTopColor: '#ffc008',
+        borderTopColor: '#FAF3E0',
         paddingTop: 10,
     },
     filterContainer: {
@@ -756,7 +758,7 @@ const styles = StyleSheet.create({
     },
     statDivider: {
         width: 1,
-        backgroundColor: '#ffc008',
+        backgroundColor: '#FAF3E0',
         marginHorizontal: 10,
     },
     statValue: {

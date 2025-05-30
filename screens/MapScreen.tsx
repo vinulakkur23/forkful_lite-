@@ -27,6 +27,7 @@ import { FilterItem } from '../components/SimpleFilterComponent';
 const MAP_ICONS = {
   myLocation: require('../assets/icons/map/my-location.png'),
   share: require('../assets/icons/map/share.png'),
+  checkmark: { uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAA8klEQVR4nO2VMU7DQBBF3xaUBpooJQ2hpPYFkhtwAtLQpM0dcgFEGuqUdDkFdLkDcAJS0FBkCyOtbCsKGstJSvKkkUYz+1/P7swG/o0JKlzwSI4FNV44IseZZB94HMbPVaRQ0OJU0PziMiixJ1h9sxkdwRRHWLMtXIJdwfKH7l2CE8F8DdeRGQyxF1M4L8d0xZUbQbvDZRKCDTWzKAIHM4zjXuMkgaDBbkzhuAZX1DngELeJXZQz6AmqFRCPRNDinncFFS7/4OpLJHbRfYcgBXV8+vQTcT9SbfVcx39uqSBf8Kn5rmDYWNgJsZygCZYf+HfeAe9jVYQkXxGBAAAAAElFTkSuQmCC' }
 };
 
 type MapScreenProps = {
@@ -610,7 +611,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
             }}
             title={meal.meal || 'Untitled meal'}
             description={meal.restaurant || ''}
-            pinColor={showWishlist ? "#ffc008" : "#ff6b6b"}
+            pinColor={showWishlist ? "#FFC008" : "#E63946"}
           >
             <Callout
               tooltip
@@ -639,7 +640,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
                     <Text style={styles.calloutSavedText}>Saved</Text>
                   </View>
                 )}
-                <Text style={styles.calloutTapText}>Tap to view details</Text>
+                <Text style={[
+                  styles.calloutTapText,
+                  { color: showWishlist ? '#FFC008' : '#E63946' }
+                ]}>Tap to view details</Text>
               </View>
             </Callout>
           </Marker>
@@ -652,13 +656,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
           style={[styles.wishlistToggleButton, showWishlist && styles.wishlistActive]}
           onPress={() => setShowWishlist(!showWishlist)}
         >
-          <Image
-            source={showWishlist 
-              ? require('../assets/icons/wishlist-active.png')
-              : require('../assets/icons/wishlist-inactive.png')}
-            style={styles.wishlistButtonIcon}
-            resizeMode="contain"
-          />
+          {showWishlist && (
+            <Image
+              source={require('../assets/icons/wishlist-active.png')}
+              style={styles.wishlistButtonIcon}
+              resizeMode="contain"
+            />
+          )}
           <Text style={styles.wishlistToggleText}>
             {showWishlist ? `Wishlist (${filteredMeals.length})` : `My Meals (${filteredMeals.length})`}
           </Text>
@@ -669,7 +673,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       <View style={styles.buttonContainer}>
         {/* My Location button - to center on user's current location */}
         <TouchableOpacity
-          style={[styles.floatingButton, styles.locationButton]}
+          style={[
+            styles.floatingButton, 
+            styles.locationButton, 
+            showWishlist && { backgroundColor: 'rgba(255, 192, 8, 0.5)' }
+          ]}
           onPress={requestLocationPermission}
         >
           <Image source={MAP_ICONS.myLocation} style={styles.buttonIcon} />
@@ -677,7 +685,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
         
         {/* Share button */}
         <TouchableOpacity
-          style={[styles.floatingButton, styles.locationButton]}
+          style={[
+            styles.floatingButton, 
+            styles.locationButton, 
+            showWishlist && { backgroundColor: 'rgba(255, 192, 8, 0.5)' }
+          ]}
           onPress={shareMapToGoogleMaps}
         >
           <Image source={MAP_ICONS.share} style={styles.buttonIcon} />
@@ -727,12 +739,12 @@ const styles = StyleSheet.create({
   buttonContainer: {
     position: 'absolute',
     right: 16,
-    bottom: 30,
+    bottom: 16,
     flexDirection: 'column',
     alignItems: 'flex-end',
   },
   floatingButton: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'rgba(230, 57, 70, 0.5)', // Lobster red with much lower opacity
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
@@ -795,7 +807,6 @@ const styles = StyleSheet.create({
   },
   calloutTapText: {
     fontSize: 10,
-    color: '#ff6b6b',
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 5,
@@ -809,7 +820,7 @@ const styles = StyleSheet.create({
   wishlistToggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#E63946', // Changed to Lobster red color for "My Meals" mode
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
@@ -820,7 +831,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   wishlistActive: {
-    backgroundColor: '#ffc008',
+    backgroundColor: '#FFC008', // Orange color for "Wishlist" mode
   },
   wishlistToggleText: {
     color: 'white',

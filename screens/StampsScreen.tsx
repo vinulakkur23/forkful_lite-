@@ -84,20 +84,32 @@ const StampsScreen: React.FC = () => {
 
   // Helper function to get the appropriate stamp image
   const getStampImage = (achievementId: string) => {
-    // Use require statements for bundled images - these would need to be added in advance
-    const images = {
-      'first_bite': require('../assets/stamps/first_bite.png'),
-      'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
-      'big_apple_bite': require('../assets/stamps/big_apple_bite.png')
-    };
-    
-    // If we have a bundled image for this achievement, use it
-    if (images[achievementId]) {
-      return images[achievementId];
+    try {
+      console.log("StampsScreen: Loading stamp image for:", achievementId);
+      
+      // Use require statements for bundled images - these would need to be added in advance
+      const images = {
+        'first_bite': require('../assets/stamps/first_bite.png'),
+        'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
+        'big_apple_bite': require('../assets/stamps/big_apple_bite.png'),
+        'catch_of_the_day': require('../assets/stamps/catch_of_the_day.png'),
+        'plant_curious': require('../assets/stamps/plant_curious.png')
+      };
+      
+      // If we have a bundled image for this achievement, use it
+      if (images[achievementId]) {
+        console.log("StampsScreen: Found stamp image for:", achievementId);
+        return images[achievementId];
+      }
+      
+      // Otherwise fall back to a default image
+      console.log("StampsScreen: No stamp image found for:", achievementId, "- using default");
+      return require('../assets/stars/star-filled.png');
+    } catch (error) {
+      console.error("StampsScreen: Error loading stamp image for:", achievementId, error);
+      // If there's an error (e.g., image not found), fall back to default
+      return require('../assets/stars/star-filled.png');
     }
-    
-    // Otherwise fall back to a default image
-    return require('../assets/stars/star-filled.png');
   };
 
   const renderAchievementItem = ({ item }: { item: AchievementDisplayItem }) => (
@@ -173,7 +185,7 @@ const StampsScreen: React.FC = () => {
                   style={styles.closeButton}
                   onPress={closeAchievementDetail}
                 >
-                  <Icon name="close" size={24} color="#888" />
+                  <Text style={styles.closeButtonX}>×</Text>
                 </TouchableOpacity>
                 
                 <View style={[
@@ -201,7 +213,6 @@ const StampsScreen: React.FC = () => {
                 
                 {selectedAchievement.earned ? (
                   <View style={styles.statusContainer}>
-                    <Icon name="check-circle" size={18} color="#4CAF50" />
                     <Text style={styles.statusText}>
                       Earned on {formatDate(selectedAchievement.earnedAt)}
                     </Text>
@@ -243,13 +254,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginHorizontal: 15,
     marginTop: 15,
-    color: '#333',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#1a2b49',
     marginHorizontal: 15,
     marginBottom: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   stampsList: {
     padding: 15,
@@ -263,7 +276,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,
-    backgroundColor: 'white',
+    backgroundColor: '#FAF3E0', // Updated to match app's card background color
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -306,17 +319,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   earnedStampText: {
-    color: '#333',
+    color: '#1a2b49', // Updated to match app's text color
   },
   unearnedStampText: {
     color: '#888',
   },
   earnedDate: {
     fontSize: 10,
-    color: '#888',
+    color: '#1a2b49', // Updated to match app's text color but slightly lighter
     marginTop: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   emptyContainer: {
     flex: 1,
@@ -327,14 +342,16 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#555',
+    color: '#1a2b49',
     marginTop: 15,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#888',
+    color: '#1a2b49',
     textAlign: 'center',
     marginTop: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Detail modal styles
   detailOverlay: {
@@ -350,7 +367,7 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     width: width * 0.8,
-    backgroundColor: 'white',
+    backgroundColor: '#FAF3E0', // Updated to match app's card background color
     borderRadius: 15,
     padding: 20,
     alignItems: 'center',
@@ -360,6 +377,19 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     padding: 5,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  closeButtonX: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailIconContainer: {
     width: 100,
@@ -385,12 +415,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     textAlign: 'center',
+    color: '#1a2b49', // Updated to match app's text color
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailDescription: {
     fontSize: 16,
-    color: '#666',
+    color: '#1a2b49', // Updated to match app's text color
     textAlign: 'center',
     marginBottom: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   statusContainer: {
     flexDirection: 'row',
@@ -398,9 +431,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   statusText: {
-    marginLeft: 5,
     fontSize: 14,
-    color: '#666',
+    color: '#1a2b49', // Updated to match app's text color
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 
