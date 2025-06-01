@@ -96,11 +96,24 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             // Sign in with Firebase
             console.log("5. Attempting Firebase authentication...");
             // Use auth directly - and note that signInWithCredential is a method on auth()
-            await auth().signInWithCredential(googleCredential);
+            const userCredential = await auth().signInWithCredential(googleCredential);
             console.log("6. Firebase auth completed successfully!");
             
+            // Update the user profile with Google information
+            if (userCredential.user && userInfo.user) {
+              console.log("7. Updating user profile with Google info (from tokens path)");
+              await userCredential.user.updateProfile({
+                displayName: userInfo.user.name || userInfo.user.email?.split('@')[0] || 'User',
+                photoURL: userInfo.user.photo || null
+              });
+              console.log("User profile updated with:", {
+                displayName: userInfo.user.name,
+                photoURL: userInfo.user.photo
+              });
+            }
+            
             // Add manual navigation to MainTabs here
-            console.log("7. Manual navigation to MainTabs");
+            console.log("8. Manual navigation to MainTabs");
             navigation.reset({
               index: 0,
               routes: [{ name: 'MainTabs' }],
@@ -120,11 +133,24 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         // Sign in with Firebase
         console.log("5. Attempting Firebase authentication...");
         // Use auth directly with signInWithCredential method
-        await auth().signInWithCredential(googleCredential);
+        const userCredential = await auth().signInWithCredential(googleCredential);
         console.log("6. Firebase auth completed successfully!");
         
+        // Update the user profile with Google information
+        if (userCredential.user && userInfo.user) {
+          console.log("7. Updating user profile with Google info");
+          await userCredential.user.updateProfile({
+            displayName: userInfo.user.name || userInfo.user.email?.split('@')[0] || 'User',
+            photoURL: userInfo.user.photo || null
+          });
+          console.log("User profile updated with:", {
+            displayName: userInfo.user.name,
+            photoURL: userInfo.user.photo
+          });
+        }
+        
         // Add manual navigation to MainTabs here
-        console.log("7. Manual navigation to MainTabs");
+        console.log("8. Manual navigation to MainTabs");
         navigation.reset({
           index: 0,
           routes: [{ name: 'MainTabs' }],

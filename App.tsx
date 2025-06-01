@@ -524,8 +524,30 @@ const App: React.FC = () => {
     };
   }, []);
 
-  function onAuthStateChanged(user: any) {
+  async function onAuthStateChanged(user: any) {
     console.log("[App.tsx] Auth state changed:", user ? "User logged in" : "No user");
+    
+    // If user is logged in but doesn't have a displayName, try to get it from Google
+    if (user && !user.displayName) {
+      console.log("User logged in but missing displayName, checking Google Sign-In status");
+      try {
+        const isSignedIn = await GoogleSignin.isSignedIn();
+        if (isSignedIn) {
+          const googleUser = await GoogleSignin.getCurrentUser();
+          if (googleUser && googleUser.user) {
+            console.log("Found Google user info, updating profile");
+            await user.updateProfile({
+              displayName: googleUser.user.name || googleUser.user.email?.split('@')[0] || 'User',
+              photoURL: googleUser.user.photo || null
+            });
+            console.log("Profile updated with Google info");
+          }
+        }
+      } catch (error) {
+        console.error("Error updating user profile from Google:", error);
+      }
+    }
+    
     setUser(user);
     if (initializing) setInitializing(false);
   }

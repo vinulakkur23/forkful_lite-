@@ -117,15 +117,30 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         return;
       }
 
-      // Update the meal data in Firestore
-      await firestore().collection('mealEntries').doc(mealId).update({
+      // Prepare update data
+      const updateData: any = {
         rating,
         comments: {
           liked: likedComment,
           disliked: dislikedComment
         },
         updatedAt: firestore.FieldValue.serverTimestamp()
-      });
+      };
+      
+      // If the current user has a displayName and this meal shows "Anonymous User", update it
+      if (currentUser.displayName && (meal.userName === 'Anonymous User' || !meal.userName)) {
+        updateData.userName = currentUser.displayName;
+        console.log("Updating userName to:", currentUser.displayName);
+      }
+      
+      // Similarly update userPhoto if available
+      if (currentUser.photoURL && !meal.userPhoto) {
+        updateData.userPhoto = currentUser.photoURL;
+        console.log("Updating userPhoto");
+      }
+      
+      // Update the meal data in Firestore
+      await firestore().collection('mealEntries').doc(mealId).update(updateData);
 
       // Success notification
       Alert.alert(

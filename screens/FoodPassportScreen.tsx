@@ -31,6 +31,7 @@ import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import MapView, { Marker, Callout } from 'react-native-maps';
 // Import achievement service
 import { getUserAchievements } from '../services/achievementService';
+import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -222,6 +223,40 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
 
             // Reset image errors when fetching new data
             setImageErrors({});
+            
+            // Check if migration is needed for user profile data
+            const currentUser = auth().currentUser;
+            if (currentUser && currentUser.displayName) {
+                const needsMigration = await checkIfMigrationNeeded();
+                if (needsMigration) {
+                    console.log("User meals need profile migration");
+                    Alert.alert(
+                        "Update Your Meals",
+                        "We noticed some of your meals are showing 'Anonymous User'. Would you like to update them with your name?",
+                        [
+                            {
+                                text: "Not Now",
+                                style: "cancel"
+                            },
+                            {
+                                text: "Update",
+                                onPress: async () => {
+                                    const result = await updateUserMealsWithProfile();
+                                    if (result.success) {
+                                        Alert.alert(
+                                            "Success",
+                                            `Updated ${result.updatedMeals} meal${result.updatedMeals !== 1 ? 's' : ''} with your profile information.`,
+                                            [{ text: "OK", onPress: () => fetchMealEntries() }]
+                                        );
+                                    } else {
+                                        Alert.alert("Error", "Failed to update meals. Please try again later.");
+                                    }
+                                }
+                            }
+                        ]
+                    );
+                }
+            }
         } catch (err: any) {
             console.error('Error fetching meal entries:', err);
             setError(`Failed to load meals: ${err.message}`);
