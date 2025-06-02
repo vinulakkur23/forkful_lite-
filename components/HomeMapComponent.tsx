@@ -80,8 +80,6 @@ const HomeMapComponent: React.FC<Props> = ({
   const selectedMarkerIndexRef = useRef<{ [key: string]: number }>({});
   const [, forceUpdate] = useState({});
   const mapRef = useRef<MapView | null>(null);
-  
-  console.log('HomeMapComponent render, tabIndex:', tabIndex, 'nearbyMeals:', nearbyMeals.length);
 
   const handleLocationPress = (meals: MealEntry[]) => {
     return;
@@ -103,9 +101,7 @@ const HomeMapComponent: React.FC<Props> = ({
 
   // Group meals by location for carousel display
   const locationGroupedMarkers = React.useMemo(() => {
-    console.log('HomeMapComponent: Computing locationGroupedMarkers, nearbyMeals count:', nearbyMeals.length);
     const mealsWithLocation = nearbyMeals.filter(meal => meal.location?.latitude && meal.location?.longitude);
-    console.log('HomeMapComponent: Meals with location:', mealsWithLocation.length);
     
     const locationGroups: { [key: string]: MealEntry[] } = {};
     
@@ -144,7 +140,6 @@ const HomeMapComponent: React.FC<Props> = ({
       });
     });
     
-    console.log('HomeMapComponent: Final grouped markers count:', groupedMarkers.length);
     return groupedMarkers;
   }, [nearbyMeals]);
 

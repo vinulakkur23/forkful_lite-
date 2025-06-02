@@ -30,6 +30,12 @@ import Geolocation from '@react-native-community/geolocation';
 import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
 
+// Map toggle icons
+const MAP_HOME_ICONS = {
+  mapActive: require('../assets/icons/maphome-active.png'),
+  mapInactive: require('../assets/icons/maphome-inactive.png'),
+};
+
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 type HomeScreenRouteProp = RouteProp<RootStackParamList, 'Home'>;
 
@@ -543,10 +549,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.mapToggleButton}
           onPress={() => setIndex(index === 0 ? 1 : 0)}
         >
-          <Icon 
-            name={index === 0 ? "map" : "list"} 
-            size={24} 
-            color="#E63946" 
+          <Image 
+            source={index === 1 ? MAP_HOME_ICONS.mapActive : MAP_HOME_ICONS.mapInactive} 
+            style={styles.mapToggleIcon}
+            resizeMode="contain"
           />
         </TouchableOpacity>
       </View>
@@ -717,8 +723,10 @@ const styles = StyleSheet.create({
   // Map toggle button style
   mapToggleButton: {
     padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(230, 57, 70, 0.1)',
+  },
+  mapToggleIcon: {
+    width: 24,
+    height: 24,
   },
   // Tab view style
   tabView: {

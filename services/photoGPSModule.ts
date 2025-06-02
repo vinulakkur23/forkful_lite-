@@ -144,7 +144,7 @@ const PhotoGPS = {
       details.push('Testing native PhotoGPS module...');
       const startTime = Date.now();
       
-      const result = await PhotoGPS.getCurrentLocation(3000, 1);
+      const result = await PhotoGPS.getCurrentLocation(3000);
       const duration = Date.now() - startTime;
       
       if (result) {

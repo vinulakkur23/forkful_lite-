@@ -347,7 +347,7 @@ const getDeviceLocationWithFallbacks = async (): Promise<LocationData | null> =>
   if (Platform.OS === 'ios') {
     try {
       console.log('Strategy 1: Trying native PhotoGPS with 3s timeout');
-      const nativeLocation = await PhotoGPS.getCurrentLocation(3000, 1);
+      const nativeLocation = await PhotoGPS.getCurrentLocation(3000);
       
       if (nativeLocation) {
         console.log('Strategy 1 SUCCESS: Got location from native module:', nativeLocation);
@@ -438,7 +438,7 @@ const getDeviceLocationWithFallbacks = async (): Promise<LocationData | null> =>
   if (Platform.OS === 'ios') {
     try {
       console.log('Strategy 4: Trying native PhotoGPS again with 8s timeout (last resort)');
-      const lastResortLocation = await PhotoGPS.getCurrentLocation(8000, 1);
+      const lastResortLocation = await PhotoGPS.getCurrentLocation(8000);
       
       if (lastResortLocation) {
         console.log('Strategy 4 SUCCESS: Got location from native module (last resort):', lastResortLocation);
