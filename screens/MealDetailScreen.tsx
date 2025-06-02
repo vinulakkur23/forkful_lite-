@@ -191,7 +191,22 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         [
           {
             text: "OK",
-            onPress: () => navigation.navigate('FoodPassport')
+            onPress: () => {
+              // Use the same logic as goBack for consistency
+              const passportUserId = route.params?.passportUserId;
+              const passportUserName = route.params?.passportUserName;
+              const passportUserPhoto = route.params?.passportUserPhoto;
+              
+              if (passportUserId) {
+                navigation.navigate('FoodPassport', {
+                  userId: passportUserId,
+                  userName: passportUserName,
+                  userPhoto: passportUserPhoto
+                });
+              } else {
+                navigation.navigate('FoodPassport');
+              }
+            }
           }
         ]
       );
@@ -348,7 +363,23 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Navigate back to the correct screen
   const goBack = () => {
     const previousScreen = route.params?.previousScreen;
-    if (previousScreen) {
+    const passportUserId = route.params?.passportUserId;
+    const passportUserName = route.params?.passportUserName;
+    const passportUserPhoto = route.params?.passportUserPhoto;
+    
+    if (previousScreen === 'FoodPassport') {
+      if (passportUserId) {
+        // Navigate back to the specific user's passport
+        navigation.navigate('FoodPassport', {
+          userId: passportUserId,
+          userName: passportUserName,
+          userPhoto: passportUserPhoto
+        });
+      } else {
+        // Navigate back to own passport
+        navigation.navigate('FoodPassport');
+      }
+    } else if (previousScreen) {
       navigation.navigate(previousScreen);
     } else {
       navigation.goBack();
@@ -476,7 +507,21 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* User who posted this meal */}
         <TouchableOpacity 
           style={[styles.infoRow, {marginTop: 4, marginBottom: 8}]} 
-          onPress={showFollowMessage}
+          onPress={() => {
+            // If it's the current user's meal, show the follow message
+            // Otherwise, navigate to their profile
+            if (meal.userId === auth().currentUser?.uid) {
+              // Navigate to own passport
+              navigation.navigate('FoodPassport');
+            } else {
+              // Navigate to other user's passport
+              navigation.navigate('FoodPassport', { 
+                userId: meal.userId,
+                userName: meal.userName || 'Anonymous User',
+                userPhoto: meal.userPhoto || null
+              });
+            }
+          }}
         >
           <View style={styles.userIconContainer}>
             {meal.userPhoto ? (

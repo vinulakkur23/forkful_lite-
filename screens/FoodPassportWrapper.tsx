@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../App';
+import { RouteProp } from '@react-navigation/native';
+import { RootStackParamList, TabParamList } from '../App';
 import FoodPassportScreen from './FoodPassportScreen';
 import MapScreen from './MapScreen';
 import StampsScreen from './StampsScreen';
 import SavedMealsScreen from './SavedMealsScreen';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { firebase, auth } from '../firebaseConfig';
+import { firebase, auth, firestore } from '../firebaseConfig';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 
 const { width } = Dimensions.get('window');
 
 type FoodPassportWrapperProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
+  route: RouteProp<TabParamList, 'FoodPassport'>;
 };
 
 class ErrorBoundary extends React.Component<
@@ -76,13 +78,27 @@ type Route = {
 };
 
 const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
+  const { navigation, route } = props;
+  const userId = route.params?.userId;
+  const userName = route.params?.userName;
+  const userPhoto = route.params?.userPhoto;
+  const isOwnProfile = !userId || userId === auth().currentUser?.uid;
+  
+  
   const [isLoading, setIsLoading] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
-  // We'll use require() for the default icons, but custom icons can be added to assets/icons/passport_tabs/
-  const [routes] = useState<Route[]>([
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [profileStats, setProfileStats] = useState({
+    totalMeals: 0,
+    averageRating: 0,
+    badgeCount: 0
+  });
+  
+  // Always show all 4 tabs for consistency
+  const routes = React.useMemo<Route[]>(() => [
     { 
       key: 'passport', 
-      title: 'My Meals', 
+      title: isOwnProfile ? 'My Meals' : 'Meals', 
       activeIcon: require('../assets/icons/passport_tabs/meals-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/meals-inactive.png')
     },
@@ -104,7 +120,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       activeIcon: require('../assets/icons/passport_tabs/stamps-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/stamps-inactive.png')
     },
-  ]);
+  ], [isOwnProfile]);
   
   // Shared filter state for both tabs - now an array of filters
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
@@ -121,13 +137,59 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   };
 
   React.useEffect(() => {
-    // Simulate loading to give components time to initialize
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 300);
+    loadUserProfile();
+  }, [userId]);
+  
+  const loadUserProfile = async () => {
+    setIsLoading(true);
     
-    return () => clearTimeout(timer);
-  }, []);
+    try {
+      if (!isOwnProfile && userId) {
+        // Load other user's profile
+        const profile: any = {
+          userId: userId,
+          displayName: userName || 'User',
+          photoURL: null,
+        };
+        
+        // Try to get user info from their meals
+        const mealsSnapshot = await firestore()
+          .collection('mealEntries')
+          .where('userId', '==', userId)
+          .limit(1)
+          .get();
+        
+        if (!mealsSnapshot.empty) {
+          const firstMeal = mealsSnapshot.docs[0].data();
+          if (firstMeal.userPhoto) {
+            profile.photoURL = firstMeal.userPhoto;
+          }
+          if (firstMeal.userName && !userName) {
+            profile.displayName = firstMeal.userName;
+          }
+        }
+        
+        setUserProfile(profile);
+      } else {
+        // Own profile
+        const currentUser = auth().currentUser;
+        if (currentUser) {
+          setUserProfile({
+            userId: currentUser.uid,
+            displayName: currentUser.displayName || 'User',
+            photoURL: currentUser.photoURL,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      // Small delay to ensure components initialize
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 300);
+    }
+  };
   
   // Add a useEffect to log when activeFilters change
   React.useEffect(() => {
@@ -136,39 +198,50 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   // Scene renderer function for custom tab implementation
   const renderScene = ({ route }: { route: Route }) => {
+    const targetUserId = userId || auth().currentUser?.uid;
+    
     switch (route.key) {
       case 'passport':
         return (
-          <ErrorBoundary navigation={props.navigation}>
+          <ErrorBoundary navigation={navigation}>
             <FoodPassportScreen 
-              navigation={props.navigation}
+              navigation={navigation}
               activeFilters={activeFilters}
+              userId={targetUserId}
+              userName={userName}
+              userPhoto={userPhoto}
+              onStatsUpdate={(stats) => setProfileStats(stats)}
             />
           </ErrorBoundary>
         );
       case 'saved':
         return (
-          <ErrorBoundary navigation={props.navigation}>
+          <ErrorBoundary navigation={navigation}>
             <SavedMealsScreen 
-              navigation={props.navigation}
+              navigation={navigation}
               activeFilters={activeFilters}
+              userId={targetUserId}
+              isOwnProfile={isOwnProfile}
             />
           </ErrorBoundary>
         );
       case 'map':
         return (
-          <ErrorBoundary navigation={props.navigation}>
+          <ErrorBoundary navigation={navigation}>
             <MapScreen 
-              navigation={props.navigation}
+              navigation={navigation}
               activeFilters={activeFilters}
-              isActive={tabIndex === 2} // Updated index since we added a new tab
+              isActive={tabIndex === 2} // Map is always at index 2 now
+              userId={targetUserId}
             />
           </ErrorBoundary>
         );
       case 'stamps':
         return (
-          <ErrorBoundary navigation={props.navigation}>
-            <StampsScreen />
+          <ErrorBoundary navigation={navigation}>
+            <StampsScreen 
+              userId={targetUserId}
+            />
           </ErrorBoundary>
         );
       default:
@@ -189,45 +262,65 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with title and sign out */}
+      {/* Header with title and back button (if viewing other user) or sign out (if own) */}
       <View style={styles.headerSection}>
+        {!isOwnProfile ? (
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Image
+              source={require('../assets/icons/back-icon.png')}
+              style={styles.backIcon}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerButton} /> // Empty view for spacing
+        )}
+        
         <Text style={styles.headerTitle}>Food Passport</Text>
-        <TouchableOpacity 
-          onPress={async () => {
-            console.log("Sign out button pressed");
-            try {
-              // Enhanced sign out that handles Google Sign In properly
-              if (global.GoogleSignin) {
-                try {
-                  // First revoke access and sign out from Google
-                  await global.GoogleSignin.revokeAccess();
-                  await global.GoogleSignin.signOut();
-                  console.log("Google Sign In: Signed out successfully");
-                } catch (googleError) {
-                  console.log("Error signing out from Google:", googleError);
-                  // Continue with Firebase sign out even if Google sign out fails
+        
+        {isOwnProfile ? (
+          <TouchableOpacity 
+            onPress={async () => {
+              console.log("Sign out button pressed");
+              try {
+                // Enhanced sign out that handles Google Sign In properly
+                if (global.GoogleSignin) {
+                  try {
+                    // First revoke access and sign out from Google
+                    await global.GoogleSignin.revokeAccess();
+                    await global.GoogleSignin.signOut();
+                    console.log("Google Sign In: Signed out successfully");
+                  } catch (googleError) {
+                    console.log("Error signing out from Google:", googleError);
+                    // Continue with Firebase sign out even if Google sign out fails
+                  }
                 }
+                
+                // Then sign out from Firebase
+                await auth().signOut();
+                console.log("Firebase Auth: Signed out successfully");
+                
+                // Navigate to Login
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                });
+              } catch (error) {
+                console.error("Error signing out:", error);
+                alert("Failed to sign out. Please try again.");
               }
-              
-              // Then sign out from Firebase
-              await auth().signOut();
-              console.log("Firebase Auth: Signed out successfully");
-              
-              // Navigate to Login
-              props.navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              console.error("Error signing out:", error);
-              alert("Failed to sign out. Please try again.");
-            }
-          }} 
-          style={styles.signOutButton}
-        >
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+            }} 
+            style={styles.signOutButton}
+          >
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.signOutButton} /> // Empty view for spacing
+        )}
       </View>
+      
       
       {/* Tab navigation */}
       <View style={styles.tabBarContainer}>
@@ -383,7 +476,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
-  }
+  },
+  headerButton: {
+    width: 60, // Fixed width for consistency
+  },
+  backButton: {
+    padding: 8,
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#1a2b49',
+  },
 });
 
 export default FoodPassportWrapper;

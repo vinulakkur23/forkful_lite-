@@ -38,6 +38,10 @@ type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 
 type Props = {
   navigation: FoodPassportScreenNavigationProp;
   activeFilters: FilterItem[] | null;
+  userId?: string;
+  userName?: string;
+  userPhoto?: string;
+  onStatsUpdate?: (stats: { totalMeals: number; averageRating: number; badgeCount: number }) => void;
 };
 
 interface MealEntry {
@@ -83,12 +87,13 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId, userName, userPhoto, onStatsUpdate }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [userInfo, setUserInfo] = useState<any>(null);
+    const [userProfile, setUserProfile] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({}); 
 
@@ -152,9 +157,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
     const fetchMealEntries = async () => {
         try {
             setLoading(true);
-            const userId = auth().currentUser?.uid;
+            const targetUserId = userId || auth().currentUser?.uid;
             
-            if (!userId) {
+            if (!targetUserId) {
                 setError('User not authenticated');
                 setLoading(false);
                 return;
@@ -162,7 +167,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
             
             const querySnapshot = await firestore()
                 .collection('mealEntries')
-                .where('userId', '==', userId)
+                .where('userId', '==', targetUserId)
                 .orderBy('createdAt', 'desc')
                 .get();
             
@@ -212,7 +217,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
             }
 
             // Get badge count
-            const userAchievements = await getUserAchievements();
+            const userAchievements = await getUserAchievements(targetUserId);
             const badgeCount = userAchievements.length;
 
             setProfileStats({
@@ -220,13 +225,57 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                 averageRating,
                 badgeCount
             });
+            
+            // Call the stats update callback if provided
+            if (onStatsUpdate) {
+                onStatsUpdate({
+                    totalMeals,
+                    averageRating,
+                    badgeCount
+                });
+            }
+
+            // Load user profile
+            const isOwnProfile = !userId || userId === auth().currentUser?.uid;
+            if (!isOwnProfile && userId) {
+                // Load other user's profile
+                const profile: any = {
+                    userId: userId,
+                    displayName: userName || 'User',
+                    photoURL: userPhoto || null,
+                };
+                
+                // Try to get user info from their meals if not provided in route params
+                if (fetchedMeals.length > 0) {
+                    const firstMeal = fetchedMeals[0];
+                    // Use route params first, then fall back to meal data
+                    if (!userPhoto && firstMeal.userPhoto) {
+                        profile.photoURL = firstMeal.userPhoto;
+                    }
+                    if (!userName && firstMeal.userName) {
+                        profile.displayName = firstMeal.userName;
+                    }
+                }
+                
+                setUserProfile(profile);
+            } else {
+                // Own profile
+                const currentUser = auth().currentUser;
+                if (currentUser) {
+                    setUserProfile({
+                        userId: currentUser.uid,
+                        displayName: currentUser.displayName || 'User',
+                        photoURL: currentUser.photoURL,
+                    });
+                }
+            }
 
             // Reset image errors when fetching new data
             setImageErrors({});
             
-            // Check if migration is needed for user profile data
+            // Check if migration is needed for user profile data (only for own profile)
             const currentUser = auth().currentUser;
-            if (currentUser && currentUser.displayName) {
+            if (!userId && currentUser && currentUser.displayName) {
                 const needsMigration = await checkIfMigrationNeeded();
                 if (needsMigration) {
                     console.log("User meals need profile migration");
@@ -382,7 +431,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
     
     const viewMealDetails = (meal: MealEntry) => {
         console.log("Navigating to meal detail with ID:", meal.id);
-        navigation.navigate('MealDetail', { mealId: meal.id, previousScreen: 'FoodPassport' });
+        navigation.navigate('MealDetail', { 
+            mealId: meal.id, 
+            previousScreen: 'FoodPassport',
+            // Pass passport context for proper back navigation
+            passportUserId: userId,
+            passportUserName: userName,
+            passportUserPhoto: userPhoto
+        });
     };
     
     const handleImageError = (mealId: string) => {
@@ -582,9 +638,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                     <Text style={styles.loadingText}>Loading your food passport...</Text>
                 </View>
             ) : (
-                <>
-
-
                     <FlatList
                         data={filteredMeals}
                         renderItem={renderMealItem}
@@ -592,60 +645,54 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                         numColumns={2}
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
+                        ListHeaderComponent={() => (
+                            <View style={styles.profileCard}>
+                                <View style={styles.profileHeader}>
+                                    <View style={styles.userAvatarContainer}>
+                                        {userProfile?.photoURL ? (
+                                            <Image 
+                                                source={{ uri: userProfile.photoURL }} 
+                                                style={styles.userAvatar}
+                                            />
+                                        ) : (
+                                            <View style={styles.defaultAvatar}>
+                                                <Icon name="person" size={24} color="#666" />
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.userDetails}>
+                                        <Text style={styles.userName}>{userProfile?.displayName || 'User'}</Text>
+                                        <View style={styles.statsRow}>
+                                            <Text style={styles.statText}>{profileStats.totalMeals} meals</Text>
+                                            <Text style={styles.statSeparator}>•</Text>
+                                            <Text style={styles.statText}>
+                                                {profileStats.averageRating > 0 ? profileStats.averageRating.toFixed(1) : '0'} avg
+                                            </Text>
+                                            {profileStats.badgeCount > 0 && (
+                                                <>
+                                                    <Text style={styles.statSeparator}>•</Text>
+                                                    <Text style={styles.statText}>{profileStats.badgeCount} stamps</Text>
+                                                </>
+                                            )}
+                                        </View>
+                                    </View>
+                                    {userId && userId !== auth().currentUser?.uid && (
+                                        <TouchableOpacity 
+                                            style={styles.followButton}
+                                            onPress={() => Alert.alert("Coming Soon", "Following users will be available in a future update!")}
+                                        >
+                                            <Text style={styles.followButtonIcon}>+</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        )}
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}
                                 onRefresh={handleRefresh}
                                 colors={['#ff6b6b']}
                             />
-                        }
-                        ListHeaderComponent={
-                            userInfo ? (
-                                <View>
-                                    {/* User Profile Card (moved inside FlatList) */}
-                                    <View style={styles.profileCard}>
-                                        <View style={styles.profileHeader}>
-                                            {userInfo.photoURL ? (
-                                                <Image
-                                                    source={{ uri: userInfo.photoURL }}
-                                                    style={styles.profilePhoto}
-                                                    onError={() => console.log("Failed to load profile image")}
-                                                />
-                                            ) : (
-                                                <View style={styles.profilePhotoPlaceholder}>
-                                                    <Icon name="person" size={22} color="#fff" />
-                                                </View>
-                                            )}
-                                            <View style={styles.profileInfo}>
-                                                <Text style={styles.profileName}>
-                                                    {userInfo.displayName || "Food Enthusiast"}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        
-                                        <View style={styles.profileStats}>
-                                            <View style={styles.statItem}>
-                                                <Text style={styles.statValue}>{profileStats.totalMeals}</Text>
-                                                <Text style={styles.statLabel}>Uploads</Text>
-                                            </View>
-                                            <View style={styles.statDivider} />
-                                            <View style={styles.statItem}>
-                                                <Text style={styles.statValue}>
-                                                    {profileStats.averageRating.toFixed(1)}
-                                                </Text>
-                                                <Text style={styles.statLabel}>Avg. Rating</Text>
-                                            </View>
-                                            <View style={styles.statDivider} />
-                                            <View style={styles.statItem}>
-                                                <Text style={styles.statValue}>
-                                                    {profileStats.badgeCount}
-                                                </Text>
-                                                <Text style={styles.statLabel}>Stamps</Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                </View>
-                            ) : null
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
@@ -668,7 +715,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
                             </View>
                         }
                     />
-                </>
             )}
         </SafeAreaView>
     );
@@ -704,19 +750,17 @@ const styles = StyleSheet.create({
     },
     // Profile Card Styles
     profileCard: {
-        backgroundColor: '#fff',
+        backgroundColor: '#FAF3E0',
         margin: 10,
-        marginTop: 0,  // Reduced from 10 to 0 to move card up
-        marginBottom: 8, // Slightly reduced bottom margin 
+        marginTop: 10,
+        marginBottom: 8,
         borderRadius: 12,
-        padding: 10,
+        padding: 15,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
-        borderWidth: 1,
-        borderColor: '#FAF3E0',
     },
     profileHeader: {
         flexDirection: 'row',
@@ -886,6 +930,70 @@ const styles = StyleSheet.create({
         color: '#888',
         textAlign: 'center',
         marginTop: 5,
+    },
+    // Profile card styles
+    userAvatarContainer: {
+        marginRight: 12,
+    },
+    userAvatar: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+    },
+    defaultAvatar: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#f0f0f0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    userDetails: {
+        flex: 1,
+    },
+    userName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1a2b49',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        marginBottom: 2,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    statText: {
+        fontSize: 13,
+        color: '#666',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    statSeparator: {
+        marginHorizontal: 6,
+        color: '#999',
+    },
+    followButton: {
+        width: 36,
+        height: 36,
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderColor: '#1a2b49',
+        borderRadius: 18,
+        marginLeft: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    followButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 13,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    followButtonIcon: {
+        color: '#1a2b49',
+        fontWeight: 'bold',
+        fontSize: 20,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });
 

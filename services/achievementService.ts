@@ -278,10 +278,10 @@ const deg2rad = (deg: number): number => {
   return deg * (Math.PI/180);
 };
 
-// Fetch all achievements for the current user
-export const getUserAchievements = async (): Promise<UserAchievement[]> => {
+// Fetch all achievements for a specific user (or current user if no userId provided)
+export const getUserAchievements = async (targetUserId?: string): Promise<UserAchievement[]> => {
   try {
-    const userId = auth().currentUser?.uid;
+    const userId = targetUserId || auth().currentUser?.uid;
     if (!userId) throw new Error('User not authenticated');
     
     const snapshot = await firestore()

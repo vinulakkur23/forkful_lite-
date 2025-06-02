@@ -95,12 +95,19 @@ export type RootStackParamList = {
     meal?: string;
     _uniqueKey?: string; // Ensure Result screen reloads
   };
-  FoodPassport: undefined; // Kept for potential direct stack navigation
+  FoodPassport: {
+    userId?: string;
+    userName?: string;
+    userPhoto?: string;
+  } | undefined; // Can view own passport (undefined) or another user's passport
   MealDetail: {
     mealId: string;
     previousScreen?: string;
     justEdited?: boolean;
     savedStatus?: boolean;
+    passportUserId?: string;
+    passportUserName?: string;
+    passportUserPhoto?: string;
   };
   EditMeal: {
     mealId: string;
@@ -112,7 +119,7 @@ export type RootStackParamList = {
 export type TabParamList = {
   Home: undefined;
   Camera: undefined; // This is a tab that navigates to CameraScreen
-  FoodPassport: undefined; // This is a tab that navigates to FoodPassportWrapper
+  FoodPassport: RootStackParamList['FoodPassport']; // This is a tab that navigates to FoodPassportWrapper
   
   // Screens that are part of flows, not "tabs" themselves, but defined in Tab.Navigator
   // They will be hidden from the tab bar using tabBarButton: () => null
@@ -413,6 +420,14 @@ function TabNavigator() {
           title: 'My Passport',
           headerShown: false, // Hide the header to avoid duplicate titles
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Prevent default action
+            e.preventDefault();
+            // Navigate to FoodPassport with no params (own profile)
+            navigation.navigate('FoodPassport', {});
+          },
+        })}
       />
       
       {/* Screens part of flows, hidden from tab bar */}

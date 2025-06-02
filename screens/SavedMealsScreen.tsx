@@ -23,6 +23,8 @@ type SavedMealsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'F
 type Props = {
   navigation: SavedMealsScreenNavigationProp;
   activeFilters: FilterItem[] | null;
+  userId?: string;
+  isOwnProfile?: boolean;
 };
 
 interface SavedMeal {
@@ -38,7 +40,7 @@ interface SavedMeal {
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 40) / 2; // 2 items per row with 10px spacing
 
-const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
+const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, isOwnProfile = true }) => {
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<SavedMeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,10 +48,14 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
 
-  // Fetch saved meals when component mounts
+  // Calculate isOwnProfile directly to be sure
+  const actualIsOwnProfile = !userId || userId === auth().currentUser?.uid;
+
+
+  // Fetch saved meals when component mounts or userId changes
   useEffect(() => {
     fetchSavedMeals();
-  }, []);
+  }, [userId]);
 
   // Apply filter whenever saved meals or active filters change
   useEffect(() => {
@@ -60,17 +66,24 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
   const fetchSavedMeals = async () => {
     try {
       setLoading(true);
-      const userId = auth().currentUser?.uid;
+      const targetUserId = userId || auth().currentUser?.uid;
       
-      if (!userId) {
+      if (!targetUserId) {
         setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+
+      // Only show saved meals for own profile (saved meals are private)
+      if (userId && userId !== auth().currentUser?.uid) {
+        setSavedMeals([]);
         setLoading(false);
         return;
       }
       
       const savedMealsRef = firestore()
         .collection('users')
-        .doc(userId)
+        .doc(targetUserId)
         .collection('savedMeals')
         .orderBy('savedAt', 'desc');
       
@@ -187,7 +200,16 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters }) => {
   // Render the main screen
   return (
     <SafeAreaView style={styles.container}>
-      {loading && !refreshing ? (
+      {!actualIsOwnProfile ? (
+        // Show private message for other users
+        <View style={styles.emptyContainer}>
+          <Icon name="lock" size={64} color="#ddd" />
+          <Text style={styles.emptyText}>Saved meals are private</Text>
+          <Text style={styles.emptySubtext}>
+            Only the user can see their saved meals
+          </Text>
+        </View>
+      ) : loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
           <Text style={styles.loadingText}>Loading your saved meals...</Text>

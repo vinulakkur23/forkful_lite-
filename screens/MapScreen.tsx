@@ -34,6 +34,7 @@ type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
   activeFilters: FilterItem[] | null;
   isActive?: boolean; // Flag to indicate if this tab is currently active
+  userId?: string; // Optional userId to view other users' maps
 };
 
 interface MealEntry {
@@ -66,7 +67,7 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActive }) => {
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActive, userId }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,10 +90,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   const fetchSavedMeals = async () => {
     try {
       setLoading(true);
-      const userId = auth().currentUser?.uid;
+      const targetUserId = userId || auth().currentUser?.uid;
       
-      if (!userId) {
+      if (!targetUserId) {
         setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+      
+      // Only show saved meals for own profile
+      if (userId && userId !== auth().currentUser?.uid) {
+        setAllMeals([]);
+        setFilteredMeals([]);
         setLoading(false);
         return;
       }
@@ -100,7 +109,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       // Get list of saved meal IDs first
       const savedMealsRef = firestore()
         .collection('users')
-        .doc(userId)
+        .doc(targetUserId)
         .collection('savedMeals');
       
       const savedMealsSnapshot = await savedMealsRef.get();
@@ -182,9 +191,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   const fetchMealEntries = async () => {
     try {
       setLoading(true);
-      const userId = auth().currentUser?.uid;
+      const targetUserId = userId || auth().currentUser?.uid;
       
-      if (!userId) {
+      if (!targetUserId) {
         setError('User not authenticated');
         setLoading(false);
         return;
@@ -192,7 +201,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       
       const querySnapshot = await firestore()
         .collection('mealEntries')
-        .where('userId', '==', userId)
+        .where('userId', '==', targetUserId)
         .orderBy('createdAt', 'desc')
         .get();
       

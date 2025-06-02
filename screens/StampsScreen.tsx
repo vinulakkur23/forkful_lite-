@@ -27,7 +27,11 @@ interface AchievementDisplayItem {
   earnedAt?: firebase.firestore.Timestamp;
 }
 
-const StampsScreen: React.FC = () => {
+type Props = {
+  userId?: string;
+};
+
+const StampsScreen: React.FC<Props> = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementItems, setAchievementItems] = useState<AchievementDisplayItem[]>([]);
@@ -35,14 +39,17 @@ const StampsScreen: React.FC = () => {
 
   useEffect(() => {
     loadAchievements();
-  }, []);
+  }, [userId]);
 
   const loadAchievements = async () => {
     try {
       setLoading(true);
       
       // Get user's earned achievements
-      const userAchievements = await getUserAchievements();
+      const targetUserId = userId || auth().currentUser?.uid;
+      
+      // Now we can get achievements for any user
+      const userAchievements = await getUserAchievements(targetUserId);
       setUserAchievements(userAchievements);
       
       // Get all available achievements
