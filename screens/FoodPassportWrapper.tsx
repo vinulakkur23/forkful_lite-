@@ -82,11 +82,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const userId = route.params?.userId;
   const userName = route.params?.userName;
   const userPhoto = route.params?.userPhoto;
+  const initialTabIndex = route.params?.tabIndex || 0;
   const isOwnProfile = !userId || userId === auth().currentUser?.uid;
   
   
   const [isLoading, setIsLoading] = useState(true);
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabIndex, setTabIndex] = useState(initialTabIndex);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [profileStats, setProfileStats] = useState({
     totalMeals: 0,

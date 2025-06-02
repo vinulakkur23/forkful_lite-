@@ -308,7 +308,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     // Close modal if open
     setShowMealsModal(false);
     setSelectedLocationMeals(null);
-    navigation.navigate('MealDetail', { mealId: meal.id });
+    navigation.navigate('MealDetail', { 
+      mealId: meal.id,
+      previousScreen: 'FoodPassport',
+      previousTabIndex: 2 // Map tab is at index 2
+    });
   };
   
   const handleLocationPress = (meals: MealEntry[]) => {

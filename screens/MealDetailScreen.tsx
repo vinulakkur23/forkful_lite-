@@ -363,6 +363,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Navigate back to the correct screen
   const goBack = () => {
     const previousScreen = route.params?.previousScreen;
+    const previousTabIndex = route.params?.previousTabIndex;
     const passportUserId = route.params?.passportUserId;
     const passportUserName = route.params?.passportUserName;
     const passportUserPhoto = route.params?.passportUserPhoto;
@@ -373,12 +374,18 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         navigation.navigate('FoodPassport', {
           userId: passportUserId,
           userName: passportUserName,
-          userPhoto: passportUserPhoto
+          userPhoto: passportUserPhoto,
+          tabIndex: previousTabIndex
         });
       } else {
         // Navigate back to own passport
-        navigation.navigate('FoodPassport');
+        navigation.navigate('FoodPassport', {
+          tabIndex: previousTabIndex
+        });
       }
+    } else if (previousScreen === 'Home') {
+      // Navigate back to Home with the correct tab index
+      navigation.navigate('Home', { tabIndex: previousTabIndex });
     } else if (previousScreen) {
       navigation.navigate(previousScreen);
     } else {

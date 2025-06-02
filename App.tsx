@@ -32,7 +32,7 @@ import { Alert } from 'react-native';
 export type RootStackParamList = {
   Login: undefined;
   MainTabs: { screen?: string; params?: any }; // Added params for deep linking to tabs
-  Home: undefined; // Kept for potential direct stack navigation, though usually via MainTabs
+  Home: { tabIndex?: number } | undefined; // Kept for potential direct stack navigation, though usually via MainTabs
   Camera: undefined; // Kept for potential direct stack navigation
   Crop: {
     photo: {
@@ -99,10 +99,12 @@ export type RootStackParamList = {
     userId?: string;
     userName?: string;
     userPhoto?: string;
+    tabIndex?: number;
   } | undefined; // Can view own passport (undefined) or another user's passport
   MealDetail: {
     mealId: string;
     previousScreen?: string;
+    previousTabIndex?: number;
     justEdited?: boolean;
     savedStatus?: boolean;
     passportUserId?: string;

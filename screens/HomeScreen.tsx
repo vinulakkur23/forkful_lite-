@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,20 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
-  SafeAreaView
+  SafeAreaView,
+  Platform,
+  PermissionsAndroid,
+  Linking,
+  Clipboard,
+  Share,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom StarRating component instead of FontAwesome
 import StarRating from '../components/StarRating';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
+import HomeMapComponent from '../components/HomeMapComponent';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import Geolocation from '@react-native-community/geolocation';
@@ -24,9 +31,11 @@ import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+type HomeScreenRouteProp = RouteProp<RootStackParamList, 'Home'>;
 
 type Props = {
   navigation: HomeScreenNavigationProp;
+  route: HomeScreenRouteProp;
 };
 
 interface MealEntry {
@@ -38,10 +47,12 @@ interface MealEntry {
   userId: string;
   userName?: string;
   userPhoto?: string;
+  city?: string; // Add city field for filtering
   location: {
     latitude: number;
     longitude: number;
     source?: string; // 'device', 'exif', etc.
+    city?: string; // City can also be stored in location
   } | null;
   createdAt: any;
   distance?: number; // Distance in meters from user's current location
@@ -60,7 +71,10 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
-const HomeScreen: React.FC<Props> = ({ navigation }) => {
+// Constants
+const MAX_MEALS_TO_DISPLAY = 50; // Limit the number of meals shown on map to prevent performance issues
+
+const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   const [user, setUser] = useState<any>(null);
   const [allNearbyMeals, setAllNearbyMeals] = useState<MealEntry[]>([]);
   const [nearbyMeals, setNearbyMeals] = useState<MealEntry[]>([]);
@@ -72,6 +86,25 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   
   // Multi-filter state
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
+  
+  // Track if we're showing limited results
+  const [showingLimitedResults, setShowingLimitedResults] = useState(false);
+  
+  // Tab view state - initialize with route param if provided
+  const initialTabIndex = route.params?.tabIndex || 0;
+  const [index, setIndex] = useState(initialTabIndex);
+  const [routes] = useState([
+    { key: 'list', title: 'Feed' },
+    { key: 'map', title: 'Map' },
+  ]);
+
+  // Handle route parameter changes (like returning from meal detail with tab index)
+  useEffect(() => {
+    if (route.params?.tabIndex !== undefined && route.params.tabIndex !== index) {
+      console.log('HomeScreen: Setting tab index from route params:', route.params.tabIndex);
+      setIndex(route.params.tabIndex);
+    }
+  }, [route.params?.tabIndex]);
 
   // Get user's current location
   useEffect(() => {
@@ -137,7 +170,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       const currentUserId = auth().currentUser?.uid;
       console.log('Current user ID:', currentUserId);
       
-      // Get all meals from Firestore - we'll filter locally for nearby ones
+      // Get all meals from all users
       const querySnapshot = await firestore()
         .collection('mealEntries')
         .orderBy('createdAt', 'desc')
@@ -222,8 +255,20 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         ? meals.sort((a, b) => (a.distance || 9999) - (b.distance || 9999))
         : meals;
       
-      console.log(`Found ${sortedMeals.length} meals from other users`);
-      setAllNearbyMeals(sortedMeals);
+      // Limit to the closest MAX_MEALS_TO_DISPLAY meals to prevent performance issues
+      const limitedMeals = sortedMeals.slice(0, MAX_MEALS_TO_DISPLAY);
+      
+      console.log(`Found ${sortedMeals.length} meals from other users, showing closest ${limitedMeals.length}`);
+      
+      // Show info to user if we're limiting results
+      const isLimited = sortedMeals.length > MAX_MEALS_TO_DISPLAY;
+      setShowingLimitedResults(isLimited);
+      
+      if (isLimited) {
+        console.log(`Limiting display to closest ${MAX_MEALS_TO_DISPLAY} meals for performance`);
+      }
+      
+      setAllNearbyMeals(limitedMeals);
       // Filtered meals will be updated via the useEffect
     } catch (error) {
       console.error('Error fetching nearby meals:', error);
@@ -355,11 +400,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     // applyFilter will be called via useEffect
   };
 
-  const viewMealDetails = (meal: MealEntry) => {
-    console.log("Navigating to meal detail with ID:", meal.id);
-    navigation.navigate('MealDetail', { mealId: meal.id, previousScreen: 'Home' });
-  };
-
   const handleImageError = (mealId: string) => {
     console.log(`Image load error for meal: ${mealId}`);
     setImageErrors(prev => ({...prev, [mealId]: true}));
@@ -390,6 +430,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       // In kilometers with one decimal
       return `${distance.toFixed(1)}km away`;
     }
+  };
+
+  // Navigation function for meal details
+  const viewMealDetails = (meal: MealEntry) => {
+    console.log("Navigating to meal detail with ID:", meal.id);
+    navigation.navigate('MealDetail', { 
+      mealId: meal.id, 
+      previousScreen: 'Home',
+      previousTabIndex: index // Pass current tab index
+    });
   };
 
   // Render a meal item in the feed
@@ -434,23 +484,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       </View>
     </TouchableOpacity>
   );
+  
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Updated Header */}
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>DishItOut</Text>
-      </View>
-      
-      {/* Multi Filter Component */}
-      <View style={styles.filterArea}>
-        <SimpleFilterComponent 
-          key="home-filter"
-          onFilterChange={handleFilterChange}
-          initialFilters={activeFilters}
-        />
-      </View>
 
+  
+
+
+
+  // Feed view component (current content)
+  const FeedViewComponent = () => (
+    <>
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
@@ -488,6 +531,57 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           }
         />
       )}
+    </>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Updated Header with Map Toggle */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>DishItOut</Text>
+        <TouchableOpacity
+          style={styles.mapToggleButton}
+          onPress={() => setIndex(index === 0 ? 1 : 0)}
+        >
+          <Icon 
+            name={index === 0 ? "map" : "list"} 
+            size={24} 
+            color="#E63946" 
+          />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Multi Filter Component */}
+      <View style={styles.filterArea}>
+        <SimpleFilterComponent 
+          key="home-filter"
+          onFilterChange={handleFilterChange}
+          initialFilters={activeFilters}
+        />
+      </View>
+
+      {/* Tab View - Render both components but show/hide based on index */}
+      <View style={styles.tabView}>
+        <View style={[styles.tabContent, index !== 0 && styles.hiddenTab]}>
+          <FeedViewComponent />
+        </View>
+        <View style={[styles.tabContent, index !== 1 && styles.hiddenTab]}>
+          <HomeMapComponent
+            navigation={navigation}
+            nearbyMeals={nearbyMeals}
+            loading={loading}
+            refreshing={refreshing}
+            activeFilters={activeFilters}
+            showingLimitedResults={showingLimitedResults}
+            userLocation={userLocation}
+            imageErrors={imageErrors}
+            onImageError={handleImageError}
+            onViewMealDetails={viewMealDetails}
+            tabIndex={index}
+            MAX_MEALS_TO_DISPLAY={MAX_MEALS_TO_DISPLAY}
+          />
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
@@ -503,7 +597,9 @@ const styles = StyleSheet.create({
     paddingBottom: 5, // Reduced from 10 to 5
     paddingHorizontal: 20,
     zIndex: 10,
-    alignItems: 'flex-start', // Align items to the left
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   filterArea: {
     paddingHorizontal: 15,
@@ -616,6 +712,202 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  // Map toggle button style
+  mapToggleButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(230, 57, 70, 0.1)',
+  },
+  // Tab view style
+  tabView: {
+    flex: 1,
+  },
+  tabContent: {
+    flex: 1,
+  },
+  hiddenTab: {
+    position: 'absolute',
+    left: -10000,
+    opacity: 0,
+  },
+  // Map styles (copied from MapScreen)
+  mapContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  // Custom photo marker styles
+  customPhotoMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerPhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  markerPhotoPlaceholder: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pagerDots: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: 'white',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  pagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 2,
+  },
+  pagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  // Callout styles
+  callout: {
+    width: 220,
+    borderRadius: 10,
+    padding: 0,
+    backgroundColor: 'transparent',
+  },
+  photoCallout: {
+    width: 220,
+  },
+  calloutContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  calloutImageLarge: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  calloutImageLargePlaceholder: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  calloutTitle: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginBottom: 3,
+  },
+  calloutSubtitle: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 3,
+  },
+  calloutRatingRow: {
+    flexDirection: 'row',
+    marginVertical: 3,
+    justifyContent: 'center',
+  },
+  calloutStar: {
+    width: 14,
+    height: 14,
+    marginHorizontal: 1,
+  },
+  calloutUserName: {
+    fontSize: 11,
+    color: '#888',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  calloutPagerDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 5,
+  },
+  calloutPagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  calloutPagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  calloutInstruction: {
+    fontSize: 9,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  // Map button styles
+  mapButtonContainer: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  floatingLocationButton: {
+    backgroundColor: 'white',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: '#E63946',
+  },
+  limitedResultsIndicator: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  limitedResultsText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
   },
 });
