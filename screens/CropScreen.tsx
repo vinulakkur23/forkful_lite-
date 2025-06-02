@@ -577,15 +577,6 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         <Text style={styles.loadingText}>
           {cropperOpened.current ? 'Loading photo...' : 'Opening cropper...'}
         </Text>
-        <Text style={[styles.loadingText, styles.smallText]}>
-          All photos will be cropped to a square format
-        </Text>
-        {/* Show additional info if taking too long */}
-        {cropperOpened.current && (
-          <Text style={[styles.loadingText, styles.smallText, { marginTop: 20 }]}>
-            This may take a moment for large photos...
-          </Text>
-        )}
       </View>
     </SafeAreaView>
   );

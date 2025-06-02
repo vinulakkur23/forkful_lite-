@@ -761,6 +761,72 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     // Filter meals that have location data
     const mealsWithLocation = filteredMeals.filter(meal => meal.location !== null);
     
+    // Group meals by location and offset overlapping markers
+    const processedMealMarkers = useMemo(() => {
+      // Group meals by location (rounded to 4 decimal places to catch very close locations)
+      const locationGroups: { [key: string]: MealEntry[] } = {};
+      
+      mealsWithLocation.forEach(meal => {
+        if (!meal.location) return;
+        
+        const lat = meal.location.latitude.toFixed(4);
+        const lng = meal.location.longitude.toFixed(4);
+        const locationKey = `${lat},${lng}`;
+        
+        if (!locationGroups[locationKey]) {
+          locationGroups[locationKey] = [];
+        }
+        locationGroups[locationKey].push(meal);
+      });
+      
+      // Process each group to offset markers if multiple meals at same location
+      const processedMarkers: Array<{meal: MealEntry, coordinate: {latitude: number, longitude: number}, isGrouped: boolean, groupSize: number}> = [];
+      
+      Object.values(locationGroups).forEach(mealsAtLocation => {
+        if (mealsAtLocation.length === 1) {
+          // Single meal at this location, no offset needed
+          processedMarkers.push({
+            meal: mealsAtLocation[0],
+            coordinate: {
+              latitude: mealsAtLocation[0].location!.latitude,
+              longitude: mealsAtLocation[0].location!.longitude
+            },
+            isGrouped: false,
+            groupSize: 1
+          });
+        } else {
+          // Multiple meals at same location, arrange in a circle
+          const centerLat = mealsAtLocation[0].location!.latitude;
+          const centerLng = mealsAtLocation[0].location!.longitude;
+          const count = mealsAtLocation.length;
+          
+          // Calculate offset distance based on number of meals (roughly 20-50 meters)
+          const offsetDistance = 0.0003 + (count > 5 ? 0.0002 : 0); // Increase offset for larger groups
+          
+          mealsAtLocation.forEach((meal, index) => {
+            // Calculate angle for even distribution in a circle
+            const angle = (2 * Math.PI * index) / count;
+            
+            // Calculate offset coordinates
+            const offsetLat = centerLat + (offsetDistance * Math.cos(angle));
+            const offsetLng = centerLng + (offsetDistance * Math.sin(angle));
+            
+            processedMarkers.push({
+              meal: meal,
+              coordinate: {
+                latitude: offsetLat,
+                longitude: offsetLng
+              },
+              isGrouped: true,
+              groupSize: count
+            });
+          });
+        }
+      });
+      
+      return processedMarkers;
+    }, [mealsWithLocation]);
+    
     // Calculate initial region based on meals only - no user location yet
     const initialRegion = useMemo<Region>(() => {
       // Default fallback if no meals with location
@@ -907,17 +973,24 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
           initialRegion={initialRegion}
           showsUserLocation={true}
         >
-          {mealsWithLocation.map(meal => (
+          {processedMealMarkers.map(({ meal, coordinate, isGrouped, groupSize }) => (
             <Marker
               key={meal.id}
-              coordinate={{
-                latitude: meal.location?.latitude || 0,
-                longitude: meal.location?.longitude || 0
-              }}
+              coordinate={coordinate}
               title={meal.meal || 'Untitled meal'}
               description={meal.restaurant || ''}
-              pinColor="#ff6b6b"
             >
+              {/* Custom marker view for grouped meals */}
+              {isGrouped && (
+                <View style={styles.customMarker}>
+                  <View style={[styles.markerDot, { backgroundColor: '#ff4444' }]} />
+                  {groupSize > 2 && (
+                    <View style={styles.markerBadge}>
+                      <Text style={styles.markerBadgeText}>{groupSize}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
               <Callout
                 tooltip
                 onPress={() => viewMealDetails(meal)}
@@ -942,6 +1015,11 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
                   <View style={styles.calloutRating}>
                     <StarRating rating={meal.rating} starSize={12} spacing={1} />
                   </View>
+                  {isGrouped && groupSize > 1 && (
+                    <Text style={styles.calloutGroupText}>
+                      {groupSize - 1} more meal{groupSize > 2 ? 's' : ''} at this location
+                    </Text>
+                  )}
                   <Text style={styles.calloutTapText}>Tap to view details</Text>
                 </View>
               </Callout>
@@ -1304,6 +1382,49 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 5,
+  },
+  calloutGroupText: {
+    fontSize: 11,
+    color: '#ff4444',
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  // Custom marker styles
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: 'white',
+    backgroundColor: '#ff6b6b',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+  },
+  markerBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#ff4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  markerBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
 

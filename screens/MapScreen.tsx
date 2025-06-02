@@ -14,6 +14,8 @@ import {
   Platform,
   PermissionsAndroid,
   ImageSourcePropType,
+  ScrollView,
+  Modal,
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
@@ -75,9 +77,58 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [showWishlist, setShowWishlist] = useState<boolean>(false); // Toggle between user's meals and saved meals
+  const [selectedLocationMeals, setSelectedLocationMeals] = useState<MealEntry[] | null>(null);
+  const [showMealsModal, setShowMealsModal] = useState(false);
+  const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<{ [key: string]: number }>({});
   
   // Map view reference
   const mapRef = useRef<MapView | null>(null);
+  
+  // Group meals by location for carousel display
+  const locationGroupedMarkers = useMemo(() => {
+    const mealsWithLocation = filteredMeals.filter(meal => meal.location?.latitude && meal.location?.longitude);
+    
+    // Group meals by location (rounded to 4 decimal places to catch very close locations)
+    const locationGroups: { [key: string]: MealEntry[] } = {};
+    
+    mealsWithLocation.forEach(meal => {
+      if (!meal.location) return;
+      
+      const lat = meal.location.latitude.toFixed(4);
+      const lng = meal.location.longitude.toFixed(4);
+      const locationKey = `${lat},${lng}`;
+      
+      if (!locationGroups[locationKey]) {
+        locationGroups[locationKey] = [];
+      }
+      locationGroups[locationKey].push(meal);
+    });
+    
+    // Create one marker per location with all meals
+    const groupedMarkers: Array<{
+      locationKey: string,
+      coordinate: {latitude: number, longitude: number},
+      meals: MealEntry[],
+      restaurant?: string
+    }> = [];
+    
+    Object.entries(locationGroups).forEach(([locationKey, meals]) => {
+      const firstMeal = meals[0];
+      const restaurant = firstMeal.restaurant || meals.find(m => m.restaurant)?.restaurant;
+      
+      groupedMarkers.push({
+        locationKey,
+        coordinate: {
+          latitude: firstMeal.location!.latitude,
+          longitude: firstMeal.location!.longitude
+        },
+        meals: meals,
+        restaurant: restaurant
+      });
+    });
+    
+    return groupedMarkers;
+  }, [filteredMeals]);
 
   useEffect(() => {
     if (showWishlist) {
@@ -254,7 +305,28 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   };
 
   const viewMealDetails = (meal: MealEntry) => {
+    // Close modal if open
+    setShowMealsModal(false);
+    setSelectedLocationMeals(null);
     navigation.navigate('MealDetail', { mealId: meal.id });
+  };
+  
+  const handleLocationPress = (meals: MealEntry[]) => {
+    // Always use pager dot view behavior now
+    // For both single and multiple meals, don't navigate directly
+    // Let the callout handle navigation
+    return;
+  };
+  
+  const handleMarkerPress = (locationKey: string, meals: MealEntry[]) => {
+    if (meals.length > 1) {
+      // Cycle through meals
+      const currentIndex = selectedMarkerIndex[locationKey] || 0;
+      const nextIndex = (currentIndex + 1) % meals.length;
+      setSelectedMarkerIndex(prev => ({ ...prev, [locationKey]: nextIndex }));
+    } else {
+      handleLocationPress(meals);
+    }
   };
 
   const handleImageError = (mealId: string) => {
@@ -625,52 +697,111 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
         showsUserLocation={true}
         onMapReady={fitMapToMarkers}
       >
-        {filteredMeals.map(meal => (
-          <Marker
-            key={meal.id}
-            coordinate={{
-              latitude: meal.location?.latitude || 0,
-              longitude: meal.location?.longitude || 0
-            }}
-            title={meal.meal || 'Untitled meal'}
-            description={meal.restaurant || ''}
-            pinColor={showWishlist ? "#FFC008" : "#E63946"}
-          >
-            <Callout
-              tooltip
-              onPress={() => viewMealDetails(meal)}
-              style={styles.callout}
+        {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant }) => {
+          const currentIndex = selectedMarkerIndex[locationKey] || 0;
+          const currentMeal = meals[currentIndex];
+          
+          return (
+            <Marker
+              key={locationKey}
+              coordinate={coordinate}
+              onPress={() => handleMarkerPress(locationKey, meals)}
             >
-              <View style={styles.calloutContent}>
-                {meal.photoUrl && !imageErrors[meal.id] ? (
+              {/* Custom marker view - show photo preview for all pins */}
+              <View style={styles.customPhotoMarker}>
+                {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
                   <Image
-                    source={{ uri: meal.photoUrl }}
-                    style={styles.calloutImage}
-                    onError={() => handleImageError(meal.id)}
+                    source={{ uri: currentMeal.photoUrl }}
+                    style={styles.markerPhoto}
+                    onError={() => handleImageError(currentMeal.id)}
                   />
                 ) : (
-                  <View style={styles.calloutImagePlaceholder}>
-                    <Icon name="image" size={24} color="#ddd" />
+                  <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
+                    <Icon name="image" size={20} color="#ddd" />
                   </View>
                 )}
-                <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
-                {meal.restaurant && (
-                  <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
-                )}
-                {showWishlist && (
-                  <View style={styles.calloutSavedBadge}>
-                    <Icon name="bookmark" size={10} color="#fff" />
-                    <Text style={styles.calloutSavedText}>Saved</Text>
+                {/* Pager dots for multiple meals */}
+                {meals.length > 1 && (
+                  <View style={styles.pagerDots}>
+                    {meals.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.pagerDot,
+                          index === currentIndex && styles.pagerDotActive,
+                          { backgroundColor: index === currentIndex ? (showWishlist ? '#FFC008' : '#E63946') : '#ddd' }
+                        ]}
+                      />
+                    ))}
                   </View>
                 )}
-                <Text style={[
-                  styles.calloutTapText,
-                  { color: showWishlist ? '#FFC008' : '#E63946' }
-                ]}>Tap to view details</Text>
               </View>
-            </Callout>
-          </Marker>
-        ))}
+              <Callout
+                tooltip
+                onPress={() => {
+                  // Always navigate to details in the current view
+                  viewMealDetails(currentMeal);
+                }}
+                style={[styles.callout, styles.photoCallout]}
+              >
+                <View style={styles.calloutContent}>
+                  {/* Enhanced callout with bigger image preview */}
+                  <>
+                    {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
+                      <Image
+                        source={{ uri: currentMeal.photoUrl }}
+                        style={styles.calloutImageLarge}
+                        onError={() => handleImageError(currentMeal.id)}
+                      />
+                    ) : (
+                      <View style={styles.calloutImageLargePlaceholder}>
+                        <Icon name="image" size={30} color="#ddd" />
+                      </View>
+                    )}
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {currentMeal.meal || 'Untitled meal'}
+                    </Text>
+                    {currentMeal.restaurant && (
+                      <Text style={styles.calloutSubtitle} numberOfLines={1}>{currentMeal.restaurant}</Text>
+                    )}
+                    <View style={styles.calloutRatingRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Image
+                          key={star}
+                          source={star <= currentMeal.rating 
+                            ? require('../assets/stars/star-filled.png')
+                            : require('../assets/stars/star-empty.png')
+                          }
+                          style={styles.calloutStar}
+                        />
+                      ))}
+                    </View>
+                    {meals.length > 1 && (
+                      <>
+                        {/* Pager dots in callout */}
+                        <View style={styles.calloutPagerDots}>
+                          {meals.map((_, index) => (
+                            <View
+                              key={index}
+                              style={[
+                                styles.calloutPagerDot,
+                                index === currentIndex && styles.calloutPagerDotActive,
+                                { backgroundColor: index === currentIndex ? (showWishlist ? '#FFC008' : '#E63946') : '#ddd' }
+                              ]}
+                            />
+                          ))}
+                        </View>
+                        <Text style={styles.calloutInstruction}>
+                          Tap marker to cycle • Tap here for details
+                        </Text>
+                      </>
+                    )}
+                  </>
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* Wishlist Toggle Button */}
@@ -718,6 +849,77 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
           <Image source={MAP_ICONS.share} style={styles.buttonIcon} />
         </TouchableOpacity>
       </View>
+      
+      {/* Modal for multiple meals at one location */}
+      <Modal
+        visible={showMealsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMealsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedLocationMeals?.[0]?.restaurant || 'Meals at this location'}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setShowMealsModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              {selectedLocationMeals?.map((meal, index) => (
+                <TouchableOpacity
+                  key={meal.id}
+                  style={[
+                    styles.modalMealCard,
+                    index === selectedLocationMeals.length - 1 && { marginRight: 0 }
+                  ]}
+                  activeOpacity={0.9}
+                  onPress={() => viewMealDetails(meal)}
+                >
+                  {meal.photoUrl && !imageErrors[meal.id] ? (
+                    <Image
+                      source={{ uri: meal.photoUrl }}
+                      style={styles.modalMealImage}
+                      onError={() => handleImageError(meal.id)}
+                    />
+                  ) : (
+                    <View style={styles.modalMealImagePlaceholder}>
+                      <Icon name="image" size={30} color="#ddd" />
+                    </View>
+                  )}
+                  <View style={styles.modalMealInfo}>
+                    <Text style={styles.modalMealName} numberOfLines={2}>
+                      {meal.meal || 'Untitled meal'}
+                    </Text>
+                    <View style={styles.modalRating}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Image
+                          key={star}
+                          source={star <= meal.rating 
+                            ? require('../assets/stars/star-filled.png')
+                            : require('../assets/stars/star-empty.png')
+                          }
+                          style={styles.modalStar}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -834,6 +1036,111 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 5,
   },
+  calloutGroupText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  // Custom marker styles
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  markerBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  markerBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  // Carousel callout styles
+  carouselCallout: {
+    width: 280,
+    minHeight: 200,
+    borderRadius: 10,
+    padding: 0,
+    backgroundColor: 'transparent',
+  },
+  carouselCalloutContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  carouselTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  carouselScrollView: {
+    maxHeight: 140,
+    marginBottom: 5,
+  },
+  carouselItem: {
+    width: 100,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  carouselImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    marginBottom: 5,
+  },
+  carouselImagePlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  carouselMealName: {
+    fontSize: 12,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 3,
+  },
+  carouselRating: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  carouselTapText: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 5,
+  },
   wishlistToggleContainer: {
     position: 'absolute',
     top: 10, // Reduced from 16 to 10 for less space at the top
@@ -884,6 +1191,177 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     tintColor: 'white',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+    maxHeight: '50%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+    marginRight: 10,
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  modalScrollContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  modalMealCard: {
+    width: 150,
+    marginRight: 15,
+  },
+  modalMealImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  modalMealImagePlaceholder: {
+    width: 150,
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalMealInfo: {
+    alignItems: 'center',
+  },
+  modalMealName: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 5,
+    fontWeight: '500',
+  },
+  modalRating: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  calloutStar: {
+    width: 14,
+    height: 14,
+    marginHorizontal: 1,
+  },
+  modalStar: {
+    width: 14,
+    height: 14,
+    marginHorizontal: 1,
+  },
+  // Custom photo marker styles for pager dot view
+  customPhotoMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerPhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  markerPhotoPlaceholder: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pagerDots: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: 'white',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  pagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 2,
+  },
+  pagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  photoCallout: {
+    width: 220,
+  },
+  calloutRatingRow: {
+    flexDirection: 'row',
+    marginVertical: 3,
+    justifyContent: 'center',
+  },
+  calloutInstruction: {
+    fontSize: 9,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  calloutImageLarge: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  calloutImageLargePlaceholder: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  calloutPagerDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 5,
+  },
+  calloutPagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  calloutPagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
 
