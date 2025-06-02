@@ -111,12 +111,25 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         prefetchSuggestions();
       }
       
-      // Delay opening the cropper slightly to ensure component is fully rendered
+      // Delay opening the cropper to ensure:
+      // 1. Component is fully rendered
+      // 2. Previous picker is fully dismissed
+      // 3. Memory is cleaned up
       setTimeout(() => {
         if (isMounted.current && !cropperOpened.current) {
-          openCropper();
+          // Clean up memory before opening cropper
+          ImageCropPicker.clean()
+            .then(() => {
+              console.log('Memory cleaned, opening cropper');
+              openCropper();
+            })
+            .catch(e => {
+              console.log('Cleanup error (ignoring):', e);
+              // Try to open cropper anyway
+              openCropper();
+            });
         }
-      }, 300);
+      }, 800); // Increased delay to ensure picker is fully dismissed
       
       return () => {
         console.log('CropScreen blurred');
@@ -442,6 +455,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
     try {
       // Check if already processing or component unmounted
       if (processing || !isMounted.current || cropperOpened.current) {
+        console.log('Skipping cropper open - already processing or opened');
         return;
       }
       
@@ -458,13 +472,13 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       const cleanUri = photo.uri.split('?')[0];
       console.log('Opening cropper with URI:', cleanUri);
       
-      // Clean crop params to avoid issues on iOS
-      ImageCropPicker.clean().catch(() => {
-        // Ignore errors during cleanup
-      });
+      // Add a small delay to ensure UI is ready (helps with memory pressure)
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Set square crop dimensions - use the minimum dimension to ensure a proper square
-      const cropSize = Math.min(photo.width, photo.height);
+      const cropSize = Math.min(photo.width || 1000, photo.height || 1000);
+      
+      console.log(`Opening cropper with size: ${cropSize}x${cropSize}`);
 
       // Open image cropper with square aspect ratio
       const result = await ImageCropPicker.openCropper({
@@ -524,36 +538,54 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log('Crop error:', error);
       
       if (isMounted.current) {
-        if (error.message !== 'User cancelled image selection') {
-          // For actual errors, show an alert
+        // Check for specific error types
+        if (error.code === 'E_PICKER_CANCELLED' || error.message === 'User cancelled image selection') {
+          // If user cancelled, go back
+          console.log('User cancelled cropping');
+          navigation.goBack();
+        } else if (error.message && error.message.includes('memory')) {
+          // Memory pressure error
           Alert.alert(
-            'Error',
-            'Failed to crop image. Please try again.',
+            'Memory Warning',
+            'Your device is running low on memory. Please close some apps and try again.',
             [{ text: 'OK', onPress: () => navigation.goBack() }]
           );
         } else {
-          // If user cancelled, go back
-          navigation.goBack();
+          // For other errors, show a more detailed alert
+          Alert.alert(
+            'Error',
+            `Failed to crop image: ${error.message || 'Unknown error'}`,
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
         }
       }
     } finally {
       // Reset processing state if component still mounted
       if (isMounted.current) {
         setProcessing(false);
+        cropperOpened.current = false; // Reset cropper opened flag
       }
     }
   };
 
-  // Simple loading screen
+  // Simple loading screen with better feedback
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff6b6b" />
-        <Text style={styles.loadingText}>Opening cropper...</Text>
+        <Text style={styles.loadingText}>
+          {cropperOpened.current ? 'Loading photo...' : 'Opening cropper...'}
+        </Text>
         <Text style={[styles.loadingText, styles.smallText]}>
           All photos will be cropped to a square format
         </Text>
+        {/* Show additional info if taking too long */}
+        {cropperOpened.current && (
+          <Text style={[styles.loadingText, styles.smallText, { marginTop: 20 }]}>
+            This may take a moment for large photos...
+          </Text>
+        )}
       </View>
     </SafeAreaView>
   );

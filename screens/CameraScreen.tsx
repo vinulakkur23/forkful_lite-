@@ -307,20 +307,25 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       const timestamp = new Date().getTime();
       const navigationKey = `gallery_photo_${timestamp}`;
       
-      // Navigate to Crop screen with the selected photo and location data
-      navigation.navigate('Crop', {
-        photo: {
-          uri: photoAsset.uri,
-          width: photoAsset.width,
-          height: photoAsset.height,
-          originalUri: photoAsset.originalUri,
-          fromGallery: true,
-          assetId: photoAsset.assetId,
-        },
-        location: photoAsset.location || location, // Use photo location or fallback to device location
-        exifData: photoAsset.exifData,
-        _navigationKey: navigationKey,
-      });
+      // Add a delay to ensure PHPicker is fully dismissed before navigation
+      // This prevents "view not in window hierarchy" errors
+      console.log("Waiting for picker dismissal before navigation...");
+      setTimeout(() => {
+        // Navigate to Crop screen with the selected photo and location data
+        navigation.navigate('Crop', {
+          photo: {
+            uri: photoAsset.uri,
+            width: photoAsset.width,
+            height: photoAsset.height,
+            originalUri: photoAsset.originalUri,
+            fromGallery: true,
+            assetId: photoAsset.assetId,
+          },
+          location: photoAsset.location || location, // Use photo location or fallback to device location
+          exifData: photoAsset.exifData,
+          _navigationKey: navigationKey,
+        });
+      }, 600); // 600ms delay to ensure picker animation completes
       
       // If we have location data, start prefetching restaurant suggestions
       if (photoAsset.location && photoAsset.uri) {

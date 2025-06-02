@@ -94,17 +94,70 @@ const PhotoGPS = {
     }
   },
 
-  // Get current device location
-  async getCurrentLocation(): Promise<LocationData | null> {
+  // Get current device location with timeout and retry logic
+  async getCurrentLocation(timeoutMs: number = 5000, retryCount: number = 2): Promise<LocationData | null> {
     if (Platform.OS !== 'ios') {
       return null;
     }
-    try {
-      return await PhotoGPSModule.getCurrentLocation();
-    } catch (error) {
-      console.error('Error getting current location:', error);
-      return null;
+    
+    for (let attempt = 1; attempt <= retryCount; attempt++) {
+      try {
+        console.log(`PhotoGPS getCurrentLocation attempt ${attempt}/${retryCount} with ${timeoutMs}ms timeout`);
+        
+        // Pass timeout to the native module directly
+        const result = await PhotoGPSModule.getCurrentLocation(timeoutMs);
+        
+        if (result) {
+          console.log(`Successfully got current location on attempt ${attempt}:`, result);
+          return result;
+        }
+      } catch (error) {
+        const isLastAttempt = attempt === retryCount;
+        console.error(`Error getting current location (attempt ${attempt}/${retryCount}):`, error);
+        
+        if (isLastAttempt) {
+          console.error('All location attempts failed, returning null');
+          return null;
+        } else {
+          // Wait before retrying (with exponential backoff)
+          const delayMs = 1000 * attempt;
+          console.log(`Waiting ${delayMs}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
     }
+    
+    return null;
+  },
+
+  // Test location services health with detailed diagnostics
+  async testLocationServices(): Promise<{ working: boolean; details: string[] }> {
+    const details: string[] = [];
+    let working = false;
+
+    if (Platform.OS !== 'ios') {
+      details.push('Not iOS platform - native location services unavailable');
+      return { working: false, details };
+    }
+
+    try {
+      details.push('Testing native PhotoGPS module...');
+      const startTime = Date.now();
+      
+      const result = await PhotoGPS.getCurrentLocation(3000, 1);
+      const duration = Date.now() - startTime;
+      
+      if (result) {
+        working = true;
+        details.push(`✅ Native location working (${duration}ms): ${result.latitude.toFixed(6)}, ${result.longitude.toFixed(6)}`);
+      } else {
+        details.push('❌ Native location returned null');
+      }
+    } catch (error) {
+      details.push(`❌ Native location failed: ${error.message}`);
+    }
+
+    return { working, details };
   },
 };
 

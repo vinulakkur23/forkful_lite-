@@ -76,100 +76,45 @@ export const getPhotoWithMetadata = async (): Promise<PhotoAsset | null> => {
         location: photoAsset.location,
       };
       
-      // If we have location data, log it
+      // PRIORITIZE PHASSET DATA - Only fall back if photo has no location
+      console.log('=== PHASSET LOCATION EXTRACTION STATUS ===');
+      
       if (result.location) {
-        console.log(`Photo has location data with source "${result.location.source}":`, 
+        console.log(`✅ PHOTO HAS LOCATION from source "${result.location.source}":`, 
           `${result.location.latitude}, ${result.location.longitude}`);
       } else {
-        console.log('Photo does not have location data');
+        console.log('❌ Photo picker did not return location, trying direct PHAsset extraction...');
         
-        // If we have an assetId but no location, try one more time with extractGPSFromAsset
+        // If we have an assetId, try extracting directly from PHAsset one more time
         if (photoAsset.assetId) {
-          console.log('Trying to extract GPS data directly from asset ID');
-          const locationData = await PhotoGPS.extractGPSFromAsset(photoAsset.assetId);
-          
-          if (locationData) {
-            console.log('Successfully extracted location data from asset ID:', locationData);
-            result.location = locationData;
-          } else {
-            console.log('Failed to extract location data from asset ID');
-          }
-        }
-        
-        // If still no location, try extracting from the file path
-        if (!result.location && result.uri) {
-          console.log('Trying to extract GPS data from file path');
-          const locationData = await PhotoGPS.extractGPSFromPath(result.uri);
-          
-          if (locationData) {
-            console.log('Successfully extracted location data from file path:', locationData);
-            result.location = locationData;
-          } else {
-            console.log('Failed to extract location data from file path');
-          }
-        }
-        
-        // If still no location, fall back to device location with a more aggressive timeout
-        if (!result.location) {
-          console.log('Falling back to device location with better timeout handling');
+          console.log('🔍 Attempting direct PHAsset extraction with enhanced Swift module...');
           try {
-            // First try the native module
-            const nativeDeviceLocation = await Promise.race([
-              PhotoGPS.getCurrentLocation(),
-              new Promise<null>((_, reject) => 
-                setTimeout(() => reject(new Error('Native location request timed out')), 2000)
-              )
-            ]).catch(err => {
-              console.log('Native device location timed out or failed:', err);
-              return null;
-            });
+            const directLocationData = await PhotoGPS.extractGPSFromAsset(photoAsset.assetId);
             
-            if (nativeDeviceLocation) {
-              console.log('Using native device location as fallback:', nativeDeviceLocation);
-              result.location = nativeDeviceLocation;
-              return result;
-            }
-            
-            // If native module fails, try React Native Geolocation directly
-            console.log('Native module failed, trying React Native Geolocation directly');
-            const position = await new Promise<any>((resolve, reject) => {
-              const timeoutId = setTimeout(() => {
-                reject(new Error('Geolocation timed out'));
-              }, 3000);
-              
-              Geolocation.getCurrentPosition(
-                (pos) => {
-                  clearTimeout(timeoutId);
-                  resolve(pos);
-                },
-                (err) => {
-                  clearTimeout(timeoutId);
-                  reject(err);
-                },
-                { enableHighAccuracy: false, timeout: 2500, maximumAge: 10000 }
-              );
-            }).catch(err => {
-              console.log('React Native Geolocation failed:', err);
-              return null;
-            });
-            
-            if (position && position.coords) {
-              const deviceLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                source: 'device'
-              };
-              console.log('Using React Native Geolocation as fallback:', deviceLocation);
-              result.location = deviceLocation;
+            if (directLocationData) {
+              console.log('✅ DIRECT PHASSET EXTRACTION SUCCESS:', directLocationData);
+              result.location = directLocationData;
             } else {
-              console.log('All location fallbacks failed, no location data available');
-              // Still return the photo even without location
+              console.log('❌ Direct PHAsset extraction returned null - photo truly has no location data');
+              console.log('🔄 Photo has no location data, falling back to device location...');
+              result.location = await getDeviceLocationWithFallbacks();
             }
-          } catch (locationError) {
-            console.error('Error in device location fallbacks:', locationError);
-            // Continue without location data
+          } catch (error) {
+            console.log('❌ Direct PHAsset extraction failed:', error.message);
+            console.log('🔄 Falling back to device location...');
+            result.location = await getDeviceLocationWithFallbacks();
           }
+        } else {
+          console.log('❌ No assetId available, falling back to device location...');
+          result.location = await getDeviceLocationWithFallbacks();
         }
+      }
+      
+      console.log('=== FINAL LOCATION RESULT ===');
+      if (result.location) {
+        console.log(`🎉 USING LOCATION from "${result.location.source}": ${result.location.latitude}, ${result.location.longitude}`);
+      } else {
+        console.log('😞 NO LOCATION AVAILABLE (photo has no GPS data and device location failed)');
       }
       
       return result;
@@ -303,35 +248,8 @@ const getPhotoWithDeviceLocation = async (): Promise<PhotoAsset | null> => {
     // Use either our native module or Geolocation to get device location
     let deviceLocation: LocationData | null = null;
     
-    if (Platform.OS === 'ios') {
-      try {
-        deviceLocation = await PhotoGPS.getCurrentLocation();
-      } catch (error) {
-        console.error('Error getting location from native module:', error);
-      }
-    }
-    
-    // If native module failed, fall back to Geolocation
-    if (!deviceLocation) {
-      try {
-        const position = await new Promise<any>((resolve, reject) => {
-          Geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 10000,
-          });
-        });
-        
-        deviceLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          source: 'device',
-        };
-      } catch (error) {
-        console.error('Error getting device location:', error);
-        return null;
-      }
-    }
+    // Use the robust fallback chain for device location
+    deviceLocation = await getDeviceLocationWithFallbacks();
     
     // We don't have a photo yet, so we'll need to use a standard picker
     const pickerOptions = {
@@ -416,4 +334,181 @@ export const prefetchSuggestionsFromPhoto = async (photo: PhotoAsset): Promise<a
     console.error('Error prefetching suggestions from photo:', error);
     return null;
   }
+};
+
+/**
+ * Robust device location getter with multiple fallback strategies
+ * This function tries multiple approaches to get device location when photo EXIF fails
+ */
+const getDeviceLocationWithFallbacks = async (): Promise<LocationData | null> => {
+  console.log('Starting robust device location fallback chain...');
+  
+  // Strategy 1: Try native PhotoGPS module with shorter timeout first
+  if (Platform.OS === 'ios') {
+    try {
+      console.log('Strategy 1: Trying native PhotoGPS with 3s timeout');
+      const nativeLocation = await PhotoGPS.getCurrentLocation(3000, 1);
+      
+      if (nativeLocation) {
+        console.log('Strategy 1 SUCCESS: Got location from native module:', nativeLocation);
+        return nativeLocation;
+      }
+    } catch (error) {
+      console.log('Strategy 1 FAILED: Native PhotoGPS failed:', error.message);
+    }
+  }
+  
+  // Strategy 2: Try React Native Geolocation with high accuracy disabled for faster response
+  try {
+    console.log('Strategy 2: Trying React Native Geolocation (low accuracy, fast)');
+    const position = await new Promise<any>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Fast geolocation timed out after 2s'));
+      }, 2000);
+      
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timeoutId);
+          resolve(pos);
+        },
+        (err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        },
+        { 
+          enableHighAccuracy: false, 
+          timeout: 1500, 
+          maximumAge: 30000  // Accept locations up to 30 seconds old
+        }
+      );
+    });
+    
+    if (position && position.coords) {
+      const fastLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        source: 'device_fast'
+      };
+      console.log('Strategy 2 SUCCESS: Got fast location:', fastLocation);
+      return fastLocation;
+    }
+  } catch (error) {
+    console.log('Strategy 2 FAILED: Fast geolocation failed:', error.message);
+  }
+  
+  // Strategy 3: Try React Native Geolocation with high accuracy but longer timeout
+  try {
+    console.log('Strategy 3: Trying React Native Geolocation (high accuracy)');
+    const position = await new Promise<any>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('High accuracy geolocation timed out after 5s'));
+      }, 5000);
+      
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timeoutId);
+          resolve(pos);
+        },
+        (err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        },
+        { 
+          enableHighAccuracy: true, 
+          timeout: 4000, 
+          maximumAge: 60000  // Accept locations up to 1 minute old
+        }
+      );
+    });
+    
+    if (position && position.coords) {
+      const accurateLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        source: 'device_accurate'
+      };
+      console.log('Strategy 3 SUCCESS: Got accurate location:', accurateLocation);
+      return accurateLocation;
+    }
+  } catch (error) {
+    console.log('Strategy 3 FAILED: High accuracy geolocation failed:', error.message);
+  }
+  
+  // Strategy 4: Try native PhotoGPS again with longer timeout as last resort
+  if (Platform.OS === 'ios') {
+    try {
+      console.log('Strategy 4: Trying native PhotoGPS again with 8s timeout (last resort)');
+      const lastResortLocation = await PhotoGPS.getCurrentLocation(8000, 1);
+      
+      if (lastResortLocation) {
+        console.log('Strategy 4 SUCCESS: Got location from native module (last resort):', lastResortLocation);
+        return lastResortLocation;
+      }
+    } catch (error) {
+      console.log('Strategy 4 FAILED: Final native PhotoGPS attempt failed:', error.message);
+    }
+  }
+  
+  console.log('ALL STRATEGIES FAILED: No device location available');
+  return null;
+};
+
+/**
+ * Debug function to test location services health
+ * You can call this from the React Native debugger console: 
+ * require('./services/photoLibraryService').testLocationHealth()
+ */
+export const testLocationHealth = async (): Promise<void> => {
+  console.log('🔍 Starting location services health check...');
+  
+  // Test native module
+  const nativeTest = await PhotoGPS.testLocationServices();
+  console.log('📱 Native PhotoGPS Test Results:');
+  nativeTest.details.forEach(detail => console.log(`   ${detail}`));
+  
+  // Test React Native Geolocation
+  console.log('🌍 Testing React Native Geolocation...');
+  try {
+    const startTime = Date.now();
+    const position = await new Promise<any>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('RN Geolocation timed out after 5s'));
+      }, 5000);
+      
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timeoutId);
+          resolve(pos);
+        },
+        (err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        },
+        { enableHighAccuracy: false, timeout: 4000, maximumAge: 30000 }
+      );
+    });
+    
+    const duration = Date.now() - startTime;
+    if (position && position.coords) {
+      console.log(`   ✅ RN Geolocation working (${duration}ms): ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`);
+    } else {
+      console.log('   ❌ RN Geolocation returned invalid position');
+    }
+  } catch (error) {
+    console.log(`   ❌ RN Geolocation failed: ${error.message}`);
+  }
+  
+  // Test the fallback chain
+  console.log('🔄 Testing fallback chain...');
+  const fallbackStart = Date.now();
+  const fallbackResult = await getDeviceLocationWithFallbacks();
+  const fallbackDuration = Date.now() - fallbackStart;
+  
+  if (fallbackResult) {
+    console.log(`   ✅ Fallback chain succeeded (${fallbackDuration}ms): ${fallbackResult.latitude.toFixed(6)}, ${fallbackResult.longitude.toFixed(6)} [${fallbackResult.source}]`);
+  } else {
+    console.log(`   ❌ Fallback chain failed (${fallbackDuration}ms)`);
+  }
+  
+  console.log('🏁 Location health check complete!');
 };

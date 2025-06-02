@@ -557,6 +557,46 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* AI Metadata Tags Section */}
+        {meal.aiMetadata && (
+          <View style={styles.metadataSection}>
+            <Text style={styles.metadataTitle}>AI Analysis</Text>
+            <View style={styles.metadataTagsContainer}>
+              {meal.aiMetadata.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.aiMetadata.cuisineType}</Text>
+                </View>
+              )}
+              {meal.aiMetadata.foodType && meal.aiMetadata.foodType !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.aiMetadata.foodType}</Text>
+                </View>
+              )}
+              {meal.aiMetadata.mealType && meal.aiMetadata.mealType !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.aiMetadata.mealType}</Text>
+                </View>
+              )}
+              {meal.aiMetadata.primaryProtein && meal.aiMetadata.primaryProtein !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.aiMetadata.primaryProtein}</Text>
+                </View>
+              )}
+              {meal.aiMetadata.dietType && meal.aiMetadata.dietType !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.aiMetadata.dietType}</Text>
+                </View>
+              )}
+              {/* City tag */}
+              {(meal.location?.city || meal.city) && (
+                <View style={[styles.metadataTag, styles.cityTag]}>
+                  <Text style={styles.metadataTagText}>{meal.location?.city || meal.city}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         <View style={styles.bottomRow}>
           {meal.location && (meal.location?.city || meal.city) && (
             <View style={styles.cityContainer}>
@@ -1116,6 +1156,40 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center', // Center the single button
     justifyContent: 'center',
+  },
+  // AI Metadata styles
+  metadataSection: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  metadataTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  metadataTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+  },
+  metadataTag: {
+    backgroundColor: '#ffc008',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  cityTag: {
+    backgroundColor: '#4285F4', // Different color for city to distinguish it
+  },
+  metadataTagText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 
