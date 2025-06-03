@@ -16,6 +16,8 @@ import { processImageMetadata, AIMetadata } from '../services/aiMetadataService'
 import { testMetadataApi } from '../services/apiTest';
 // Import button icons
 import { BUTTON_ICONS, hasCustomIcons } from '../config/buttonIcons';
+// Import cheers service
+import { toggleCheer, subscribeToCheersData } from '../services/cheersService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -42,6 +44,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [processingMetadata, setProcessingMetadata] = useState(false);
   const [justEdited, setJustEdited] = useState(false); // Track if meal was just edited
   const [isSaved, setIsSaved] = useState(false); // Track if meal is saved by current user
+  const [hasUserCheered, setHasUserCheered] = useState(false);
+  const [totalCheers, setTotalCheers] = useState(0);
+  const [cheersLoading, setCheersLoading] = useState(false);
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
@@ -125,6 +130,24 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     fetchMealDetails();
   }, []);
+  
+  // Subscribe to cheers data
+  useEffect(() => {
+    if (!meal || !mealId) return;
+    
+    const unsubscribe = subscribeToCheersData(
+      mealId,
+      meal.userId,
+      (cheersData) => {
+        setHasUserCheered(cheersData.hasUserCheered);
+        setTotalCheers(cheersData.totalCheers);
+      }
+    );
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [meal, mealId]);
   
   // Handle image load error
   const handleImageError = () => {
@@ -365,6 +388,27 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
+  // Handle cheers button press
+  const handleCheer = async () => {
+    // Don't allow cheering own meals
+    if (meal.userId === auth().currentUser?.uid) {
+      return;
+    }
+    
+    setCheersLoading(true);
+    try {
+      const success = await toggleCheer(mealId);
+      if (!success) {
+        Alert.alert('Error', 'Failed to update cheer. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error toggling cheer:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setCheersLoading(false);
+    }
+  };
+  
   // Navigate back to the correct screen
   const goBack = () => {
     const previousScreen = route.params?.previousScreen;
@@ -457,18 +501,24 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Meal Details</Text>
-        <TouchableOpacity 
-          style={styles.headerRightButton}
-          onPress={toggleSaveMeal}
-        >
-          <Image
-            source={isSaved 
-              ? require('../assets/icons/wishlist-active.png')
-              : require('../assets/icons/wishlist-inactive.png')}
-            style={styles.wishlistIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+        {/* Cheers button in header - only show if not own meal */}
+        {meal && meal.userId !== auth().currentUser?.uid ? (
+          <TouchableOpacity 
+            style={[styles.headerRightButton, { marginRight: 8 }]} // Add right margin to move left
+            onPress={handleCheer}
+            disabled={cheersLoading}
+          >
+            <Image
+              source={hasUserCheered 
+                ? require('../assets/icons/cheers-active.png')
+                : require('../assets/icons/cheers-inactive.png')}
+              style={styles.headerCheersIcon}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerRightButton} />
+        )}
       </View>
 
       <ScrollView style={styles.container}>
@@ -494,10 +544,38 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* Meal details */}
       <View style={styles.detailsContainer}>
         <View style={styles.titleRow}>
-          <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
-          {justEdited && (
-            <View style={styles.editedBadge}>
-              <Text style={styles.editedText}>Updated</Text>
+          <View style={styles.titleContent}>
+            <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+            {justEdited && (
+              <View style={styles.editedBadge}>
+                <Text style={styles.editedText}>Updated</Text>
+              </View>
+            )}
+          </View>
+          
+          {/* Wishlist button next to title */}
+          <TouchableOpacity 
+            style={styles.titleWishlistButton}
+            onPress={toggleSaveMeal}
+          >
+            <Image
+              source={isSaved 
+                ? require('../assets/icons/wishlist-active.png')
+                : require('../assets/icons/wishlist-inactive.png')}
+              style={styles.titleWishlistIcon}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          
+          {/* Show cheers count if it's own meal */}
+          {meal.userId === auth().currentUser?.uid && totalCheers > 0 && (
+            <View style={styles.cheersCountContainer}>
+              <Image
+                source={require('../assets/icons/cheers-active.png')}
+                style={[styles.cheersCountIcon, { tintColor: undefined }]} // Remove tint to preserve original colors
+                resizeMode="contain"
+              />
+              <Text style={styles.cheersCountText}>{totalCheers}</Text>
             </View>
           )}
         </View>
@@ -857,7 +935,9 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailsContainer: {
-    padding: 20,
+    paddingTop: 16, // Reduced from 20 to tighten top spacing
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     backgroundColor: '#FAF3E0',
     marginHorizontal: 16,
     marginBottom: 10,
@@ -871,8 +951,14 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center', // Changed back to center for better alignment
+    marginBottom: 8, // Reduced from 10 to tighten spacing
+  },
+  titleContent: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    flexWrap: 'wrap',
   },
   mealName: {
     fontSize: 24,
@@ -1212,6 +1298,48 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '500',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Header cheers icon (moved from title area)
+  headerCheersIcon: {
+    width: 28, // Increased from 24
+    height: 28, // Increased from 24
+    // No tintColor - preserves original icon colors
+  },
+  // Title wishlist button (moved from header)
+  titleWishlistButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    marginLeft: 12, // Increased from 8 to 12
+    marginRight: 0, // Back to no right margin
+    marginTop: -2,
+  },
+  titleWishlistIcon: {
+    width: 28,
+    height: 28,
+    // No tintColor - preserves original icon colors
+  },
+  cheersCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffc008',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8, // Reduced to match cheers button
+    marginTop: -2, // Move up slightly to match cheers button
+  },
+  cheersCountIcon: {
+    width: 16,
+    height: 16,
+    // No tintColor - preserves original icon colors
+    marginRight: 4,
+  },
+  cheersCountText: {
+    color: '#1a2b49',
+    fontSize: 12,
+    fontWeight: 'bold',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

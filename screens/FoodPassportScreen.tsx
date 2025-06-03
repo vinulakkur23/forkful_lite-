@@ -33,6 +33,7 @@ import MapView, { Marker, Callout } from 'react-native-maps';
 // Import achievement service
 import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
+import { getTotalCheersForUser } from '../services/cheersService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -42,7 +43,7 @@ type Props = {
   userId?: string;
   userName?: string;
   userPhoto?: string;
-  onStatsUpdate?: (stats: { totalMeals: number; averageRating: number; badgeCount: number }) => void;
+  onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number }) => void;
 };
 
 interface MealEntry {
@@ -101,7 +102,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     // State for profile stats
     const [profileStats, setProfileStats] = useState({
         totalMeals: 0,
-        averageRating: 0,
+        totalCheers: 0,
         badgeCount: 0
     });
 
@@ -221,12 +222,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
 
             // Calculate profile stats
             const totalMeals = fetchedMeals.length;
-            let averageRating = 0;
-
-            if (totalMeals > 0) {
-                const totalRating = fetchedMeals.reduce((sum, meal) => sum + (meal.rating || 0), 0);
-                averageRating = totalRating / totalMeals;
-            }
+            
+            // Get total cheers for the user
+            const totalCheers = await getTotalCheersForUser(targetUserId);
 
             // Get badge count
             const userAchievements = await getUserAchievements(targetUserId);
@@ -234,7 +232,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
 
             setProfileStats({
                 totalMeals,
-                averageRating,
+                totalCheers,
                 badgeCount
             });
             
@@ -242,7 +240,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
             if (onStatsUpdate) {
                 onStatsUpdate({
                     totalMeals,
-                    averageRating,
+                    totalCheers,
                     badgeCount
                 });
             }
@@ -694,7 +692,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                             <Text style={styles.statText}>{profileStats.totalMeals} meals</Text>
                                             <Text style={styles.statSeparator}>•</Text>
                                             <Text style={styles.statText}>
-                                                {profileStats.averageRating > 0 ? profileStats.averageRating.toFixed(1) : '0'} avg
+                                                {profileStats.totalCheers} cheers
                                             </Text>
                                             {profileStats.badgeCount > 0 && (
                                                 <>
@@ -1006,7 +1004,7 @@ const styles = StyleSheet.create({
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
     statSeparator: {
-        marginHorizontal: 6,
+        marginHorizontal: 12, // Increased from 6 to spread out the stats more
         color: '#999',
     },
     followButton: {
