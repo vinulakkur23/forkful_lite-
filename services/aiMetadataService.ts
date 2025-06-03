@@ -7,7 +7,7 @@ import { API_CONFIG } from '../config/api';
  */
 export interface AIMetadata {
   cuisineType: string;
-  foodType: string;
+  foodType: string[];  // Changed to array
   mealType: string;
   primaryProtein: string;
   dietType: string;
@@ -234,7 +234,7 @@ export const processImageMetadata = async (mealId: string, photoUrl: string): Pr
     if (randomSeed % 3 === 0) {
       fallbackMetadata = {
         cuisineType: 'American',
-        foodType: 'Burger',
+        foodType: ['Burger', 'Fries'],
         mealType: 'Dinner',
         primaryProtein: 'Beef',
         dietType: 'Omnivore',
@@ -246,7 +246,7 @@ export const processImageMetadata = async (mealId: string, photoUrl: string): Pr
     } else if (randomSeed % 3 === 1) {
       fallbackMetadata = {
         cuisineType: 'Italian',
-        foodType: 'Pizza',
+        foodType: ['Pizza'],
         mealType: 'Dinner',
         primaryProtein: 'Cheese',
         dietType: 'Vegetarian',
@@ -258,7 +258,7 @@ export const processImageMetadata = async (mealId: string, photoUrl: string): Pr
     } else {
       fallbackMetadata = {
         cuisineType: 'Japanese',
-        foodType: 'Sushi',
+        foodType: ['Sushi', 'Miso Soup'],
         mealType: 'Lunch',
         primaryProtein: 'Fish',
         dietType: 'Pescatarian',

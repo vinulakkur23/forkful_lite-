@@ -56,7 +56,7 @@ interface MealEntry {
   createdAt: number;
   aiMetadata?: {
     cuisineType: string;
-    foodType: string;
+    foodType: string[];
     mealType: string;
     primaryProtein: string;
     dietType: string;
@@ -276,7 +276,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
             createdAt: data.createdAt?.toDate?.() || Date.now(),
             aiMetadata: {
               cuisineType: aiMetadata.cuisineType || 'Unknown',
-              foodType: aiMetadata.foodType || 'Unknown',
+              foodType: aiMetadata.foodType || ['Unknown'],
               mealType: aiMetadata.mealType || 'Unknown',
               primaryProtein: aiMetadata.primaryProtein || 'Unknown',
               dietType: aiMetadata.dietType || 'Unknown',
@@ -368,11 +368,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
           meal.aiMetadata.cuisineType === filter.value
         );
       } else if (filter.type === 'foodType') {
-        result = result.filter(meal => 
-          meal.aiMetadata && 
-          meal.aiMetadata.foodType && 
-          meal.aiMetadata.foodType === filter.value
-        );
+        result = result.filter(meal => {
+          if (!meal.aiMetadata || !meal.aiMetadata.foodType) return false;
+          
+          // foodType is now an array
+          if (Array.isArray(meal.aiMetadata.foodType)) {
+            return meal.aiMetadata.foodType.includes(filter.value);
+          } else {
+            // Handle old data that might still be a string
+            return meal.aiMetadata.foodType === filter.value;
+          }
+        });
       } else if (filter.type === 'city') {
         result = result.filter(meal => {
           // First check if city is stored in location.city

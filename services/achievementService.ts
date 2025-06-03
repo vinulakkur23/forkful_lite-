@@ -140,11 +140,19 @@ const achievementDefinitions: AchievementDefinition[] = [
       
       // Check food type
       if (mealEntry.aiMetadata.foodType) {
-        const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
-        console.log(`Food type: "${foodType}"`);
-        if (seafoodKeywords.some(keyword => foodType.includes(keyword))) {
-          console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood food type detected: ${foodType}`);
-          return true;
+        // Handle foodType as array
+        const foodTypes = Array.isArray(mealEntry.aiMetadata.foodType) 
+          ? mealEntry.aiMetadata.foodType 
+          : [mealEntry.aiMetadata.foodType]; // Convert string to array for backward compatibility
+        
+        console.log(`Food types: ${JSON.stringify(foodTypes)}`);
+        
+        for (const foodType of foodTypes) {
+          const foodTypeLower = foodType.toLowerCase();
+          if (seafoodKeywords.some(keyword => foodTypeLower.includes(keyword))) {
+            console.log(`ACHIEVEMENT UNLOCKED: 'Catch of the Day' - Seafood food type detected: ${foodType}`);
+            return true;
+          }
         }
       }
       
@@ -234,12 +242,20 @@ const achievementDefinitions: AchievementDefinition[] = [
       
       // Check food type
       if (mealEntry.aiMetadata.foodType) {
-        const foodType = mealEntry.aiMetadata.foodType.toLowerCase();
-        console.log(`Food type: "${foodType}"`);
+        // Handle foodType as array
+        const foodTypes = Array.isArray(mealEntry.aiMetadata.foodType) 
+          ? mealEntry.aiMetadata.foodType 
+          : [mealEntry.aiMetadata.foodType]; // Convert string to array for backward compatibility
+        
+        console.log(`Food types: ${JSON.stringify(foodTypes)}`);
         const vegFoodKeywords = ['salad', 'vegetable', 'vegetarian', 'vegan', 'plant-based'];
-        if (vegFoodKeywords.some(keyword => foodType.includes(keyword))) {
-          console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - Vegetarian food type detected: ${foodType}`);
-          return true;
+        
+        for (const foodType of foodTypes) {
+          const foodTypeLower = foodType.toLowerCase();
+          if (vegFoodKeywords.some(keyword => foodTypeLower.includes(keyword))) {
+            console.log(`ACHIEVEMENT UNLOCKED: 'Plant Curious' - Vegetarian food type detected: ${foodType}`);
+            return true;
+          }
         }
       }
       

@@ -92,9 +92,20 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
             cuisineTypesSet.add(data.aiMetadata.cuisineType);
           }
           
-          if (data.aiMetadata.foodType && 
-              data.aiMetadata.foodType !== 'Unknown') {
-            foodTypesSet.add(data.aiMetadata.foodType);
+          if (data.aiMetadata.foodType) {
+            // foodType is now an array
+            if (Array.isArray(data.aiMetadata.foodType)) {
+              data.aiMetadata.foodType.forEach(food => {
+                if (food !== 'Unknown') {
+                  foodTypesSet.add(food);
+                }
+              });
+            } else {
+              // Handle old data that might still be a string
+              if (data.aiMetadata.foodType !== 'Unknown') {
+                foodTypesSet.add(data.aiMetadata.foodType as string);
+              }
+            }
           }
         }
       });

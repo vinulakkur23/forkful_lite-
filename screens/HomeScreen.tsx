@@ -64,7 +64,7 @@ interface MealEntry {
   distance?: number; // Distance in meters from user's current location
   aiMetadata?: {
     cuisineType: string;
-    foodType: string;
+    foodType: string[];  // Changed to array
     mealType: string;
     primaryProtein: string;
     dietType: string;
@@ -244,7 +244,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           createdAt: data.createdAt?.toDate?.() || new Date(),
           aiMetadata: {
             cuisineType: aiMetadata.cuisineType || 'Unknown',
-            foodType: aiMetadata.foodType || 'Unknown',
+            foodType: aiMetadata.foodType || ['Unknown'],
             mealType: aiMetadata.mealType || 'Unknown',
             primaryProtein: aiMetadata.primaryProtein || 'Unknown',
             dietType: aiMetadata.dietType || 'Unknown',
@@ -344,9 +344,17 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         });
       } else if (filter.type === 'foodType') {
         result = result.filter(meal => {
-          const matches = meal.aiMetadata && 
-                        meal.aiMetadata.foodType && 
-                        meal.aiMetadata.foodType === filter.value;
+          if (!meal.aiMetadata || !meal.aiMetadata.foodType) return false;
+          
+          // foodType is now an array
+          let matches = false;
+          if (Array.isArray(meal.aiMetadata.foodType)) {
+            matches = meal.aiMetadata.foodType.includes(filter.value);
+          } else {
+            // Handle old data that might still be a string
+            matches = meal.aiMetadata.foodType === filter.value;
+          }
+          
           if (matches) {
             console.log(`HomeScreen: Meal "${meal.meal}" matches foodType: ${filter.value}`);
           }

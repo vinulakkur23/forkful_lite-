@@ -35,7 +35,7 @@ interface MealEntry {
   distance?: number;
   aiMetadata?: {
     cuisineType: string;
-    foodType: string;
+    foodType: string[];
     mealType: string;
     primaryProtein: string;
     dietType: string;

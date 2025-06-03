@@ -67,7 +67,7 @@ interface MealEntry {
   };
   aiMetadata?: {
     cuisineType: string;
-    foodType: string;
+    foodType: string[];
     mealType: string;
     primaryProtein: string;
     dietType: string;
@@ -374,9 +374,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 });
             } else if (filter.type === 'foodType') {
                 result = result.filter(meal => {
-                    const matches = meal.aiMetadata && 
-                                  meal.aiMetadata.foodType && 
-                                  meal.aiMetadata.foodType === filter.value;
+                    if (!meal.aiMetadata || !meal.aiMetadata.foodType) return false;
+                    
+                    // foodType is now an array
+                    let matches = false;
+                    if (Array.isArray(meal.aiMetadata.foodType)) {
+                        matches = meal.aiMetadata.foodType.includes(filter.value);
+                    } else {
+                        // Handle old data that might still be a string
+                        matches = meal.aiMetadata.foodType === filter.value;
+                    }
+                    
                     if (matches) {
                         console.log(`Meal "${meal.meal}" matches foodType: ${filter.value}`);
                     }

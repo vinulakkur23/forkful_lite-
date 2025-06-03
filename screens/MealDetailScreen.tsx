@@ -574,10 +574,22 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.metadataTagText}>{meal.aiMetadata.cuisineType}</Text>
                 </View>
               )}
-              {meal.aiMetadata.foodType && meal.aiMetadata.foodType !== 'Unknown' && (
-                <View style={styles.metadataTag}>
-                  <Text style={styles.metadataTagText}>{meal.aiMetadata.foodType}</Text>
-                </View>
+              {meal.aiMetadata.foodType && meal.aiMetadata.foodType.length > 0 && 
+               !meal.aiMetadata.foodType.includes('Unknown') && (
+                <>
+                  {Array.isArray(meal.aiMetadata.foodType) ? (
+                    meal.aiMetadata.foodType.map((food, index) => (
+                      <View key={`food-${index}`} style={styles.metadataTag}>
+                        <Text style={styles.metadataTagText}>{food}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    // Handle old data that might still be a string
+                    <View style={styles.metadataTag}>
+                      <Text style={styles.metadataTagText}>{meal.aiMetadata.foodType}</Text>
+                    </View>
+                  )}
+                </>
               )}
               {meal.aiMetadata.mealType && meal.aiMetadata.mealType !== 'Unknown' && (
                 <View style={styles.metadataTag}>
