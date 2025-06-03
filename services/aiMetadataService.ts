@@ -17,14 +17,26 @@ export interface AIMetadata {
   beverageType: string;
 }
 
+interface MealContext {
+  mealName?: string;
+  restaurantName?: string; 
+  likedComments?: string;
+  dislikedComments?: string;
+}
+
 /**
  * Process a meal image to extract AI-generated metadata
  * 
  * @param mealId The Firestore document ID of the meal
  * @param photoUrl The URL of the meal photo
+ * @param context Additional context about the meal (name, comments, etc)
  * @returns A promise that resolves to the updated metadata
  */
-export const processImageMetadata = async (mealId: string, photoUrl: string): Promise<AIMetadata> => {
+export const processImageMetadata = async (
+  mealId: string, 
+  photoUrl: string,
+  context?: MealContext
+): Promise<AIMetadata> => {
   try {
     console.log(`Processing metadata for meal ${mealId}`);
     
@@ -100,6 +112,23 @@ export const processImageMetadata = async (mealId: string, photoUrl: string): Pr
       // Add the meal ID
       formData.append('meal_id', mealId);
 
+      // Add context data if provided
+      if (context) {
+        if (context.mealName) {
+          formData.append('meal_name', context.mealName);
+        }
+        if (context.restaurantName) {
+          formData.append('restaurant_name', context.restaurantName);
+        }
+        if (context.likedComments) {
+          formData.append('liked_comments', context.likedComments);
+        }
+        if (context.dislikedComments) {
+          formData.append('disliked_comments', context.dislikedComments);
+        }
+        console.log('Added context to request:', context);
+      }
+
       console.log('Sending API request to extract metadata...');
 
       // Try the main FormData API endpoint first
@@ -158,6 +187,22 @@ export const processImageMetadata = async (mealId: string, photoUrl: string): Pr
           const urlFormData = new FormData();
           urlFormData.append('image_url', photoUrl);
           urlFormData.append('meal_id', mealId);
+          
+          // Add context data to URL endpoint too
+          if (context) {
+            if (context.mealName) {
+              urlFormData.append('meal_name', context.mealName);
+            }
+            if (context.restaurantName) {
+              urlFormData.append('restaurant_name', context.restaurantName);
+            }
+            if (context.likedComments) {
+              urlFormData.append('liked_comments', context.likedComments);
+            }
+            if (context.dislikedComments) {
+              urlFormData.append('disliked_comments', context.dislikedComments);
+            }
+          }
 
           // Use the URL-specific endpoint
           console.log('Using URL-based endpoint with direct image URL');

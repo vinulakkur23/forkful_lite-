@@ -652,7 +652,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Process image metadata and then check for achievements
         // This ensures we have metadata before checking for food-type based achievements
         console.log("Starting metadata processing and achievement check flow...");
-        processImageMetadata(docRef.id, imageUrl)
+        processImageMetadata(docRef.id, imageUrl, {
+          mealName: meal || undefined,
+          restaurantName: restaurant || undefined,
+          likedComments: likedComment || undefined,
+          dislikedComments: dislikedComment || undefined
+        })
           .then(metadata => {
             console.log("AI metadata processed successfully:", metadata);
             
@@ -867,11 +872,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           onDismiss={handleDismissAchievement}
         />
       )}
-      
-      {/* Header with title */}
-      <View style={styles.headerSection}>
-        <Text style={styles.headerTitle}>Rating Saved</Text>
-      </View>
 
       <ScrollView style={styles.container}>
         {/* Meal image card */}
@@ -969,8 +969,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.shareButton}
           onPress={handleShare}
         >
-          <MaterialIcon name="share" size={18} color="white" />
-          <Text style={styles.buttonText}>Share</Text>
+          <Text style={styles.shareButtonText}>Share</Text>
         </TouchableOpacity>
 
         {!auth().currentUser && (
@@ -999,20 +998,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAF9F6',
     position: 'relative', // Make sure relative positioning is set for absolute children
-  },
-  headerSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#FAF9F6',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   container: {
     flex: 1,
@@ -1227,12 +1212,13 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee',
   },
   shareButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffc008',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
     borderRadius: 12,
   },
   saveButton: {
@@ -1270,6 +1256,12 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     marginLeft: 8,
     fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  shareButtonText: {
+    color: '#1a2b49',
+    fontWeight: '600',
+    fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

@@ -14,6 +14,7 @@ import {
   SafeAreaView
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList } from '../App';
 // Import Firebase from our central config
@@ -113,6 +114,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
 
     // Map view reference
     const mapRef = useRef<MapView | null>(null);
+    
+    // Track screen focus for refreshing data
+    const isFocused = useIsFocused();
 
     useEffect(() => {
         // Initialize GoogleSignin
@@ -153,6 +157,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
         console.log('FoodPassportScreen: activeFilters changed:', activeFilters);
         applyFilter();
     }, [meals, activeFilters]);
+    
+    // Refresh data when screen comes into focus (handles returning from deletion)
+    useEffect(() => {
+        if (isFocused && userInfo && !loading) {
+            console.log('FoodPassportScreen focused, refreshing meal data...');
+            fetchMealEntries();
+        }
+    }, [isFocused]);
     
     const fetchMealEntries = async () => {
         try {

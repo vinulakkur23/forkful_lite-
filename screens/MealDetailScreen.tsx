@@ -306,8 +306,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setProcessingMetadata(true);
       Alert.alert('Processing', 'Analyzing your meal photo with AI. This may take a moment...');
 
-      // Call the AI service to process the image
-      const metadata = await processImageMetadata(mealId, meal.photoUrl);
+      // Call the AI service to process the image with context
+      const metadata = await processImageMetadata(mealId, meal.photoUrl, {
+        mealName: meal.meal || undefined,
+        restaurantName: meal.restaurant || undefined,
+        likedComments: meal.comments?.liked || undefined,
+        dislikedComments: meal.comments?.disliked || undefined
+      });
 
       // Update the local state with the new metadata
       setMeal({
