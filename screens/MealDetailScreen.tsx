@@ -6,7 +6,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import StarRating from '../components/StarRating';
+import EmojiDisplay from '../components/EmojiDisplay';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
@@ -503,7 +503,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
         
         <View style={styles.ratingContainer}>
-          <StarRating rating={meal.rating} starSize={22} />
+          <EmojiDisplay rating={meal.rating} size={28} />
         </View>
         
         {meal.restaurant && (

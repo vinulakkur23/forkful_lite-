@@ -6,7 +6,8 @@ import {
   Animated,
   TouchableOpacity,
   Dimensions,
-  Image
+  Image,
+  Platform
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Achievement } from '../types/achievements';
@@ -138,22 +139,26 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 30,
+    top: Platform.OS === 'ios' ? 60 : 40, // Increased top spacing to avoid status bar
     left: 0,
     right: 0,
     backgroundColor: '#FAF3E0', // Changed to match food card background color
     borderRadius: 12, // Match food card radius
     marginHorizontal: 16,
     marginTop: 10,
-    padding: 18, // Increased padding for a bigger card
+    paddingTop: 18,
+    paddingBottom: 18,
+    paddingLeft: 18,
+    paddingRight: 50, // Extra padding on right to ensure close button has space
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2, // Match food card elevation
-    zIndex: 1000,
+    elevation: 10, // Increased elevation for Android
+    zIndex: 10000, // Increased z-index
+    overflow: 'visible', // Ensure nothing is clipped
   },
   iconContainer: {
     width: 80, // Increased from 60
@@ -192,17 +197,21 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   closeButton: {
-    padding: 8,
-    height: 30,
-    width: 30,
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    padding: 10,
+    height: 40,
+    width: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   closeButtonX: {
-    fontSize: 24,
+    fontSize: 20,
     color: '#1a2b49',
     fontWeight: 'bold',
-    lineHeight: 24,
+    lineHeight: 20,
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },

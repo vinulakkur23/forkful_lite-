@@ -14,6 +14,7 @@ import { firebase, auth } from '../firebaseConfig';
 import { Achievement, UserAchievement } from '../types/achievements';
 import { getUserAchievements, getAchievementById, getAllAchievements } from '../services/achievementService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { clearUserStamps } from '../services/clearUserStamps';
 
 const { width } = Dimensions.get('window');
 const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
@@ -36,6 +37,8 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementItems, setAchievementItems] = useState<AchievementDisplayItem[]>([]);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDisplayItem | null>(null);
+
+  console.log('🏆 StampsScreen rendered with userId:', userId);
 
   useEffect(() => {
     loadAchievements();
@@ -156,6 +159,35 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
     setSelectedAchievement(null);
   };
 
+  // DEBUG: Handler to clear stamps for testing
+  const handleClearStamps = async () => {
+    Alert.alert(
+      'Debug: Clear All Stamps',
+      'This will delete all your stamps for testing purposes. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Stamps',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await clearUserStamps();
+              if (result.success) {
+                Alert.alert('Success', result.message, [
+                  { text: 'OK', onPress: () => loadAchievements() }
+                ]);
+              } else {
+                Alert.alert('Error', result.message);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear stamps');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       {loading ? (
@@ -183,6 +215,14 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
               </Text>
             </View>
           )}
+
+          {/* DEBUG: Clear stamps button - show for testing */}
+          <TouchableOpacity 
+            style={styles.debugButton}
+            onPress={handleClearStamps}
+          >
+            <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
+          </TouchableOpacity>
           
           {/* Achievement detail modal */}
           {selectedAchievement && (
@@ -440,6 +480,27 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     color: '#1a2b49', // Updated to match app's text color
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Debug button styles
+  debugButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  debugButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

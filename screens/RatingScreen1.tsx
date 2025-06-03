@@ -19,6 +19,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
+import EmojiRating from '../components/EmojiRating';
 
 // Extend the TabParamList to include suggestionData in the RatingScreen1 screen params
 declare module '../App' {
@@ -57,11 +58,17 @@ type Props = {
 const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   const { photo, photoSource } = route.params;
 
-  // Pre-load star images using useMemo to prevent memory issues
-  const starImages = useMemo(() => ({
-    filled: require('../assets/stars/star-filled.png'),
-    empty: require('../assets/stars/star-empty.png')
-  }), []);
+  // Emoji rating descriptions
+  const EMOJI_DESCRIPTIONS = {
+    1: "Not a tasty meal.",
+    2: "Ok, but I won't be getting it again.",
+    3: "Tasty food. I enjoyed it!",
+    4: "Very tasty. I'd order this again if I come back.",
+    5: "Delicious. I plan to make a trip back just for this.",
+    6: "One of the best things I've ever eaten."
+  };
+
+  // Emoji rating will be handled by the EmojiRating component
 
   // Initialize location with priority information
   const initializeLocation = useCallback(() => {
@@ -154,7 +161,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     console.log("Location updated in RatingScreen1:", JSON.stringify(location));
   }, [location]);
   
-  const handleRating = (selectedRating: number): void => {
+  const handleEmojiRating = (selectedRating: number): void => {
     setRating(selectedRating);
   };
 
@@ -281,12 +288,12 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     try {
       setIsProcessing(true);
       
-      // Set rating to 3 stars
+      // Set rating to 3 (good emoji)
       setRating(3);
       
       // Generate a unique session ID for this result flow
       const sessionId = route.params._uniqueKey || `rating_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      console.log(`Quick continue session ${sessionId} to RatingScreen2 with 3 stars`);
+      console.log(`Quick continue session ${sessionId} to RatingScreen2 with 3 (good) emoji rating`);
 
       // Create a clean copy of the image without query parameters for passing to next screen
       const timestamp = Date.now();
@@ -329,13 +336,13 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         originalUri: photo.uri
       };
 
-      console.log(`Quick navigating to RatingScreen2 with 3 stars and fresh image: ${freshPhoto.uri}`);
+      console.log(`Quick navigating to RatingScreen2 with 3 (good) emoji rating and fresh image: ${freshPhoto.uri}`);
 
       // Navigate to RatingScreen2 with 3-star rating and empty comments
       navigation.navigate('RatingScreen2', {
         photo: freshPhoto,
         location: location,
-        rating: 3, // Always 3 stars for quick continue
+        rating: 3, // Always 3 (good) emoji rating for quick continue
         likedComment: '', // Empty comments for quick continue
         dislikedComment: '',
         suggestionData: route.params.suggestionData,
@@ -387,24 +394,21 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Rating Section */}
           <View style={styles.ratingSection}>
-            <View style={styles.ratingContainer} key={`stars-container-${screenKey}`}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity
-                  key={`star-${star}-${screenKey}`}
-                  onPress={() => handleRating(star)}
-                  style={styles.starTouchable}
-                  activeOpacity={0.7}
-                >
-                  <Image
-                    source={star <= rating ? starImages.filled : starImages.empty}
-                    style={styles.star}
-                    resizeMode="contain"
-                    // Force clear any cached rendering that might be stale
-                    key={`star-img-${star}-${rating}-${screenKey}`}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
+            <EmojiRating
+              rating={rating}
+              onRatingChange={handleEmojiRating}
+              size={45}
+              key={`emoji-rating-${screenKey}`}
+            />
+            
+            {/* Rating Description */}
+            {rating > 0 && (
+              <View style={styles.ratingDescriptionContainer}>
+                <Text style={styles.ratingDescription}>
+                  {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Comments Section */}
@@ -562,13 +566,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 10,
   },
-  starTouchable: {
-    padding: 5,
-    marginHorizontal: 5,
+  ratingDescriptionContainer: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
   },
-  star: {
-    width: 40,
-    height: 40,
+  ratingDescription: {
+    fontSize: 14,
+    color: '#1a2b49',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentsContainer: {
     width: '100%',

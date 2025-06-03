@@ -7,8 +7,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
-import StarRating from '../components/StarRating';
-import AchievementNotification from '../components/AchievementNotification';
+import EmojiDisplay from '../components/EmojiDisplay';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
@@ -47,8 +46,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
-  const [unlockedAchievements, setUnlockedAchievements] = useState<Achievement[]>([]);
-  const [currentAchievement, setCurrentAchievement] = useState<Achievement | null>(null);
   const [mealId, setMealId] = useState<string | null>(null);
   
   // Generate a unique instance key for this specific navigation
@@ -700,19 +697,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               console.log(`Unlocked ${achievements.length} achievements:`, 
                 achievements.map(a => a.name).join(', '));
               
-              // Store the unlocked achievements
-              setUnlockedAchievements(achievements);
-              
-              // Show the first achievement notification
-              if (achievements.length > 0) {
-                console.log("Setting current achievement:", achievements[0].name);
-                setCurrentAchievement(achievements[0]);
-                
-                // Force update notification visibility
-                setTimeout(() => {
-                  console.log("Achievement notification should be visible now");
-                }, 500);
-              }
+              // Don't set local state - let the global notification handle it
+              // The checkAchievements function already emits global notifications
             } else {
               console.log("No achievements unlocked for this meal");
             }
@@ -843,37 +829,23 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   };
 
+  const goToFoodPassport = (): void => {
+    // Navigate to the FoodPassport tab
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs', params: { screen: 'FoodPassport' } }],
+    });
+  };
+
   // Handle image load error
   const handleImageError = () => {
     console.log('Image failed to load in ResultScreen');
     setImageError(true);
   };
-  
-  // Handle achievement notification dismissal 
-  const handleDismissAchievement = () => {
-    // If there are more achievements to show, show the next one
-    if (unlockedAchievements.length > 0) {
-      const nextAchievements = [...unlockedAchievements];
-      const nextAchievement = nextAchievements.shift();
-      
-      setUnlockedAchievements(nextAchievements);
-      setCurrentAchievement(nextAchievements.length > 0 ? nextAchievements[0] : null);
-    } else {
-      // No more achievements to show
-      setCurrentAchievement(null);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {currentAchievement && (
-        <AchievementNotification
-          achievement={currentAchievement}
-          onDismiss={handleDismissAchievement}
-        />
-      )}
-
-      <ScrollView style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Meal image card */}
         <View style={styles.imageCard}>
           <View style={styles.imageContainer}>
@@ -904,7 +876,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.mealName}>{meal || 'Untitled Meal'}</Text>
           
           <View style={styles.ratingContainer}>
-            <StarRating rating={rating} starSize={22} />
+            <EmojiDisplay rating={rating} size={28} />
           </View>
 
           {mealType === "Restaurant" && restaurant && (
@@ -962,33 +934,41 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
           )}
         </View>
-      </ScrollView>
 
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={handleShare}
-        >
-          <Text style={styles.shareButtonText}>Share</Text>
-        </TouchableOpacity>
-
-        {!auth().currentUser && (
+        {/* Action buttons - now part of scrollable content */}
+        <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.saveButton, saving || saved ? styles.disabledButton : {}]}
-            onPress={saveToFirebase}
-            disabled={saving || saved}
+            style={styles.shareButton}
+            onPress={handleShare}
           >
-            {saving ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <>
-                <MaterialIcon name={saved ? "check" : "save"} size={18} color="white" />
-                <Text style={styles.buttonText}>{saved ? 'Saved' : 'Save'}</Text>
-              </>
-            )}
+            <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
-        )}
-      </View>
+
+          <TouchableOpacity
+            style={styles.foodPassportButton}
+            onPress={goToFoodPassport}
+          >
+            <Text style={styles.foodPassportButtonText}>Food Passport</Text>
+          </TouchableOpacity>
+
+          {!auth().currentUser && (
+            <TouchableOpacity
+              style={[styles.saveButton, saving || saved ? styles.disabledButton : {}]}
+              onPress={saveToFirebase}
+              disabled={saving || saved}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <MaterialIcon name={saved ? "check" : "save"} size={18} color="white" />
+                  <Text style={styles.buttonText}>{saved ? 'Saved' : 'Save'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -1002,15 +982,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FAF9F6',
-    paddingHorizontal: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginVertical: 20,
-    textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 20, // Add top padding since we removed the title
+    paddingBottom: 30, // Extra padding at bottom
   },
   imageCard: {
     backgroundColor: '#FAF3E0',
@@ -1066,7 +1042,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF3E0',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 10, // Reduced from 20
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1203,13 +1179,9 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    marginTop: 10, // Reduced from 20
+    marginBottom: 10,
+    gap: 12, // Space between buttons
   },
   shareButton: {
     alignItems: 'center',
@@ -1220,6 +1192,24 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 40,
     borderRadius: 12,
+    width: '100%',
+  },
+  foodPassportButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    width: '100%',
+  },
+  foodPassportButtonText: {
+    color: '#1a2b49',
+    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   saveButton: {
     flexDirection: 'row',

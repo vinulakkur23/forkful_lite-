@@ -1,5 +1,6 @@
 import { firebase, firestore, auth } from '../firebaseConfig';
 import { Achievement, UserAchievement, AchievementDefinition } from '../types/achievements';
+import achievementNotificationService from './achievementNotificationService';
 
 // Define achievements directly in the service for now
 // These can be moved to Firestore later for easier management
@@ -301,8 +302,9 @@ export const getUserAchievements = async (targetUserId?: string): Promise<UserAc
     if (!userId) throw new Error('User not authenticated');
     
     const snapshot = await firestore()
-      .collection('userAchievements')
-      .where('userId', '==', userId)
+      .collection('users')
+      .doc(userId)
+      .collection('achievements')
       .get();
     
     const achievements: UserAchievement[] = [];
@@ -342,7 +344,9 @@ export const saveUserAchievement = async (
     };
     
     const docRef = await firestore()
-      .collection('userAchievements')
+      .collection('users')
+      .doc(userId)
+      .collection('achievements')
       .add(userAchievement);
     
     return {
@@ -380,6 +384,10 @@ export const checkAchievements = async (
         const saved = await saveUserAchievement(achievement.id, mealEntry.id);
         if (saved) {
           unlockedAchievements.push(achievement);
+          
+          // Emit global notification
+          console.log('🎯 Emitting global achievement notification for:', achievement.name);
+          achievementNotificationService.showAchievement(achievement);
         }
       }
     }

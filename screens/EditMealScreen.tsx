@@ -8,7 +8,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import InteractiveStarRating from '../components/InteractiveStarRating';
+import EmojiRating from '../components/EmojiRating';
 import { RootStackParamList, TabParamList } from '../App';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -30,12 +30,41 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Get meal ID and data from route params
   const { mealId, meal } = route.params;
 
+  // Emoji rating descriptions
+  const EMOJI_DESCRIPTIONS = {
+    1: "Not a tasty meal.",
+    2: "Ok, but I won't be getting it again.",
+    3: "Tasty food. I enjoyed it!",
+    4: "Very tasty. I'd order this again if I come back.",
+    5: "Delicious. I plan to make a trip back just for this.",
+    6: "One of the best things I've ever eaten."
+  };
+
   // State for editable fields
   const [rating, setRating] = useState<number>(meal.rating || 0);
   const [likedComment, setLikedComment] = useState<string>(meal.comments?.liked || '');
   const [dislikedComment, setDislikedComment] = useState<string>(meal.comments?.disliked || '');
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
+  
+  // Debug: Log the initial values
+  useEffect(() => {
+    console.log('EditMealScreen - Initial meal data:', {
+      rating: meal.rating,
+      liked: meal.comments?.liked,
+      disliked: meal.comments?.disliked,
+      hasComments: !!meal.comments,
+      allKeys: Object.keys(meal)
+    });
+  }, []);
+
+  // Update state if meal data changes (e.g., if screen is reused)
+  useEffect(() => {
+    console.log('EditMealScreen - Meal data changed, updating state');
+    setRating(meal.rating || 0);
+    setLikedComment(meal.comments?.liked || '');
+    setDislikedComment(meal.comments?.disliked || '');
+  }, [meal.rating, meal.comments?.liked, meal.comments?.disliked]);
   
   // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
@@ -231,19 +260,28 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           {/* Rating Section */}
           <View style={styles.ratingSection}>
             <Text style={styles.sectionTitle}>Rating:</Text>
-            <InteractiveStarRating 
+            <EmojiRating 
               rating={rating} 
               onRatingChange={handleRating}
-              starSize={36}
-              spacing={8}
+              size={40}
               style={styles.interactiveRating}
             />
+            
+            {/* Rating Description */}
+            {rating > 0 && (
+              <View style={styles.ratingDescriptionContainer}>
+                <Text style={styles.ratingDescription}>
+                  {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.sectionTitle}>What was Good:</Text>
             <TextInput
+              key={`liked-${mealId}`}
               style={styles.commentInput}
               placeholder="What did you enjoy about this meal..."
               placeholderTextColor="#999"
@@ -255,6 +293,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
             <Text style={styles.sectionTitle}>What could be Better:</Text>
             <TextInput
+              key={`disliked-${mealId}`}
               style={styles.commentInput}
               placeholder="What could be improved..."
               placeholderTextColor="#999"
@@ -428,6 +467,18 @@ const styles = StyleSheet.create({
   interactiveRating: {
     marginTop: 5,
     marginBottom: 5,
+  },
+  ratingDescriptionContainer: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  ratingDescription: {
+    fontSize: 14,
+    color: '#1a2b49',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentsSection: {
     marginTop: 10,

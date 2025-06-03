@@ -23,7 +23,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 import { getMealSuggestions, getMealSuggestionsForRestaurant, searchRestaurants, Restaurant } from '../services/mealService';
-import StarRating from '../components/StarRating';
+import EmojiDisplay from '../components/EmojiDisplay';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include suggestionData in the Rating screen params

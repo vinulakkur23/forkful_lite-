@@ -11,6 +11,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getPhotoWithMetadata } from './services/photoLibraryService';
 import RNFS from 'react-native-fs';
+import GlobalAchievementListener from './components/GlobalAchievementListener';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -190,8 +191,11 @@ export const ResourceManager = {
             console.log(`[ResourceManager] Keeping recent file: ${filePath}`);
           }
         }
-      } catch (e) {
-        console.warn(`[ResourceManager] Error cleaning up file ${filePath}:`, e);
+      } catch (e: any) {
+        // Ignore ENOENT errors (file already deleted)
+        if (e.code !== 'ENOENT') {
+          console.warn(`[ResourceManager] Error cleaning up file ${filePath}:`, e.message || e);
+        }
       }
     }
     
@@ -211,9 +215,11 @@ export const ResourceManager = {
     this._resources.clear();
     
     // Also clean temp files
-    this.cleanupTempFiles().catch(e => 
-      console.warn('[ResourceManager] Error cleaning temp files:', e)
-    );
+    this.cleanupTempFiles().catch(e => {
+      if (e.code !== 'ENOENT') {
+        console.warn('[ResourceManager] Error cleaning temp files:', e);
+      }
+    });
   }
 };
 
@@ -670,21 +676,27 @@ const App: React.FC = () => {
   }
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      onStateChange={onNavigationStateChange}
-    >
-      <Stack.Navigator initialRouteName={user ? "MainTabs" : "Login"} screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-        />
-        <Stack.Screen
-          name="MainTabs"
-          component={TabNavigator}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <>
+      <View style={{ flex: 1 }}>
+        <NavigationContainer
+          ref={navigationRef}
+          onStateChange={onNavigationStateChange}
+        >
+          <Stack.Navigator initialRouteName={user ? "MainTabs" : "Login"} screenOptions={{ headerShown: false }}>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+            />
+            <Stack.Screen
+              name="MainTabs"
+              component={TabNavigator}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </View>
+      {/* GlobalAchievementListener is rendered outside the main View to prevent layout interference */}
+      <GlobalAchievementListener />
+    </>
   );
 };
 

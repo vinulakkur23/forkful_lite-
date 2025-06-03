@@ -15,7 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { RootStackParamList } from '../App';
 import { firebase, auth, firestore } from '../firebaseConfig';
-import StarRating from '../components/StarRating';
+import EmojiDisplay from '../components/EmojiDisplay';
 import { FilterItem } from '../components/SimpleFilterComponent';
 
 type SavedMealsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
@@ -188,7 +188,7 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, 
       <View style={styles.mealCardContent}>
         <Text style={styles.mealName} numberOfLines={1}>{item.mealName}</Text>
         <View style={styles.ratingContainer}>
-          <StarRating rating={item.rating} starSize={16} spacing={2} />
+          <EmojiDisplay rating={item.rating} size={20} />
         </View>
         {item.restaurant && (
           <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>

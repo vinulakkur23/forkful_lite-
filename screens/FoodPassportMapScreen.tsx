@@ -29,7 +29,7 @@ import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
 // Import our new photoLibraryService for improved metadata extraction
 import { getPhotoWithMetadata, prefetchSuggestionsFromPhoto } from '../services/photoLibraryService';
-import StarRating from '../components/StarRating';
+import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
@@ -631,7 +631,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.mealCardContent}>
         <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Untitled meal'}</Text>
         <View style={styles.ratingContainer}>
-          <StarRating rating={item.rating} starSize={16} spacing={2} />
+          <EmojiDisplay rating={item.rating} size={20} />
         </View>
         {item.restaurant && (
           <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
@@ -1013,7 +1013,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
                   )}
                   <View style={styles.calloutRating}>
-                    <StarRating rating={meal.rating} starSize={12} spacing={1} />
+                    <EmojiDisplay rating={meal.rating} size={16} />
                   </View>
                   {isGrouped && groupSize > 1 && (
                     <Text style={styles.calloutGroupText}>

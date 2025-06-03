@@ -22,8 +22,8 @@ import {
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-// Import our custom StarRating component instead of FontAwesome
-import StarRating from '../components/StarRating';
+// Import our custom EmojiDisplay component
+import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import HomeMapComponent from '../components/HomeMapComponent';
 import auth from '@react-native-firebase/auth';
@@ -222,11 +222,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         // Skip entries without location
         if (!data.location) continue;
         
-        // Skip entries that belong to the current user for the HomeScreen
-        if (currentUserId && data.userId === currentUserId) {
-          console.log(`Skipping own meal: ${data.meal} (${doc.id})`);
-          continue;
-        }
+        // Include all users' meals (no longer skip current user's meals)
+        // This allows users to see their own meals mixed with others
         
         // Calculate distance if user location is available
         let distance = null;
@@ -294,7 +291,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       // Limit to the closest MAX_MEALS_TO_DISPLAY meals to prevent performance issues
       const limitedMeals = sortedMeals.slice(0, MAX_MEALS_TO_DISPLAY);
       
-      console.log(`Found ${sortedMeals.length} meals from other users, showing closest ${limitedMeals.length}`);
+      console.log(`Found ${sortedMeals.length} meals from all users, showing closest ${limitedMeals.length}`);
       
       // Show info to user if we're limiting results
       const isLimited = sortedMeals.length > MAX_MEALS_TO_DISPLAY;
@@ -449,9 +446,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     setImageErrors(prev => ({...prev, [mealId]: true}));
   };
 
-  const renderStars = (rating: number) => {
+  const renderEmoji = (rating: number) => {
     return (
-      <StarRating rating={rating} starSize={14} />
+      <EmojiDisplay rating={rating} size={28} />
     );
   };
 
@@ -591,8 +588,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  // Swipeable meal card component
-  const SwipeableMealCard = ({ item }: { item: MealEntry }) => {
+  // Swipeable meal card component - memoized to prevent unnecessary re-renders
+  const SwipeableMealCard = React.memo(({ item }: { item: MealEntry }) => {
     const translateX = useRef(new Animated.Value(0)).current;
     const isAnimating = useRef(false);
     const [showHeart, setShowHeart] = useState(savedMealsRef.current.has(item.id));
@@ -752,7 +749,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               
               {/* Star rating overlay */}
               <View style={styles.ratingOverlay}>
-                {renderStars(item.rating)}
+                {renderEmoji(item.rating)}
               </View>
             </View>
             
@@ -773,12 +770,17 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         </Animated.View>
       </View>
     );
-  };
+  }, (prevProps, nextProps) => {
+    // Only re-render if the meal item actually changed
+    return prevProps.item.id === nextProps.item.id &&
+           prevProps.item.photoUrl === nextProps.item.photoUrl &&
+           prevProps.item.rating === nextProps.item.rating;
+  });
 
-  // Render a meal item in the feed
-  const renderMealItem = ({ item }: { item: MealEntry }) => (
+  // Render a meal item in the feed - memoized to prevent recreation
+  const renderMealItem = React.useCallback(({ item }: { item: MealEntry }) => (
     <SwipeableMealCard item={item} />
-  );
+  ), []);
   
 
 
@@ -815,6 +817,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             scrollPosition.current = event.nativeEvent.contentOffset.y;
           }}
           scrollEventThrottle={16}
+          // Additional performance optimizations
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+          }}
+          legacyImplementation={false}
+          disableVirtualization={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -830,12 +838,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
                   ? "Couldn't access your location. Please check your settings."
                   : activeFilters && activeFilters.length > 0
                     ? "No meals match your current filters"
-                    : "No meals from other users found nearby"}
+                    : "No meals found nearby"}
               </Text>
               <Text style={styles.emptySubtext}>
                 {activeFilters && activeFilters.length > 0
                   ? "Try adjusting your filters or exploring a new area"
-                  : "Share the app with friends to see their meals in your feed!"}
+                  : "Start rating meals to populate your feed!"}
               </Text>
             </View>
           }
@@ -976,10 +984,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 10,
     left: 10,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(250, 248, 230, 0.8)', // Cream color with 80% opacity
     borderRadius: 20,
-    padding: 5,
-    paddingHorizontal: 8,
+    padding: 4,
+    paddingHorizontal: 5,
   },
   mealCardContent: {
     padding: 14,
@@ -1263,4 +1271,21 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+// Wrap HomeScreen with React.memo to prevent unnecessary re-renders
+// This will only re-render if navigation or route props actually change
+export default React.memo(HomeScreen, (prevProps, nextProps) => {
+  // Custom comparison function
+  // Return true if props are equal (skip re-render)
+  // Return false if props are different (re-render needed)
+  
+  // Check if navigation state is the same
+  const navStateEqual = 
+    prevProps.navigation.getState() === nextProps.navigation.getState();
+  
+  // Check if route params are the same
+  const routeParamsEqual = 
+    JSON.stringify(prevProps.route.params) === JSON.stringify(nextProps.route.params);
+  
+  // Only re-render if navigation state or route params actually changed
+  return navStateEqual && routeParamsEqual;
+});
