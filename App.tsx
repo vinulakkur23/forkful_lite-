@@ -565,6 +565,31 @@ const App: React.FC = () => {
       }
     }
     
+    // Ensure user document exists in Firestore
+    if (user) {
+      try {
+        const userDoc = await firestore().collection('users').doc(user.uid).get();
+        if (!userDoc.exists) {
+          console.log("Creating missing user document in Firestore");
+          await firestore().collection('users').doc(user.uid).set({
+            displayName: user.displayName || user.email?.split('@')[0] || 'User',
+            email: user.email,
+            photoURL: user.photoURL || null,
+            uid: user.uid,
+            createdAt: firestore.FieldValue.serverTimestamp(),
+            lastLoginAt: firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          // Update last login
+          await firestore().collection('users').doc(user.uid).update({
+            lastLoginAt: firestore.FieldValue.serverTimestamp()
+          });
+        }
+      } catch (error) {
+        console.error("Error ensuring user document exists:", error);
+      }
+    }
+    
     setUser(user);
     if (initializing) setInitializing(false);
   }

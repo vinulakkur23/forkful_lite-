@@ -349,6 +349,10 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           key="shared-passport-filter"
           onFilterChange={handleFilterChange}
           initialFilters={activeFilters}
+          onUserSelect={(searchUserId, searchUserName) => {
+            console.log('FoodPassport: Navigating to user profile:', searchUserName, searchUserId);
+            navigation.push('FoodPassport', { userId: searchUserId });
+          }}
         />
       </View>
       

@@ -110,6 +110,18 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 displayName: userInfo.user.name,
                 photoURL: userInfo.user.photo
               });
+              
+              // Create/update user document in Firestore
+              console.log("7a. Creating/updating user document in Firestore");
+              await firestore().collection('users').doc(userCredential.user.uid).set({
+                displayName: userInfo.user.name || userInfo.user.email?.split('@')[0] || 'User',
+                email: userInfo.user.email,
+                photoURL: userInfo.user.photo || null,
+                uid: userCredential.user.uid,
+                createdAt: firestore.FieldValue.serverTimestamp(),
+                lastLoginAt: firestore.FieldValue.serverTimestamp()
+              }, { merge: true });
+              console.log("User document created/updated in Firestore");
             }
             
             // Add manual navigation to MainTabs here
@@ -147,6 +159,18 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             displayName: userInfo.user.name,
             photoURL: userInfo.user.photo
           });
+          
+          // Create/update user document in Firestore
+          console.log("7a. Creating/updating user document in Firestore");
+          await firestore().collection('users').doc(userCredential.user.uid).set({
+            displayName: userInfo.user.name || userInfo.user.email?.split('@')[0] || 'User',
+            email: userInfo.user.email,
+            photoURL: userInfo.user.photo || null,
+            uid: userCredential.user.uid,
+            createdAt: firestore.FieldValue.serverTimestamp(),
+            lastLoginAt: firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          console.log("User document created/updated in Firestore");
         }
         
         // Add manual navigation to MainTabs here

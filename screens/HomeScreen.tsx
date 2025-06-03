@@ -867,6 +867,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           key="home-filter"
           onFilterChange={handleFilterChange}
           initialFilters={activeFilters}
+          onUserSelect={(userId, userName) => {
+            console.log('Navigating to user profile:', userName, userId);
+            navigation.navigate('FoodPassport', { userId });
+          }}
         />
       </View>
 

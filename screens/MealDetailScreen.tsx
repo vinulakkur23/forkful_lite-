@@ -567,7 +567,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* AI Metadata Tags Section */}
         {meal.aiMetadata && (
           <View style={styles.metadataSection}>
-            <Text style={styles.metadataTitle}>AI Analysis</Text>
             <View style={styles.metadataTagsContainer}>
               {meal.aiMetadata.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown' && (
                 <View style={styles.metadataTag}>

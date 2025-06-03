@@ -7,7 +7,8 @@ import {
   TextInput,
   FlatList,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  Image
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firestore } from '../firebaseConfig';
@@ -15,21 +16,25 @@ import { firestore } from '../firebaseConfig';
 export interface FilterItem {
   type: string;
   value: string;
+  userId?: string; // For user search results
 }
 
 interface SimpleFilterComponentProps {
   onFilterChange: (filters: FilterItem[] | null) => void;
   initialFilters?: FilterItem[] | null;
+  onUserSelect?: (userId: string, userName: string) => void; // For user navigation
 }
 
 const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
   onFilterChange,
-  initialFilters = null
+  initialFilters = null,
+  onUserSelect
 }) => {
   // States
   const [searchText, setSearchText] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterItem[]>([]);
+  const [dropdownOptions, setDropdownOptions] = useState<FilterItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterItem[]>(initialFilters || []);
 
@@ -44,6 +49,26 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       setActiveFilters(initialFilters);
     }
   }, [initialFilters]);
+
+  // Update dropdown options when search text changes
+  useEffect(() => {
+    const updateDropdownOptions = async () => {
+      if (searchText.length > 0) {
+        setLoading(true);
+        const options = await getFilteredOptions();
+        setDropdownOptions(options);
+        setShowDropdown(true);
+        setLoading(false);
+      } else {
+        setDropdownOptions([]);
+        setShowDropdown(false);
+      }
+    };
+
+    // Debounce the search
+    const timer = setTimeout(updateDropdownOptions, 300);
+    return () => clearTimeout(timer);
+  }, [searchText, filterOptions]);
 
   // Fetch available cuisine, food types, and cities from Firestore
   const fetchFilterOptions = async () => {
@@ -136,24 +161,126 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
     }
   };
 
+  // Search for users by display name
+  const searchUsers = async (searchTerm: string): Promise<FilterItem[]> => {
+    if (!searchTerm || searchTerm.length < 2) return [];
+    
+    try {
+      console.log('🔍 Searching for users with term:', searchTerm);
+      
+      // First, let's try a simpler query to see if there are any users
+      const allUsersSnapshot = await firestore()
+        .collection('users')
+        .limit(10)
+        .get();
+      
+      console.log('📊 Total users found in database:', allUsersSnapshot.size);
+      
+      if (allUsersSnapshot.size > 0) {
+        const sampleUser = allUsersSnapshot.docs[0].data();
+        console.log('👤 Sample user data:', JSON.stringify(sampleUser, null, 2));
+        console.log('🔑 User fields:', Object.keys(sampleUser));
+      }
+      
+      // Now try the search query
+      const usersSnapshot = await firestore()
+        .collection('users')
+        .where('displayName', '>=', searchTerm)
+        .where('displayName', '<=', searchTerm + '\uf8ff')
+        .limit(5)
+        .get();
+      
+      console.log('🎯 Users matching search:', usersSnapshot.size);
+      
+      const userResults: FilterItem[] = [];
+      
+      // If no results with displayName, try searching all users and filtering in memory
+      if (usersSnapshot.size === 0) {
+        console.log('🔄 No results with displayName query, trying alternative search...');
+        
+        // Get all users and search multiple fields
+        allUsersSnapshot.docs.forEach(doc => {
+          const userData = doc.data();
+          const searchLower = searchTerm.toLowerCase();
+          
+          // Check multiple possible name fields
+          const possibleNames = [
+            userData.displayName,
+            userData.name,
+            userData.fullName,
+            userData.userName,
+            userData.username,
+            userData.email?.split('@')[0] // Use email prefix as last resort
+          ].filter(Boolean); // Remove null/undefined values
+          
+          // Check if any name field matches
+          const matchingName = possibleNames.find(name => 
+            name?.toLowerCase().includes(searchLower)
+          );
+          
+          if (matchingName && doc.id) {
+            console.log('🎯 Found user via alternative search:', matchingName, 'ID:', doc.id);
+            userResults.push({
+              type: 'user',
+              value: matchingName,
+              userId: doc.id
+            });
+          }
+        });
+      } else {
+        // Original displayName results
+        usersSnapshot.docs.forEach(doc => {
+          const userData = doc.data();
+          console.log('👤 Found user:', userData.displayName, 'ID:', doc.id);
+          if (userData.displayName && doc.id) {
+            userResults.push({
+              type: 'user',
+              value: userData.displayName,
+              userId: doc.id
+            });
+          }
+        });
+      }
+      
+      console.log('✅ Returning user results:', userResults.length);
+      return userResults.slice(0, 5); // Limit to 5 results
+    } catch (error) {
+      console.error('❌ Error searching users:', error);
+      return [];
+    }
+  };
+
   // Filter options based on search text
-  const getFilteredOptions = () => {
+  const getFilteredOptions = async () => {
     if (!searchText) return [];
     
-    // Filter options that match the search text and are not already selected
-    const filteredOptions = filterOptions.filter(option => 
+    // Get regular filter options
+    const regularOptions = filterOptions.filter(option => 
       option.value.toLowerCase().includes(searchText.toLowerCase()) &&
       !activeFilters.some(filter => 
         filter.type === option.type && filter.value === option.value
       )
-    ).slice(0, 10); // Limit to 10 results
+    ).slice(0, 8); // Reduced to make room for user results
+
+    // Get user search results
+    const userResults = await searchUsers(searchText);
     
-    return filteredOptions;
+    // Combine and return
+    return [...userResults, ...regularOptions];
   };
 
   // Handle option selection - now adds to the list of active filters
   const handleSelectOption = (option: FilterItem) => {
-    // Check if this filter is already active
+    // Handle user selection differently
+    if (option.type === 'user' && option.userId && onUserSelect) {
+      console.log('User selected:', option.value, option.userId);
+      onUserSelect(option.userId, option.value);
+      setSearchText('');
+      setShowDropdown(false);
+      return;
+    }
+    
+    // Handle regular filter selection
     const filterExists = activeFilters.some(
       filter => filter.type === option.type && filter.value === option.value
     );
@@ -224,18 +351,31 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
               <ActivityIndicator size="small" color="#ff6b6b" />
               <Text style={styles.loadingText}>Loading options...</Text>
             </View>
-          ) : getFilteredOptions().length > 0 ? (
+          ) : dropdownOptions.length > 0 ? (
             <FlatList
-              data={getFilteredOptions()}
+              data={dropdownOptions}
               keyExtractor={(item, index) => `${item.type}-${item.value}-${index}`}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.optionItem}
+                  style={[
+                    styles.optionItem,
+                    item.type === 'user' && styles.userOptionItem
+                  ]}
                   onPress={() => handleSelectOption(item)}
                 >
-                  <Text style={styles.optionText}>{item.value}</Text>
+                  <View style={styles.optionContent}>
+                    {item.type === 'user' && (
+                      <Image 
+                        source={require('../assets/icons/profile-persona.png')}
+                        style={[styles.userIcon, { width: 16, height: 16 }]}
+                        resizeMode="contain"
+                      />
+                    )}
+                    <Text style={styles.optionText}>{item.value}</Text>
+                  </View>
                   <Text style={styles.optionType}>
-                    {item.type === 'cuisineType' ? 'Cuisine' : 
+                    {item.type === 'user' ? 'User' :
+                     item.type === 'cuisineType' ? 'Cuisine' : 
                      item.type === 'foodType' ? 'Food' : 'City'}
                   </Text>
                 </TouchableOpacity>
@@ -336,6 +476,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  userOptionItem: {
+    // backgroundColor: '#FFF5F5', // Removed red background
+  },
+  optionContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userIcon: {
+    marginRight: 8,
   },
   optionText: {
     flex: 1,
