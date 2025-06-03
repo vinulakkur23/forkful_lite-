@@ -272,7 +272,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             style={styles.cancelButton}
             onPress={handleBackPress}
           >
-            <Icon name="close" size={18} color="white" />
             <Text style={styles.buttonText}>Cancel</Text>
           </TouchableOpacity>
 
@@ -281,7 +280,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             disabled={rating === 0}
             onPress={saveMeal}
           >
-            <Icon name="check" size={18} color="white" />
             <Text style={styles.buttonText}>Save Changes</Text>
           </TouchableOpacity>
         </View>
@@ -459,7 +457,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffc008',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 8,
@@ -473,14 +473,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 8,
   },
   buttonText: {
-    color: 'white',
-    marginLeft: 8,
+    color: '#1a2b49',
     fontWeight: '600',
     fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',

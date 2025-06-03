@@ -55,7 +55,7 @@ type Props = {
 };
 
 const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
-  const { photo } = route.params;
+  const { photo, photoSource } = route.params;
 
   // Pre-load star images using useMemo to prevent memory issues
   const starImages = useMemo(() => ({
@@ -275,6 +275,80 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     console.log('Image failed to load in RatingScreen1');
     setImageError(true);
   };
+
+  // Quick continue function for "Eat Now, Edit Later" - sets 3 stars and continues
+  const handleEatNowEditLater = async (): Promise<void> => {
+    try {
+      setIsProcessing(true);
+      
+      // Set rating to 3 stars
+      setRating(3);
+      
+      // Generate a unique session ID for this result flow
+      const sessionId = route.params._uniqueKey || `rating_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      console.log(`Quick continue session ${sessionId} to RatingScreen2 with 3 stars`);
+
+      // Create a clean copy of the image without query parameters for passing to next screen
+      const timestamp = Date.now();
+      const fileExt = 'jpg'; // Default to jpg
+
+      // Create a path for the new clean image file
+      const newFilename = `rating2_image_${timestamp}.${fileExt}`;
+
+      // Determine the temp directory path based on platform
+      const dirPath = Platform.OS === 'ios'
+        ? `${RNFS.TemporaryDirectoryPath}/`
+        : `${RNFS.CachesDirectoryPath}/`;
+
+      const newFilePath = `${dirPath}${newFilename}`;
+      console.log('Creating clean image for RatingScreen2 at:', newFilePath);
+
+      // If the photo is already in the temp directory, avoid copying it again
+      if (photo.uri !== newFilePath) {
+        // First check if the target file already exists, and delete it if it does
+        try {
+          const exists = await RNFS.exists(newFilePath);
+          if (exists) {
+            await RNFS.unlink(newFilePath);
+          }
+        } catch (e) {
+          console.warn('Error checking/deleting existing file:', e);
+        }
+        
+        // Copy the current image file to new location
+        await RNFS.copyFile(photo.uri, newFilePath);
+        console.log('File copied successfully for RatingScreen2');
+      }
+
+      // Create a fresh photo object to avoid any reference issues
+      const freshPhoto = {
+        uri: newFilePath,
+        width: photo.width,
+        height: photo.height,
+        sessionId: sessionId,
+        originalUri: photo.uri
+      };
+
+      console.log(`Quick navigating to RatingScreen2 with 3 stars and fresh image: ${freshPhoto.uri}`);
+
+      // Navigate to RatingScreen2 with 3-star rating and empty comments
+      navigation.navigate('RatingScreen2', {
+        photo: freshPhoto,
+        location: location,
+        rating: 3, // Always 3 stars for quick continue
+        likedComment: '', // Empty comments for quick continue
+        dislikedComment: '',
+        suggestionData: route.params.suggestionData,
+        _uniqueKey: sessionId
+      });
+      
+    } catch (error) {
+      console.error('Error in quick continue:', error);
+      Alert.alert('Error', 'Failed to continue. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
   
   return (
     <SafeAreaView style={styles.container}>
@@ -374,6 +448,21 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
               />
             </View>
           </View>
+
+          {/* Show "Eat Now, Edit Later" button only for camera photos */}
+          {photoSource === 'camera' && (
+            <TouchableOpacity
+              style={styles.eatNowButton}
+              onPress={handleEatNowEditLater}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <ActivityIndicator size="small" color="#1a2b49" />
+              ) : (
+                <Text style={styles.eatNowButtonText}>Eat Now, Edit Later</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[
@@ -538,6 +627,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     color: '#1a2b49',
     textAlignVertical: 'top',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  eatNowButton: {
+    width: '100%',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 15,
+    marginBottom: 5,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+  },
+  eatNowButtonText: {
+    color: '#1a2b49',
+    fontSize: 16,
+    fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   continueButton: {

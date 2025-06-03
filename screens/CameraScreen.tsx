@@ -233,6 +233,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 },
                 location: exifLocation,
                 exifData: exifData, // Pass the full EXIF data for potential future use
+                photoSource: 'camera',
                 _navigationKey: navigationKey,
               });
               return;
@@ -269,6 +270,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
               height: photo.height,
             },
             location: location, // Use the device location as fallback
+            photoSource: 'camera',
             _navigationKey: navigationKey, // Add navigation key for component refresh
           });
           
@@ -325,6 +327,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           },
           location: photoAsset.location || location, // Use photo location or fallback to device location
           exifData: photoAsset.exifData,
+          photoSource: 'gallery',
           _navigationKey: navigationKey,
         });
       }, 600); // 600ms delay to ensure picker animation completes

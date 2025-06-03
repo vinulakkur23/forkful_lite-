@@ -526,6 +526,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           exifData: route.params.exifData,
           // Include suggestionData if available
           suggestionData: cachedSuggestions || undefined,
+          // Pass through photo source
+          photoSource: route.params.photoSource,
           _uniqueKey: `rating_screen1_${timestamp}`,
         });
         

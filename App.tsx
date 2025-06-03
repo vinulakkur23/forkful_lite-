@@ -45,6 +45,7 @@ export type RootStackParamList = {
       latitude: number;
       longitude: number;
     } | null;
+    photoSource?: 'camera' | 'gallery';
     _navigationKey?: string; // For forcing screen refresh
   };
   RatingScreen1: {
@@ -59,6 +60,7 @@ export type RootStackParamList = {
       latitude: number;
       longitude: number;
     } | null;
+    photoSource?: 'camera' | 'gallery';
     _uniqueKey?: string; // Ensure Rating screen reloads with new data
   };
   RatingScreen2: {
