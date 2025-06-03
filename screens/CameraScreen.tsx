@@ -43,8 +43,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
   
-  // Size for square guide (80% of screen width)
-  const guideSize = screenWidth * 0.8;
+  // Size for square guide - match full screen width to show actual capture area
+  const guideSize = screenWidth;
   
   // Get all devices and manually find the back camera
   const devices = useCameraDevices();
@@ -155,7 +155,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             qualityPrioritization: 'quality',
             flash: 'off',
             enableAutoStabilization: true,
-            skipMetadata: false
+            skipMetadata: false,
+            // Ensure photo matches preview dimensions
+            enableShutterSound: false
           });
 
           // Verify we got a valid photo
@@ -489,17 +491,22 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         device={device}
         isActive={true}
         photo={true}
-        enableZoomGesture
+        enableZoomGesture={false}
+        // Ensure we capture at photo quality
+        photoQualityBalance='quality'
+        // Disable any zoom to ensure preview matches capture
+        zoom={1}
+        // Ensure preview matches capture by using same aspect ratio
+        preset='photo'
+        // Try to match preview with actual photo output
+        videoAspectRatio={1}
       />
       
-      {/* Square framing guide centered on screen */}
+      {/* Square framing guide that matches capture area */}
       <View style={styles.guideCenterer}>
         <View style={[styles.framingGuide, { width: guideSize, height: guideSize }]}>
-          {/* Top line */}
-          <View style={styles.dottedLine} />
-          
-          {/* Bottom line */}
-          <View style={[styles.dottedLine, styles.bottomLine]} />
+          {/* Semi-transparent overlay to show capture area */}
+          <View style={styles.captureAreaOverlay} />
           
           {/* Corner guides */}
           <View style={[styles.cornerGuide, styles.topLeftCorner]} />
@@ -537,7 +544,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
   },
   camera: {
-    flex: 1, // Make camera fill the entire screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   guideCenterer: {
     position: 'absolute',
@@ -549,11 +560,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   framingGuide: {
-    borderColor: 'rgba(255,255,255,0.5)',
-    borderWidth: 1,
-    borderRadius: 8,
-    justifyContent: 'space-between', // For dashed lines at top and bottom
+    borderColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 2,
+    borderRadius: 0, // Square corners to match capture
     position: 'relative',
+    backgroundColor: 'transparent',
   },
   dottedLine: {
     width: '100%',
@@ -567,38 +578,46 @@ const styles = StyleSheet.create({
   },
   cornerGuide: {
     position: 'absolute',
-    width: 20,
-    height: 20,
+    width: 30,
+    height: 30,
     borderColor: 'white',
-    borderWidth: 2,
+    borderWidth: 3,
   },
   topLeftCorner: {
-    top: 0,
-    left: 0,
+    top: -2,
+    left: -2,
     borderBottomWidth: 0,
     borderRightWidth: 0,
-    borderTopLeftRadius: 4,
+    borderTopLeftRadius: 0,
   },
   topRightCorner: {
-    top: 0,
-    right: 0,
+    top: -2,
+    right: -2,
     borderBottomWidth: 0,
     borderLeftWidth: 0,
-    borderTopRightRadius: 4,
+    borderTopRightRadius: 0,
   },
   bottomLeftCorner: {
-    bottom: 0,
-    left: 0,
+    bottom: -2,
+    left: -2,
     borderTopWidth: 0,
     borderRightWidth: 0,
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: 0,
   },
   bottomRightCorner: {
-    bottom: 0,
-    right: 0,
+    bottom: -2,
+    right: -2,
     borderTopWidth: 0,
     borderLeftWidth: 0,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 0,
+  },
+  captureAreaOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.05)', // Very subtle overlay to show capture area
   },
   overlay: {
     position: 'absolute',
