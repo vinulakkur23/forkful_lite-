@@ -408,6 +408,27 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setCheersLoading(false);
     }
   };
+
+  // Handle meal title press to view on map
+  const handleViewOnMap = () => {
+    if (!meal.location || !meal.location.latitude || !meal.location.longitude) {
+      Alert.alert('No Location', 'This meal doesn\'t have location information to show on the map.');
+      return;
+    }
+
+    // Navigate to Home screen with map tab active and center on this meal's location
+    navigation.navigate('MainTabs', {
+      screen: 'Home',
+      params: {
+        initialTab: 'map', // Tell HomeScreen to show map tab
+        centerOnLocation: {
+          latitude: meal.location.latitude,
+          longitude: meal.location.longitude,
+          mealId: mealId // Pass meal ID to potentially highlight it
+        }
+      }
+    });
+  };
   
   // Navigate back to the correct screen
   const goBack = () => {
@@ -545,7 +566,10 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.detailsContainer}>
         <View style={styles.titleRow}>
           <View style={styles.titleContent}>
-            <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+            <TouchableOpacity onPress={handleViewOnMap} style={styles.mealNameContainer}>
+              <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+              <Icon name="map" size={18} color="#1a2b49" style={styles.mapIcon} />
+            </TouchableOpacity>
             {justEdited && (
               <View style={styles.editedBadge}>
                 <Text style={styles.editedText}>Updated</Text>
@@ -960,13 +984,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
+  mealNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
   mealName: {
     fontSize: 24,
     fontWeight: 'bold',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     color: '#1a2b49',
     flex: 1,
-    marginRight: 10,
+  },
+  mapIcon: {
+    marginLeft: 8,
+    opacity: 0.7,
   },
   editedBadge: {
     backgroundColor: '#ffc008',

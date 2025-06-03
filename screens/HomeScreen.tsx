@@ -120,7 +120,21 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       console.log('HomeScreen: Setting tab index from route params:', route.params.tabIndex);
       setIndex(route.params.tabIndex);
     }
-  }, [route.params?.tabIndex]);
+    
+    // Handle navigation from meal detail to show on map
+    if (route.params?.initialTab === 'map') {
+      console.log('HomeScreen: Switching to map tab from meal detail');
+      setIndex(1); // Map tab is index 1
+      
+      // Clear the navigation parameters after processing them to prevent reuse
+      setTimeout(() => {
+        navigation.setParams({
+          initialTab: undefined,
+          centerOnLocation: undefined
+        });
+      }, 1000); // Clear after the map animation completes
+    }
+  }, [route.params?.tabIndex, route.params?.initialTab, navigation]);
 
   // Get user's current location
   useEffect(() => {
@@ -899,6 +913,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             imageErrors={imageErrors}
             onImageError={handleImageError}
             onViewMealDetails={viewMealDetails}
+            centerOnLocation={route.params?.centerOnLocation}
             tabIndex={index}
             MAX_MEALS_TO_DISPLAY={MAX_MEALS_TO_DISPLAY}
           />

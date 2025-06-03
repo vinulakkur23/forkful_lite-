@@ -60,6 +60,11 @@ type Props = {
   onViewMealDetails: (meal: MealEntry) => void;
   tabIndex: number;
   MAX_MEALS_TO_DISPLAY: number;
+  centerOnLocation?: {
+    latitude: number;
+    longitude: number;
+    mealId?: string;
+  };
 };
 
 const HomeMapComponent: React.FC<Props> = ({
@@ -74,13 +79,17 @@ const HomeMapComponent: React.FC<Props> = ({
   onImageError,
   onViewMealDetails,
   tabIndex,
-  MAX_MEALS_TO_DISPLAY
+  MAX_MEALS_TO_DISPLAY,
+  centerOnLocation
 }) => {
   // Map-specific state - isolated from parent component
   // Use useRef to persist state across component hide/show
   const selectedMarkerIndexRef = useRef<{ [key: string]: number }>({});
   const [, forceUpdate] = useState({});
   const mapRef = useRef<MapView | null>(null);
+  
+  // Store centerOnLocation locally to prevent it from being lost when params are cleared
+  const storedCenterLocationRef = useRef<typeof centerOnLocation>(null);
 
   const handleLocationPress = (meals: MealEntry[]) => {
     return;
@@ -233,6 +242,38 @@ const HomeMapComponent: React.FC<Props> = ({
       }, 500);
     }
   }, [userLocation, tabIndex]);
+
+  // Handle centering on specific location when navigating from meal detail
+  useEffect(() => {
+    // Store centerOnLocation when it's first received
+    if (centerOnLocation && !storedCenterLocationRef.current) {
+      storedCenterLocationRef.current = centerOnLocation;
+      console.log('Storing center location from meal detail:', centerOnLocation);
+    }
+    
+    // Clear stored location when centerOnLocation is cleared (params reset)
+    if (!centerOnLocation && storedCenterLocationRef.current) {
+      console.log('Clearing stored center location');
+      storedCenterLocationRef.current = null;
+    }
+    
+    // Animate to stored location when map tab becomes active
+    if (storedCenterLocationRef.current && mapRef.current && tabIndex === 1) {
+      console.log('Centering on stored location:', storedCenterLocationRef.current);
+      setTimeout(() => {
+        if (storedCenterLocationRef.current) {
+          mapRef.current?.animateToRegion({
+            latitude: storedCenterLocationRef.current.latitude,
+            longitude: storedCenterLocationRef.current.longitude,
+            latitudeDelta: 0.01, // Zoom in closer for specific meal location
+            longitudeDelta: 0.01,
+          }, 1000);
+          // Clear the stored location after using it
+          storedCenterLocationRef.current = null;
+        }
+      }, 500);
+    }
+  }, [centerOnLocation, tabIndex]);
 
   const fitMapToMarkers = () => {
     if (!mapRef.current || nearbyMeals.length === 0) return;
