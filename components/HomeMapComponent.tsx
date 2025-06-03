@@ -14,6 +14,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from './SimpleFilterComponent';
+import EmojiDisplay from './EmojiDisplay';
 
 interface MealEntry {
   id: string;
@@ -390,26 +391,14 @@ const HomeMapComponent: React.FC<Props> = ({
                       <Icon name="image" size={30} color="#ddd" />
                     </View>
                   )}
-                  <Text style={styles.calloutTitle} numberOfLines={1}>
-                    {currentMeal.meal || 'Untitled meal'}
-                  </Text>
+                  <View style={styles.calloutTitleRow}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {currentMeal.meal || 'Untitled meal'}
+                    </Text>
+                    <EmojiDisplay rating={currentMeal.rating} size={16} />
+                  </View>
                   {currentMeal.restaurant && (
                     <Text style={styles.calloutSubtitle} numberOfLines={1}>{currentMeal.restaurant}</Text>
-                  )}
-                  <View style={styles.calloutRatingRow}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Image
-                        key={star}
-                        source={star <= currentMeal.rating 
-                          ? require('../assets/stars/star-filled.png')
-                          : require('../assets/stars/star-empty.png')
-                        }
-                        style={styles.calloutStar}
-                      />
-                    ))}
-                  </View>
-                  {currentMeal.userName && (
-                    <Text style={styles.calloutUserName}>by {currentMeal.userName}</Text>
                   )}
                   {meals.length > 1 && (
                     <>
@@ -501,9 +490,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   markerPhoto: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60, // Increased from 50 for better visibility
+    height: 60, // Increased from 50 for better visibility
+    borderRadius: 8, // Slightly more rounded for the larger size
     borderWidth: 3,
     borderColor: 'white',
     shadowColor: '#000',
@@ -576,32 +565,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  calloutTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
   calloutTitle: {
     fontWeight: 'bold',
     fontSize: 14,
-    marginBottom: 3,
+    flex: 1,
+    marginRight: 8,
   },
   calloutSubtitle: {
     fontSize: 12,
     color: '#666',
     marginBottom: 3,
-  },
-  calloutRatingRow: {
-    flexDirection: 'row',
-    marginVertical: 3,
-    justifyContent: 'center',
-  },
-  calloutStar: {
-    width: 14,
-    height: 14,
-    marginHorizontal: 1,
-  },
-  calloutUserName: {
-    fontSize: 11,
-    color: '#888',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 2,
   },
   calloutPagerDots: {
     flexDirection: 'row',

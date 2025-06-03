@@ -977,8 +977,6 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
             <Marker
               key={meal.id}
               coordinate={coordinate}
-              title={meal.meal || 'Untitled meal'}
-              description={meal.restaurant || ''}
             >
               {/* Custom marker view for grouped meals */}
               {isGrouped && (
@@ -1008,13 +1006,13 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
                       <Icon name="image" size={24} color="#ddd" />
                     </View>
                   )}
-                  <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
+                  <View style={styles.calloutTitleRow}>
+                    <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
+                    <EmojiDisplay rating={meal.rating} size={16} />
+                  </View>
                   {meal.restaurant && (
                     <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
                   )}
-                  <View style={styles.calloutRating}>
-                    <EmojiDisplay rating={meal.rating} size={16} />
-                  </View>
                   {isGrouped && groupSize > 1 && (
                     <Text style={styles.calloutGroupText}>
                       {groupSize - 1} more meal{groupSize > 2 ? 's' : ''} at this location
@@ -1362,19 +1360,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 5,
   },
+  calloutTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
   calloutTitle: {
     fontWeight: 'bold',
     fontSize: 14,
-    marginBottom: 3,
+    flex: 1,
+    marginRight: 8,
   },
   calloutSubtitle: {
     fontSize: 12,
     color: '#666',
     marginBottom: 3,
-  },
-  calloutRating: {
-    flexDirection: 'row',
-    marginBottom: 5,
   },
   calloutTapText: {
     fontSize: 10,
