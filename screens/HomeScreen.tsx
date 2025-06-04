@@ -155,14 +155,32 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }, []);
 
-  // Check if user is logged in
+  // Check if user is logged in and set up saved meals listener
   useEffect(() => {
     const currentUser = auth().currentUser;
     setUser(currentUser);
     
-    // Load saved meals when user is set
+    // Set up real-time listener for saved meals
     if (currentUser) {
-      loadSavedMeals();
+      const unsubscribe = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('savedMeals')
+        .onSnapshot(snapshot => {
+          const savedMealIds = new Set(snapshot.docs.map(doc => doc.id));
+          savedMealsRef.current = savedMealIds;
+          
+          // Update all visible cards
+          Object.keys(cardRefs.current).forEach(mealId => {
+            if (cardRefs.current[mealId]?.updateHeartVisibility) {
+              cardRefs.current[mealId].updateHeartVisibility(savedMealIds.has(mealId));
+            }
+          });
+        }, error => {
+          console.error('Error listening to saved meals:', error);
+        });
+      
+      return () => unsubscribe();
     }
   }, []);
 
@@ -500,39 +518,24 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   };
 
-  // Load saved meals from Firestore
-  const loadSavedMeals = async () => {
-    try {
-      const userId = user?.uid;
-      if (!userId) return;
-
-      const savedMealsRef = firestore()
-        .collection('users')
-        .doc(userId)
-        .collection('savedMeals');
-      
-      const snapshot = await savedMealsRef.get();
-      const savedMealIds = new Set(snapshot.docs.map(doc => doc.data().mealId));
-      savedMealsRef.current = savedMealIds;
-    } catch (error) {
-      console.error('Error loading saved meals:', error);
-    }
-  };
 
   // Save meal to wishlist
-  const saveMealToWishlist = async (mealId: string) => {
+  const saveMealToWishlist = async (mealId: string, mealData?: MealEntry) => {
     try {
-      const userId = user?.uid;
+      const currentUser = auth().currentUser;
+      const userId = currentUser?.uid;
       if (!userId) {
         Alert.alert('Error', 'Please log in to save meals');
         return;
       }
 
-      // Find the meal data from our current nearby meals
-      const mealData = nearbyMeals.find(meal => meal.id === mealId);
+      // If meal data is not provided, try to find it from nearby meals
       if (!mealData) {
-        Alert.alert('Error', 'Meal data not found');
-        return;
+        mealData = nearbyMeals.find(meal => meal.id === mealId);
+        if (!mealData) {
+          Alert.alert('Error', 'Meal data not found');
+          return;
+        }
       }
 
       const savedMealRef = firestore()
@@ -576,7 +579,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Remove meal from wishlist
   const removeMealFromWishlist = async (mealId: string) => {
     try {
-      const userId = user?.uid;
+      const currentUser = auth().currentUser;
+      const userId = currentUser?.uid;
       if (!userId) return;
 
       const savedMealRef = firestore()
@@ -602,14 +606,16 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  // Swipeable meal card component - memoized to prevent unnecessary re-renders
-  const SwipeableMealCard = React.memo(({ item }: { item: MealEntry }) => {
-    const translateX = useRef(new Animated.Value(0)).current;
-    const isAnimating = useRef(false);
+  // Double tap meal card component - memoized to prevent unnecessary re-renders
+  const DoubleTapMealCard = React.memo(({ item }: { item: MealEntry }) => {
     const [showHeart, setShowHeart] = useState(savedMealsRef.current.has(item.id));
+    const lastTap = useRef<number>(0);
 
     // Register this card's update function
     React.useEffect(() => {
+      // Check initial state
+      setShowHeart(savedMealsRef.current.has(item.id));
+      
       cardRefs.current[item.id] = {
         updateHeartVisibility: (visible: boolean) => {
           setShowHeart(visible);
@@ -621,167 +627,84 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       };
     }, [item.id]);
 
-    // Force reset function to ensure card always returns to 0
-    const forceReset = () => {
-      if (isAnimating.current) return; // Don't interrupt existing animations
+    const handleDoubleTap = () => {
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 300;
       
-      isAnimating.current = true;
-      Animated.spring(translateX, {
-        toValue: 0,
-        tension: 200,
-        friction: 10,
-        useNativeDriver: false,
-      }).start(() => {
-        isAnimating.current = false;
-        translateX.setValue(0); // Force to exactly 0
-      });
+      if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+        // Double tap detected
+        lastTap.current = 0; // Reset
+        
+        // Toggle wishlist status
+        if (showHeart) {
+          removeMealFromWishlist(item.id);
+        } else {
+          saveMealToWishlist(item.id, item);
+        }
+      } else {
+        // First tap - wait for potential double tap
+        lastTap.current = now;
+        
+        // If no second tap, navigate to details after delay
+        setTimeout(() => {
+          if (lastTap.current === now) {
+            viewMealDetails(item);
+          }
+        }, DOUBLE_TAP_DELAY);
+      }
     };
 
-    const panResponder = PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Very forgiving gesture detection
-        if (isAnimating.current) return false;
-        
-        const horizontalMovement = Math.abs(gestureState.dx);
-        const verticalMovement = Math.abs(gestureState.dy);
-        
-        // Allow swipe if:
-        // 1. There's any reasonable horizontal movement (>5px), AND
-        // 2. Horizontal movement is at least 15% of total movement (very lenient)
-        const totalMovement = horizontalMovement + verticalMovement;
-        const horizontalRatio = totalMovement > 0 ? horizontalMovement / totalMovement : 1;
-        
-        return horizontalMovement > 5 && horizontalRatio > 0.15;
-      },
-      onPanResponderGrant: () => {
-        // Stop any ongoing animations
-        translateX.stopAnimation();
-        isAnimating.current = false;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        // Continue tracking horizontal movement regardless of vertical movement
-        if (gestureState.dx > 0) {
-          const maxSwipe = width * 0.4; // 40% of screen width max
-          const adjustedDx = Math.min(gestureState.dx, maxSwipe);
-          translateX.setValue(adjustedDx);
-        } else if (gestureState.dx < -10) {
-          // Only snap back if there's significant leftward movement
-          translateX.setValue(0);
-        }
-        // For small negative values (-10 to 0), keep current position to avoid jitter
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const swipeThreshold = width * 0.25; // 25% of screen width for easy activation
-        const swipeVelocity = gestureState.vx; // Consider velocity too
-        
-        // Check if swipe was fast enough or far enough
-        const shouldActivate = gestureState.dx > swipeThreshold || 
-                              (gestureState.dx > width * 0.15 && swipeVelocity > 0.4);
-        
-        if (shouldActivate) {
-          // Swipe right - save to wishlist
-          isAnimating.current = true;
-          Animated.timing(translateX, {
-            toValue: width,
-            duration: 200,
-            useNativeDriver: false,
-          }).start(() => {
-            // Reset position after animation
-            translateX.setValue(0);
-            isAnimating.current = false;
-            
-            // Toggle wishlist status
-            if (showHeart) {
-              removeMealFromWishlist(item.id);
-            } else {
-              saveMealToWishlist(item.id);
-            }
-          });
-        } else {
-          // Snap back to original position
-          forceReset();
-        }
-      },
-      onPanResponderTerminate: () => {
-        // Handle case where gesture is interrupted
-        forceReset();
-      },
-    });
-
     return (
-      <View style={styles.swipeContainer}>
-        {/* Background indicator */}
-        <View style={styles.swipeBackground}>
-          <Image 
-            source={showHeart 
-              ? require('../assets/icons/wishlist-inactive.png')  // Show unfilled heart to indicate removal
-              : require('../assets/icons/wishlist-active.png')    // Show filled heart to indicate adding
-            }
-            style={styles.swipeHeartIcon}
-            resizeMode="contain"
-          />
-        </View>
-        
-        {/* Swipeable card */}
-        <Animated.View
-          style={[
-            styles.swipeableCard,
-            {
-              transform: [{ translateX }],
-            },
-          ]}
-          {...panResponder.panHandlers}
+      <View style={styles.mealCardContainer}>
+        <TouchableOpacity
+          style={styles.mealCard}
+          onPress={handleDoubleTap}
+          activeOpacity={0.9}
         >
-          <TouchableOpacity
-            style={styles.mealCard}
-            onPress={() => viewMealDetails(item)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.imageContainer}>
-              {/* Saved indicator with heart icon */}
-              {showHeart && (
-                <Image 
-                  source={require('../assets/icons/wishlist-active.png')}
-                  style={styles.heartIcon}
-                  resizeMode="contain"
-                />
-              )}
-              
-              {/* Add safe image handling */}
-              {item.photoUrl && !imageErrors[item.id] ? (
-                <Image
-                  source={{ uri: item.photoUrl }}
-                  style={styles.mealImage}
-                  resizeMode="cover"
-                  onError={() => handleImageError(item.id)}
-                />
-              ) : (
-                <View style={[styles.mealImage, styles.placeholderContainer]}>
-                  <Icon name="image-not-supported" size={32} color="#D8D6B8" />
-                </View>
-              )}
-              
-              {/* Star rating overlay */}
-              <View style={styles.ratingOverlay}>
-                {renderEmoji(item.rating)}
-              </View>
-            </View>
+          <View style={styles.imageContainer}>
+            {/* Saved indicator with heart icon */}
+            {showHeart && (
+              <Image 
+                source={require('../assets/icons/wishlist-active.png')}
+                style={styles.heartIcon}
+                resizeMode="contain"
+              />
+            )}
             
-            <View style={styles.mealCardContent}>
-              <View style={styles.infoRow}>
-                <Text style={styles.mealName} numberOfLines={1}>
-                  {item.meal || 'Delicious meal'}
-                </Text>
-                
-                {item.distance !== undefined && (
-                  <Text style={styles.distanceText}>
-                    {formatDistance(item.distance, item)}
-                  </Text>
-                )}
+            {/* Add safe image handling */}
+            {item.photoUrl && !imageErrors[item.id] ? (
+              <Image
+                source={{ uri: item.photoUrl }}
+                style={styles.mealImage}
+                resizeMode="cover"
+                onError={() => handleImageError(item.id)}
+              />
+            ) : (
+              <View style={[styles.mealImage, styles.placeholderContainer]}>
+                <Icon name="image-not-supported" size={32} color="#D8D6B8" />
               </View>
+            )}
+            
+            {/* Star rating overlay */}
+            <View style={styles.ratingOverlay}>
+              {renderEmoji(item.rating)}
             </View>
-          </TouchableOpacity>
-        </Animated.View>
+          </View>
+          
+          <View style={styles.mealCardContent}>
+            <View style={styles.infoRow}>
+              <Text style={styles.mealName} numberOfLines={1}>
+                {item.meal || 'Delicious meal'}
+              </Text>
+              
+              {item.distance !== undefined && (
+                <Text style={styles.distanceText}>
+                  {formatDistance(item.distance, item)}
+                </Text>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   }, (prevProps, nextProps) => {
@@ -793,7 +716,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Render a meal item in the feed - memoized to prevent recreation
   const renderMealItem = React.useCallback(({ item }: { item: MealEntry }) => (
-    <SwipeableMealCard item={item} />
+    <DoubleTapMealCard item={item} />
   ), []);
   
 
@@ -1068,30 +991,11 @@ const styles = StyleSheet.create({
     left: -10000,
     opacity: 0,
   },
-  // Swipe functionality styles
-  swipeContainer: {
+  // Meal card container
+  mealCardContainer: {
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
-  },
-  swipeBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#FAF9F6', // Same cream color as homescreen background
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center the heart icon
-  },
-  swipeHeartIcon: {
-    width: 40,
-    height: 40,
-  },
-  swipeableCard: {
-    backgroundColor: 'transparent',
   },
   heartIcon: {
     position: 'absolute',

@@ -24,6 +24,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from '../components/SimpleFilterComponent';
+import EmojiDisplay from '../components/EmojiDisplay';
 
 // Custom button icons - replace these with actual assets when available
 const MAP_ICONS = {
@@ -768,24 +769,15 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
                         <Icon name="image" size={30} color="#ddd" />
                       </View>
                     )}
-                    <Text style={styles.calloutTitle} numberOfLines={1}>
-                      {currentMeal.meal || 'Untitled meal'}
-                    </Text>
+                    <View style={styles.calloutTitleRow}>
+                      <Text style={styles.calloutTitle} numberOfLines={1}>
+                        {currentMeal.meal || 'Untitled meal'}
+                      </Text>
+                      <EmojiDisplay rating={currentMeal.rating} size={16} />
+                    </View>
                     {currentMeal.restaurant && (
                       <Text style={styles.calloutSubtitle} numberOfLines={1}>{currentMeal.restaurant}</Text>
                     )}
-                    <View style={styles.calloutRatingRow}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Image
-                          key={star}
-                          source={star <= currentMeal.rating 
-                            ? require('../assets/stars/star-filled.png')
-                            : require('../assets/stars/star-empty.png')
-                          }
-                          style={styles.calloutStar}
-                        />
-                      ))}
-                    </View>
                     {meals.length > 1 && (
                       <>
                         {/* Pager dots in callout */}
@@ -1030,10 +1022,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 5,
   },
+  calloutTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
   calloutTitle: {
     fontWeight: 'bold',
     fontSize: 14,
-    marginBottom: 3,
+    flex: 1,
+    marginRight: 8,
   },
   calloutSubtitle: {
     fontSize: 12,
@@ -1286,9 +1285,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   markerPhoto: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60, // Increased for better visibility like HomeMapComponent
+    height: 60, // Increased for better visibility like HomeMapComponent
+    borderRadius: 8, // Square with slight rounding like HomeMapComponent
     borderWidth: 3,
     borderColor: 'white',
     shadowColor: '#000',

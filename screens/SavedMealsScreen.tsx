@@ -174,22 +174,27 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, 
       style={styles.mealCard}
       onPress={() => viewMealDetails(item)}
     >
-      {item.photoUrl && !imageErrors[item.id] ? (
-        <Image 
-          source={{ uri: item.photoUrl }} 
-          style={styles.mealImage}
-          onError={() => handleImageError(item.id)}
-        />
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Icon name="image" size={24} color="#ddd" />
+      <View style={styles.imageContainer}>
+        {item.photoUrl && !imageErrors[item.id] ? (
+          <Image 
+            source={{ uri: item.photoUrl }} 
+            style={styles.mealImage}
+            onError={() => handleImageError(item.id)}
+          />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Icon name="image" size={24} color="#ddd" />
+          </View>
+        )}
+        
+        {/* Emoji rating overlay */}
+        <View style={styles.ratingOverlay}>
+          <EmojiDisplay rating={item.rating} size={22} />
         </View>
-      )}
+      </View>
+      
       <View style={styles.mealCardContent}>
         <Text style={styles.mealName} numberOfLines={1}>{item.mealName}</Text>
-        <View style={styles.ratingContainer}>
-          <EmojiDisplay rating={item.rating} size={20} />
-        </View>
         {item.restaurant && (
           <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
         )}
@@ -291,6 +296,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+  },
   mealImage: {
     width: '100%',
     height: itemWidth,
@@ -303,6 +312,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  ratingOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(250, 248, 230, 0.8)', // Cream color with 80% opacity
+    borderRadius: 20,
+    padding: 4,
+    paddingHorizontal: 5,
+  },
   mealCardContent: {
     padding: 10,
   },
@@ -311,10 +329,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'normal',
     color: '#1a2b49',
-    marginBottom: 5,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
     marginBottom: 5,
   },
   restaurantName: {

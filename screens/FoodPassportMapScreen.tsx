@@ -978,47 +978,79 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
               key={meal.id}
               coordinate={coordinate}
             >
-              {/* Custom marker view for grouped meals */}
-              {isGrouped && (
-                <View style={styles.customMarker}>
-                  <View style={[styles.markerDot, { backgroundColor: '#ff4444' }]} />
-                  {groupSize > 2 && (
-                    <View style={styles.markerBadge}>
-                      <Text style={styles.markerBadgeText}>{groupSize}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
+              {/* Custom photo marker with square shape */}
+              <View style={styles.customPhotoMarker}>
+                {meal.photoUrl && !imageErrors[meal.id] ? (
+                  <Image
+                    source={{ uri: meal.photoUrl }}
+                    style={styles.markerPhoto}
+                    onError={() => handleImageError(meal.id)}
+                  />
+                ) : (
+                  <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
+                    <Icon name="image" size={20} color="#ddd" />
+                  </View>
+                )}
+                {isGrouped && groupSize > 1 && (
+                  <View style={styles.pagerDots}>
+                    {Array.from({ length: Math.min(groupSize, 5) }).map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.pagerDot,
+                          index === 0 && styles.pagerDotActive,
+                          { backgroundColor: index === 0 ? '#E63946' : '#ddd' }
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
               <Callout
                 tooltip
                 onPress={() => viewMealDetails(meal)}
-                style={styles.callout}
+                style={[styles.callout, styles.photoCallout]}
               >
                 <View style={styles.calloutContent}>
                   {meal.photoUrl && !imageErrors[meal.id] ? (
                     <Image
                       source={{ uri: meal.photoUrl }}
-                      style={styles.calloutImage}
+                      style={styles.calloutImageLarge}
                       onError={() => handleImageError(meal.id)}
                     />
                   ) : (
-                    <View style={styles.calloutImagePlaceholder}>
-                      <Icon name="image" size={24} color="#ddd" />
+                    <View style={styles.calloutImageLargePlaceholder}>
+                      <Icon name="image" size={30} color="#ddd" />
                     </View>
                   )}
                   <View style={styles.calloutTitleRow}>
-                    <Text style={styles.calloutTitle}>{meal.meal || 'Untitled meal'}</Text>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {meal.meal || 'Untitled meal'}
+                    </Text>
                     <EmojiDisplay rating={meal.rating} size={16} />
                   </View>
                   {meal.restaurant && (
-                    <Text style={styles.calloutSubtitle}>{meal.restaurant}</Text>
+                    <Text style={styles.calloutSubtitle} numberOfLines={1}>{meal.restaurant}</Text>
                   )}
                   {isGrouped && groupSize > 1 && (
-                    <Text style={styles.calloutGroupText}>
-                      {groupSize - 1} more meal{groupSize > 2 ? 's' : ''} at this location
-                    </Text>
+                    <>
+                      <View style={styles.calloutPagerDots}>
+                        {Array.from({ length: Math.min(groupSize, 5) }).map((_, index) => (
+                          <View
+                            key={index}
+                            style={[
+                              styles.calloutPagerDot,
+                              index === 0 && styles.calloutPagerDotActive,
+                              { backgroundColor: index === 0 ? '#E63946' : '#ddd' }
+                            ]}
+                          />
+                        ))}
+                      </View>
+                      <Text style={styles.calloutInstruction}>
+                        {groupSize} meals at this location • Tap for details
+                      </Text>
+                    </>
                   )}
-                  <Text style={styles.calloutTapText}>Tap to view details</Text>
                 </View>
               </Callout>
             </Marker>
@@ -1330,10 +1362,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   callout: {
-    width: 200,
+    width: 220,
     borderRadius: 10,
     padding: 0,
     backgroundColor: 'transparent',
+  },
+  photoCallout: {
+    width: 220,
   },
   calloutContent: {
     backgroundColor: 'white',
@@ -1345,20 +1380,20 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  calloutImage: {
+  calloutImageLarge: {
     width: '100%',
-    height: 100,
-    borderRadius: 5,
-    marginBottom: 5,
+    height: 140,
+    borderRadius: 8,
+    marginBottom: 8,
   },
-  calloutImagePlaceholder: {
+  calloutImageLargePlaceholder: {
     width: '100%',
-    height: 100,
-    borderRadius: 5,
+    height: 140,
+    borderRadius: 8,
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   calloutTitleRow: {
     flexDirection: 'row',
@@ -1391,41 +1426,75 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  // Custom marker styles
-  customMarker: {
+  // Custom photo marker styles
+  customPhotoMarker: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markerDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  markerPhoto: {
+    width: 60, // Increased from 50 for better visibility
+    height: 60, // Increased from 50 for better visibility
+    borderRadius: 8, // Square with slight rounding to match HomeScreen
     borderWidth: 3,
     borderColor: 'white',
-    backgroundColor: '#ff6b6b',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 3,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  markerBadge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#ff4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    alignItems: 'center',
+  markerPhotoPlaceholder: {
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'white',
+    alignItems: 'center',
   },
-  markerBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
+  pagerDots: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: 'white',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  pagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 2,
+  },
+  pagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  calloutPagerDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 5,
+  },
+  calloutPagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  calloutPagerDotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  calloutInstruction: {
+    fontSize: 9,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 3,
+    textAlign: 'center',
   },
 });
 
