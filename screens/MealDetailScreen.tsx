@@ -522,18 +522,15 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Meal Details</Text>
-        {/* Cheers button in header - only show if not own meal */}
-        {meal && meal.userId !== auth().currentUser?.uid ? (
+        {/* Map button in header - only show if meal has location */}
+        {meal && meal.location && meal.location.latitude && meal.location.longitude ? (
           <TouchableOpacity 
-            style={[styles.headerRightButton, { marginRight: 8 }]} // Add right margin to move left
-            onPress={handleCheer}
-            disabled={cheersLoading}
+            style={styles.headerRightButton}
+            onPress={handleViewOnMap}
           >
             <Image
-              source={hasUserCheered 
-                ? require('../assets/icons/cheers-active.png')
-                : require('../assets/icons/cheers-inactive.png')}
-              style={styles.headerCheersIcon}
+              source={require('../assets/icons/map-icon.png')}
+              style={styles.headerMapIcon}
               resizeMode="contain"
             />
           </TouchableOpacity>
@@ -566,61 +563,79 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.detailsContainer}>
         <View style={styles.titleRow}>
           <View style={styles.titleContent}>
-            <TouchableOpacity onPress={handleViewOnMap} style={styles.mealNameContainer}>
-              <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
-              <Icon name="map" size={18} color="#1a2b49" style={styles.mapIcon} />
+            <View style={styles.mealInfoColumn}>
+              <View style={styles.mealNameRow}>
+                <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
+                {justEdited && (
+                  <View style={styles.editedBadge}>
+                    <Text style={styles.editedText}>Updated</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.ratingContainer}>
+                <EmojiDisplay rating={meal.rating} size={28} />
+              </View>
+              {meal.restaurant && (
+                <View style={styles.restaurantRow}>
+                  <Image
+                    source={require('../assets/icons/restaurant-icon.png')}
+                    style={styles.restaurantIcon}
+                  />
+                  <Text style={styles.restaurantName}>{meal.restaurant}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          
+          <View style={styles.buttonColumn}>
+            {/* Wishlist button */}
+            <TouchableOpacity 
+              style={styles.titleWishlistButton}
+              onPress={toggleSaveMeal}
+            >
+              <Image
+                source={isSaved 
+                  ? require('../assets/icons/wishlist-active.png')
+                  : require('../assets/icons/wishlist-inactive.png')}
+                style={styles.titleWishlistIcon}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
-            {justEdited && (
-              <View style={styles.editedBadge}>
-                <Text style={styles.editedText}>Updated</Text>
+            
+            {/* Cheers button - only show if not own meal */}
+            {meal.userId !== auth().currentUser?.uid && (
+              <TouchableOpacity 
+                style={styles.titleCheersButton}
+                onPress={handleCheer}
+                disabled={cheersLoading}
+              >
+                <Image
+                  source={hasUserCheered 
+                    ? require('../assets/icons/cheers-active.png')
+                    : require('../assets/icons/cheers-inactive.png')}
+                  style={styles.titleCheersIcon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Show cheers count if it's own meal */}
+            {meal.userId === auth().currentUser?.uid && totalCheers > 0 && (
+              <View style={styles.cheersCountContainer}>
+                <Image
+                  source={require('../assets/icons/cheers-active.png')}
+                  style={[styles.cheersCountIcon, { tintColor: undefined }]} // Remove tint to preserve original colors
+                  resizeMode="contain"
+                />
+                <Text style={styles.cheersCountText}>{totalCheers}</Text>
               </View>
             )}
           </View>
-          
-          {/* Wishlist button next to title */}
-          <TouchableOpacity 
-            style={styles.titleWishlistButton}
-            onPress={toggleSaveMeal}
-          >
-            <Image
-              source={isSaved 
-                ? require('../assets/icons/wishlist-active.png')
-                : require('../assets/icons/wishlist-inactive.png')}
-              style={styles.titleWishlistIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          
-          {/* Show cheers count if it's own meal */}
-          {meal.userId === auth().currentUser?.uid && totalCheers > 0 && (
-            <View style={styles.cheersCountContainer}>
-              <Image
-                source={require('../assets/icons/cheers-active.png')}
-                style={[styles.cheersCountIcon, { tintColor: undefined }]} // Remove tint to preserve original colors
-                resizeMode="contain"
-              />
-              <Text style={styles.cheersCountText}>{totalCheers}</Text>
-            </View>
-          )}
         </View>
-        
-        <View style={styles.ratingContainer}>
-          <EmojiDisplay rating={meal.rating} size={28} />
-        </View>
-        
-        {meal.restaurant && (
-          <View style={styles.infoRow}>
-            <Image
-              source={require('../assets/icons/restaurant-icon.png')}
-              style={styles.restaurantIcon}
-            />
-            <Text style={styles.restaurantName}>{meal.restaurant}</Text>
-          </View>
-        )}
         
         {/* User who posted this meal */}
         <TouchableOpacity 
-          style={[styles.infoRow, {marginTop: 4, marginBottom: 8}]} 
+          style={[styles.infoRow, {marginTop: 4, marginBottom: 4}]} 
           onPress={() => {
             // If it's the current user's meal, show the follow message
             // Otherwise, navigate to their profile
@@ -871,6 +886,11 @@ const styles = StyleSheet.create({
     tintColor: '#1a2b49',
     resizeMode: 'contain',
   },
+  headerMapIcon: {
+    width: 24,
+    height: 24,
+    // No tintColor - preserves original icon colors
+  },
   wishlistIcon: {
     width: 28,
     height: 28,
@@ -975,14 +995,11 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center', // Changed back to center for better alignment
-    marginBottom: 8, // Reduced from 10 to tighten spacing
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
   titleContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
   },
   mealNameContainer: {
     flexDirection: 'row',
@@ -1018,6 +1035,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+    marginTop: 8, // Add dynamic top margin
   },
   restaurantIcon: {
     width: 18,
@@ -1035,6 +1053,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  restaurantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8, // Consistent spacing
   },
   usernameText: {
     fontSize: 16,
@@ -1060,8 +1083,7 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    marginTop: -3,
+    marginTop: 8, // Consistent spacing
   },
   ratingLabel: {
     fontSize: 16,
@@ -1344,9 +1366,9 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 8,
     backgroundColor: 'transparent',
-    marginLeft: 12, // Increased from 8 to 12
-    marginRight: 0, // Back to no right margin
-    marginTop: -2,
+    marginLeft: 0, // Remove left margin since it's in a column now
+    marginRight: 0,
+    marginTop: 0, // Remove negative margin for better alignment
   },
   titleWishlistIcon: {
     width: 28,
@@ -1360,8 +1382,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 8, // Reduced to match cheers button
-    marginTop: -2, // Move up slightly to match cheers button
+    marginLeft: 0, // Remove left margin since it's in a column now
+    marginTop: 6, // Slightly reduced space to match button spacing
   },
   cheersCountIcon: {
     width: 16,
@@ -1374,6 +1396,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // New styles for meal info layout
+  mealInfoColumn: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  mealNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  // Button column for wishlist and cheers buttons
+  buttonColumn: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginLeft: 16, // Add some space from the content
+  },
+  // Title cheers button (moved from header)
+  titleCheersButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    marginTop: 8, // Space below wishlist button
+  },
+  titleCheersIcon: {
+    width: 28,
+    height: 28,
+    // No tintColor - preserves original icon colors
   },
 });
 
