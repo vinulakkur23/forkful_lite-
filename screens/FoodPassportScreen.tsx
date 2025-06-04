@@ -673,6 +673,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                         contentContainerStyle={styles.list}
                         ListHeaderComponent={() => (
                             <View style={styles.profileCard}>
+                                {/* Follow button in top right corner */}
+                                {userId && userId !== auth().currentUser?.uid && (
+                                    <TouchableOpacity 
+                                        style={styles.followButton}
+                                        onPress={() => Alert.alert("Coming Soon", "Following users will be available in a future update!")}
+                                    >
+                                        <Text style={styles.followButtonIcon}>+</Text>
+                                    </TouchableOpacity>
+                                )}
+                                
                                 <View style={styles.profileHeader}>
                                     <View style={styles.userAvatarContainer}>
                                         {userProfile?.photoURL ? (
@@ -702,14 +712,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                             )}
                                         </View>
                                     </View>
-                                    {userId && userId !== auth().currentUser?.uid && (
-                                        <TouchableOpacity 
-                                            style={styles.followButton}
-                                            onPress={() => Alert.alert("Coming Soon", "Following users will be available in a future update!")}
-                                        >
-                                            <Text style={styles.followButtonIcon}>+</Text>
-                                        </TouchableOpacity>
-                                    )}
                                 </View>
                             </View>
                         )}
@@ -1008,15 +1010,18 @@ const styles = StyleSheet.create({
         color: '#999',
     },
     followButton: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
         width: 36,
         height: 36,
         backgroundColor: 'transparent',
         borderWidth: 2,
         borderColor: '#1a2b49',
         borderRadius: 18,
-        marginLeft: 12,
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1,
     },
     followButtonText: {
         color: 'white',

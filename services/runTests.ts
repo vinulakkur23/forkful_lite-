@@ -1,5 +1,5 @@
 /**
- * Test runner for RatingScreen2 implementation tests
+ * Test runner for various services and tests
  * This script runs all our tests to validate the features
  */
 
@@ -7,6 +7,7 @@ import './testLocationPriority';
 import './testSessionReset';
 import './testPhotoLocationExtraction';
 import './testRestaurantSuggestions';
+import { checkManuLakkurStamps } from './testAchievements';
 
 console.log(`
 ===============================================
@@ -58,5 +59,16 @@ To complete testing, try the following in the app:
 6. Test with photos without location data
 
 `);
+
+// Function to run Manu stamps check
+export const runManuStampsCheck = async () => {
+  console.log("=== Manu Lakkur Stamps Check ===");
+  
+  try {
+    await checkManuLakkurStamps();
+  } catch (error) {
+    console.error("Manu stamps check failed:", error);
+  }
+};
 
 export {};

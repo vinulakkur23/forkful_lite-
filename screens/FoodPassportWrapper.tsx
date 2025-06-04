@@ -150,23 +150,25 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         const profile: any = {
           userId: userId,
           displayName: userName || 'User',
-          photoURL: null,
+          photoURL: userPhoto || null, // Use the passed userPhoto first
         };
         
-        // Try to get user info from their meals
-        const mealsSnapshot = await firestore()
-          .collection('mealEntries')
-          .where('userId', '==', userId)
-          .limit(1)
-          .get();
-        
-        if (!mealsSnapshot.empty) {
-          const firstMeal = mealsSnapshot.docs[0].data();
-          if (firstMeal.userPhoto) {
-            profile.photoURL = firstMeal.userPhoto;
-          }
-          if (firstMeal.userName && !userName) {
-            profile.displayName = firstMeal.userName;
+        // If no userPhoto was passed, try to get it from their meals
+        if (!userPhoto) {
+          const mealsSnapshot = await firestore()
+            .collection('mealEntries')
+            .where('userId', '==', userId)
+            .limit(1)
+            .get();
+          
+          if (!mealsSnapshot.empty) {
+            const firstMeal = mealsSnapshot.docs[0].data();
+            if (firstMeal.userPhoto) {
+              profile.photoURL = firstMeal.userPhoto;
+            }
+            if (firstMeal.userName && !userName) {
+              profile.displayName = firstMeal.userName;
+            }
           }
         }
         
@@ -349,9 +351,31 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           key="shared-passport-filter"
           onFilterChange={handleFilterChange}
           initialFilters={activeFilters}
-          onUserSelect={(searchUserId, searchUserName) => {
-            console.log('FoodPassport: Navigating to user profile:', searchUserName, searchUserId);
-            navigation.push('FoodPassport', { userId: searchUserId });
+          onUserSelect={(searchUserId, searchUserName, searchUserPhoto) => {
+            console.log('FoodPassport: Switching to user profile:', searchUserName, searchUserId, 'Photo:', searchUserPhoto);
+            
+            // Check if we're already viewing this user
+            if (searchUserId === userId) {
+              console.log('Already viewing this user profile');
+              return;
+            }
+            
+            // If we're on own profile or different user, navigate to the searched user
+            if (!userId || userId === auth().currentUser?.uid) {
+              // From own profile, navigate to other user
+              navigation.navigate('FoodPassport', { 
+                userId: searchUserId, 
+                userName: searchUserName,
+                userPhoto: searchUserPhoto
+              });
+            } else {
+              // From other user profile, replace with new user
+              navigation.setParams({ 
+                userId: searchUserId, 
+                userName: searchUserName,
+                userPhoto: searchUserPhoto
+              });
+            }
           }}
         />
       </View>

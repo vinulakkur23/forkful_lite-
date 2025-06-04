@@ -667,15 +667,16 @@ export const getUserAchievements = async (targetUserId?: string): Promise<UserAc
     const userId = targetUserId || auth().currentUser?.uid;
     if (!userId) throw new Error('User not authenticated');
     
-    const snapshot = await firestore()
+    const achievements: UserAchievement[] = [];
+    
+    // Check new format: users/{userId}/achievements subcollection
+    const newFormatSnapshot = await firestore()
       .collection('users')
       .doc(userId)
       .collection('achievements')
       .get();
     
-    const achievements: UserAchievement[] = [];
-    
-    snapshot.forEach(doc => {
+    newFormatSnapshot.forEach(doc => {
       const data = doc.data();
       achievements.push({
         id: doc.id,
@@ -685,6 +686,29 @@ export const getUserAchievements = async (targetUserId?: string): Promise<UserAc
         mealEntryId: data.mealEntryId
       });
     });
+    
+    // Also check old format: userAchievements flat collection (for backward compatibility)
+    const oldFormatSnapshot = await firestore()
+      .collection('userAchievements')
+      .where('userId', '==', userId)
+      .get();
+    
+    oldFormatSnapshot.forEach(doc => {
+      const data = doc.data();
+      // Only add if we don't already have this achievement from the new format
+      const existingAchievement = achievements.find(a => a.achievementId === data.achievementId);
+      if (!existingAchievement) {
+        achievements.push({
+          id: doc.id,
+          userId: data.userId,
+          achievementId: data.achievementId,
+          earnedAt: data.earnedAt,
+          mealEntryId: data.mealEntryId
+        });
+      }
+    });
+    
+    console.log(`📊 Found ${achievements.length} achievements for user ${userId}: ${newFormatSnapshot.size} from new format, ${oldFormatSnapshot.size} from old format`);
     
     return achievements;
   } catch (error) {

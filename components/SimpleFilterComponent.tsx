@@ -17,12 +17,13 @@ export interface FilterItem {
   type: string;
   value: string;
   userId?: string; // For user search results
+  userPhoto?: string; // For user search results
 }
 
 interface SimpleFilterComponentProps {
   onFilterChange: (filters: FilterItem[] | null) => void;
   initialFilters?: FilterItem[] | null;
-  onUserSelect?: (userId: string, userName: string) => void; // For user navigation
+  onUserSelect?: (userId: string, userName: string, userPhoto?: string) => void; // For user navigation
 }
 
 const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
@@ -223,7 +224,8 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
             userResults.push({
               type: 'user',
               value: matchingName,
-              userId: doc.id
+              userId: doc.id,
+              userPhoto: userData.photoURL || null // Get photo from user data
             });
           }
         });
@@ -236,7 +238,8 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
             userResults.push({
               type: 'user',
               value: userData.displayName,
-              userId: doc.id
+              userId: doc.id,
+              userPhoto: userData.photoURL || null // Get photo from user data
             });
           }
         });
@@ -273,8 +276,8 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
   const handleSelectOption = (option: FilterItem) => {
     // Handle user selection differently
     if (option.type === 'user' && option.userId && onUserSelect) {
-      console.log('User selected:', option.value, option.userId);
-      onUserSelect(option.userId, option.value);
+      console.log('User selected:', option.value, option.userId, 'Photo:', option.userPhoto);
+      onUserSelect(option.userId, option.value, option.userPhoto || undefined);
       setSearchText('');
       setShowDropdown(false);
       return;
