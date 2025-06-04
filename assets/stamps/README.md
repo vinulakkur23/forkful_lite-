@@ -28,6 +28,14 @@ The following achievements are defined in the app, and their image files should 
 | `big_apple_bite`   | `big_apple_bite.png`  | Earned after posting in NYC       |
 | `catch_of_the_day` | `catch_of_the_day.png`| Earned after posting seafood meal |
 | `plant_curious`    | `plant_curious.png`   | Earned after posting vegetarian meal |
+| `plantlandia`      | `plantlandia.png`     | Earned after posting vegan meal in Portland |
+| `brew_and_chew`    | `brew_and_chew.png`   | Earned after posting beer in Portland |
+| `taco_tuesday`     | `taco_tuesday.png`    | Earned after posting tacos on Tuesday |
+| `dreaming_of_sushi`| `dreaming_of_sushi.png`| Earned after posting 5 sushi meals |
+| `takeout_tour`     | `takeout_tour.png`    | Earned after posting 5 takeout/to-go meals |
+| `urban_explorer`   | `urban_explorer.png`  | Earned after dining in 10 different cities |
+| `flavor_nomad`     | `flavor_nomad.png`    | Earned after trying 5 different cuisines |
+| `world_on_a_plate` | `world_on_a_plate.png`| Earned after trying 10 different cuisines |
 
 ## Important Notes
 
