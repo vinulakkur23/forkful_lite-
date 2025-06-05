@@ -507,29 +507,50 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         // Prepare any cached suggestion data
         const cachedSuggestions = (global as any).prefetchedSuggestions;
         
-        // Navigate to RatingScreen1 with the cropped image and any prefetched suggestions
-        console.log('Navigating to RatingScreen1 with cropped image:', result.path);
-        console.log('Passing prefetched suggestions:', 
-          cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
+        // Check if photo is from camera (fresh photo) or gallery (already taken)
+        const isFromCamera = !route.params.photo?.fromGallery;
         
         // Use the saved location in prefetchedLocation if available (has the right source)
         const locationToUse = (global as any).prefetchedLocation || location;
         
-        navigation.navigate('RatingScreen1', {
-          photo: {
-            uri: result.path,
-            width: result.width,
-            height: result.height,
-          },
-          location: locationToUse,
-          // Include EXIF data if available from route params
-          exifData: route.params.exifData,
-          // Include suggestionData if available
-          suggestionData: cachedSuggestions || undefined,
-          // Pass through photo source
-          photoSource: route.params.photoSource,
-          _uniqueKey: `rating_screen1_${timestamp}`,
-        });
+        if (isFromCamera) {
+          // Camera photos: Skip RatingScreen1, go directly to RatingScreen2 (meal hasn't been eaten yet)
+          console.log('Camera photo detected - navigating directly to RatingScreen2 (meal not eaten yet)');
+          navigation.navigate('RatingScreen2', {
+            photo: {
+              uri: result.path,
+              width: result.width,
+              height: result.height,
+            },
+            location: locationToUse,
+            rating: 0, // No rating yet
+            likedComment: '',
+            dislikedComment: '',
+            suggestionData: cachedSuggestions || undefined,
+            _uniqueKey: `rating_screen2_${timestamp}`,
+          });
+        } else {
+          // Gallery photos: Go to RatingScreen1 (meal already eaten, rate the experience)
+          console.log('Gallery photo detected - navigating to RatingScreen1 with cropped image:', result.path);
+          console.log('Passing prefetched suggestions:', 
+            cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
+          
+          navigation.navigate('RatingScreen1', {
+            photo: {
+              uri: result.path,
+              width: result.width,
+              height: result.height,
+            },
+            location: locationToUse,
+            // Include EXIF data if available from route params
+            exifData: route.params.exifData,
+            // Include suggestionData if available
+            suggestionData: cachedSuggestions || undefined,
+            // Pass through photo source
+            photoSource: route.params.photoSource,
+            _uniqueKey: `rating_screen1_${timestamp}`,
+          });
+        }
         
         console.log('Passing location data to RatingScreen1:', 
           locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');

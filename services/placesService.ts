@@ -105,11 +105,14 @@ export const searchRestaurantsByText = async (
   location?: LocationData
 ): Promise<Restaurant[]> => {
   try {
+    console.log(`🚀 searchRestaurantsByText called with query: "${query}", location: ${location ? 'YES' : 'NO'}`);
+    
     if (!query || query.length < 2) {
+      console.log(`❌ Query too short: "${query}" (length: ${query?.length || 0})`);
       return [];
     }
     
-    console.log(`Searching for restaurants with query: "${query}"`);
+    console.log(`✅ Searching for restaurants with query: "${query}"`);
     
     // Base URL for Places autocomplete
     // Add cache-busting parameter to prevent caching issues
@@ -119,30 +122,37 @@ export const searchRestaurantsByText = async (
     // Add location bias if available
     if (location) {
       url += `&location=${location.latitude},${location.longitude}&radius=50000`;
+      console.log(`📍 Added location bias: ${location.latitude}, ${location.longitude}`);
     }
     
-    console.log(`Making autocomplete request to Google Places API: ${url.replace(GOOGLE_MAPS_API_KEY, 'API_KEY_HIDDEN')}`);
+    console.log(`🌐 Making autocomplete request to Google Places API: ${url.replace(GOOGLE_MAPS_API_KEY, 'API_KEY_HIDDEN')}`);
     
     // Make the API request
     const response = await fetch(url);
     
+    console.log(`📡 API Response status: ${response.status} ${response.statusText}`);
+    
     if (!response.ok) {
+      console.error(`❌ Places API error: ${response.status} ${response.statusText}`);
       throw new Error(`Places API error: ${response.status}`);
     }
     
     const data = await response.json();
+    console.log(`📦 API Response data:`, JSON.stringify(data, null, 2));
     
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      console.error(`❌ Places API returned status: ${data.status}`);
       throw new Error(`Places API returned status: ${data.status}`);
     }
     
-    // For autocomplete, we need to get details for each place to match our Restaurant interface
+    // For autocomplete, use prediction data directly to avoid multiple API calls
+    // We'll fetch detailed place info only when user actually selects a restaurant
     const restaurants: Restaurant[] = [];
     
-    // Process only the first 5 predictions to avoid too many API calls
+    // Process only the first 5 predictions
     const predictions = (data.predictions || []).slice(0, 5);
     
-    // For each prediction, fetch the details
+    // Convert predictions to Restaurant objects using available data
     for (const prediction of predictions) {
       // Only process restaurant predictions
       if (prediction.types && 
@@ -150,36 +160,74 @@ export const searchRestaurantsByText = async (
            prediction.types.includes('food') ||
            prediction.types.includes('cafe'))) {
         
-        try {
-          const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${prediction.place_id}&fields=place_id,name,vicinity,formatted_address,rating,user_ratings_total,geometry&key=${GOOGLE_MAPS_API_KEY}`;
-          
-          const detailsResponse = await fetch(detailsUrl);
-          const detailsData = await detailsResponse.json();
-          
-          if (detailsData.status === 'OK' && detailsData.result) {
-            const place = detailsData.result;
-            
-            restaurants.push({
-              id: place.place_id,
-              name: place.name,
-              vicinity: place.vicinity || place.formatted_address,
-              formatted_address: place.formatted_address,
-              rating: place.rating,
-              user_ratings_total: place.user_ratings_total,
-              geometry: place.geometry
-            });
-          }
-        } catch (detailsError) {
-          console.error(`Error fetching details for place ${prediction.place_id}:`, detailsError);
-        }
+        // Use the prediction data directly - much faster than individual API calls
+        restaurants.push({
+          id: prediction.place_id,
+          name: prediction.structured_formatting?.main_text || prediction.description.split(',')[0],
+          vicinity: prediction.structured_formatting?.secondary_text || prediction.description,
+          formatted_address: prediction.description,
+          // We'll fetch detailed info (rating, geometry) only when user selects this restaurant
+        });
       }
     }
     
-    console.log(`Found ${restaurants.length} restaurants matching "${query}"`);
+    console.log(`🎉 Found ${restaurants.length} restaurants matching "${query}"`);
+    if (restaurants.length > 0) {
+      console.log(`📋 First restaurant: ${restaurants[0].name} - ${restaurants[0].vicinity}`);
+    }
     return restaurants;
   } catch (error) {
-    console.error('Error searching for restaurants by text:', error);
+    console.error('❌ Error searching for restaurants by text:', error);
     return [];
+  }
+};
+
+/**
+ * Fetches detailed information for a specific place by place_id
+ * This is used when user selects a restaurant to get full details including geometry
+ * 
+ * @param placeId - The Google Places place_id
+ * @returns Promise with detailed restaurant information
+ */
+export const getPlaceDetails = async (placeId: string): Promise<Restaurant | null> => {
+  try {
+    console.log(`Fetching place details for: ${placeId}`);
+    
+    const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=place_id,name,vicinity,formatted_address,rating,user_ratings_total,geometry&key=${GOOGLE_MAPS_API_KEY}`;
+    
+    const response = await fetch(detailsUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Place Details API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+      throw new Error(`Place Details API returned status: ${data.status}`);
+    }
+    
+    if (!data.result) {
+      return null;
+    }
+    
+    const place = data.result;
+    
+    const restaurant: Restaurant = {
+      id: place.place_id,
+      name: place.name,
+      vicinity: place.vicinity || place.formatted_address,
+      formatted_address: place.formatted_address,
+      rating: place.rating,
+      user_ratings_total: place.user_ratings_total,
+      geometry: place.geometry
+    };
+    
+    console.log(`Got place details for: ${restaurant.name}`);
+    return restaurant;
+  } catch (error) {
+    console.error('Error fetching place details:', error);
+    return null;
   }
 };
 

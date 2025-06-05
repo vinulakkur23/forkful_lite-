@@ -37,6 +37,11 @@ declare module '../App' {
         priority?: number;
       } | null;
       suggestionData?: any;
+      meal?: string;
+      restaurant?: string;
+      mealType?: string;
+      isEditingExisting?: boolean;
+      existingMealId?: string;
       _uniqueKey: string;
     };
   }
@@ -230,9 +235,26 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
           console.warn('Error checking/deleting existing file:', e);
         }
         
-        // Copy the current image file to new location
-        await RNFS.copyFile(photo.uri, newFilePath);
-        console.log('File copied successfully for RatingScreen2');
+        // Check if the source URI is a Firebase Storage URL (or any HTTP URL)
+        if (photo.uri.startsWith('http://') || photo.uri.startsWith('https://')) {
+          console.log('Source is a remote URL, downloading file...');
+          
+          // Download the file from Firebase Storage
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: photo.uri,
+            toFile: newFilePath,
+          }).promise;
+          
+          if (downloadResult.statusCode === 200) {
+            console.log('File downloaded successfully for RatingScreen2');
+          } else {
+            throw new Error(`Download failed with status code: ${downloadResult.statusCode}`);
+          }
+        } else {
+          // Copy the local file to new location
+          await RNFS.copyFile(photo.uri, newFilePath);
+          console.log('File copied successfully for RatingScreen2');
+        }
       }
 
       // Create a fresh photo object to avoid any reference issues
@@ -259,6 +281,12 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         likedComment: likedComment.trim(),
         dislikedComment: dislikedComment.trim(),
         suggestionData: route.params.suggestionData, // Pass along any suggestion data
+        // Pass along editing parameters if we're editing an existing meal
+        meal: route.params.meal,
+        restaurant: route.params.restaurant,
+        mealType: route.params.mealType,
+        isEditingExisting: route.params.isEditingExisting,
+        existingMealId: route.params.existingMealId,
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
       
@@ -336,9 +364,26 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
           console.warn('Error checking/deleting existing file:', e);
         }
         
-        // Copy the current image file to new location
-        await RNFS.copyFile(photo.uri, newFilePath);
-        console.log('File copied successfully for RatingScreen2');
+        // Check if the source URI is a Firebase Storage URL (or any HTTP URL)
+        if (photo.uri.startsWith('http://') || photo.uri.startsWith('https://')) {
+          console.log('Source is a remote URL, downloading file...');
+          
+          // Download the file from Firebase Storage
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: photo.uri,
+            toFile: newFilePath,
+          }).promise;
+          
+          if (downloadResult.statusCode === 200) {
+            console.log('File downloaded successfully for RatingScreen2');
+          } else {
+            throw new Error(`Download failed with status code: ${downloadResult.statusCode}`);
+          }
+        } else {
+          // Copy the local file to new location
+          await RNFS.copyFile(photo.uri, newFilePath);
+          console.log('File copied successfully for RatingScreen2');
+        }
       }
 
       // Create a fresh photo object to avoid any reference issues

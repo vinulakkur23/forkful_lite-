@@ -10,7 +10,6 @@ export interface MealEnhancement {
 // Generate a haiku about the meal from food image and dish name
 export const generateMealHaiku = async (dishName: string, imageUri?: string): Promise<string> => {
   try {
-    console.log('🎋 Generating haiku for dish:', dishName);
     
     const formData = new FormData();
     formData.append('dish_name', dishName);
@@ -39,10 +38,9 @@ export const generateMealHaiku = async (dishName: string, imageUri?: string): Pr
     const data = await response.json();
     const haiku = data.content || 'Food on the table\nMoments shared with those we love\nMemories made here';
     
-    console.log('✅ Generated haiku:', haiku);
     return haiku;
   } catch (error) {
-    console.error('❌ Error generating haiku:', error);
+    console.error('Error generating haiku:', error);
     return `Food on the table\nMoments shared with those we love\nMemories made here`;
   }
 };
@@ -50,7 +48,6 @@ export const generateMealHaiku = async (dishName: string, imageUri?: string): Pr
 // Generate restaurant history and popular dishes
 export const generateRestaurantHistory = async (restaurantName: string): Promise<string> => {
   try {
-    console.log('🏪 Generating restaurant history for:', restaurantName);
     
     const formData = new FormData();
     formData.append('restaurant_name', restaurantName);
@@ -70,10 +67,9 @@ export const generateRestaurantHistory = async (restaurantName: string): Promise
     const data = await response.json();
     const history = data.content || 'This establishment has been serving the community with delicious food and warm hospitality. Known for their commitment to quality ingredients and authentic flavors. Popular dishes include their signature specialties, seasonal favorites, and classic comfort foods.';
     
-    console.log('✅ Generated restaurant history:', history);
     return history;
   } catch (error) {
-    console.error('❌ Error generating restaurant history:', error);
+    console.error('Error generating restaurant history:', error);
     return 'This establishment has been serving the community with delicious food and warm hospitality. Known for their commitment to quality ingredients and authentic flavors. Popular dishes include their signature specialties, seasonal favorites, and classic comfort foods.';
   }
 };
@@ -81,7 +77,6 @@ export const generateRestaurantHistory = async (restaurantName: string): Promise
 // Generate food history based on dish name
 export const generateFoodHistory = async (dishName: string): Promise<string> => {
   try {
-    console.log('🍽️ Generating food history for:', dishName);
     
     const formData = new FormData();
     formData.append('dish_name', dishName);
@@ -101,10 +96,9 @@ export const generateFoodHistory = async (dishName: string): Promise<string> => 
     const data = await response.json();
     const history = data.content || 'This dish has a rich culinary heritage that spans generations. It has been enjoyed by countless people across different cultures and regions. The preparation and enjoyment of this food represents a beautiful tradition of sharing meals and creating memories together.';
     
-    console.log('✅ Generated food history:', history);
     return history;
   } catch (error) {
-    console.error('❌ Error generating food history:', error);
+    console.error('Error generating food history:', error);
     return 'This dish has a rich culinary heritage that spans generations. It has been enjoyed by countless people across different cultures and regions. The preparation and enjoyment of this food represents a beautiful tradition of sharing meals and creating memories together.';
   }
 };
@@ -112,7 +106,6 @@ export const generateFoodHistory = async (dishName: string): Promise<string> => 
 // Generate a photo quality rating
 export const getPhotoRating = async (imageUri: string): Promise<MealEnhancement> => {
   try {
-    console.log('📸 Getting photo quality rating...');
     
     const formData = new FormData();
     
@@ -144,7 +137,7 @@ export const getPhotoRating = async (imageUri: string): Promise<MealEnhancement>
       rating: data.rating || 7
     };
   } catch (error) {
-    console.error('❌ Error getting photo rating:', error);
+    console.error('Error getting photo rating:', error);
     return {
       type: 'photo_rating',
       content: 'Your food photography scores 7/10!',
@@ -162,8 +155,6 @@ export const getRandomMealEnhancement = async (
   likedComments?: string,
   dislikedComments?: string
 ): Promise<MealEnhancement> => {
-  console.log('🎲 Getting random meal enhancement from backend...');
-  
   try {
     const formData = new FormData();
     formData.append('dish_name', dishName);
@@ -186,7 +177,9 @@ export const getRandomMealEnhancement = async (
       } as any);
     }
 
-    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RANDOM), {
+    const apiUrl = API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RANDOM);
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       body: formData,
       headers: {
@@ -195,17 +188,20 @@ export const getRandomMealEnhancement = async (
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     
-    return {
+    const enhancement = {
       type: data.type || 'haiku',
       content: data.content || 'Food on the table\nMoments shared with those we love\nMemories made here',
       title: data.title || '✨ Something Special',
       rating: data.rating // Include rating if present (for photo_rating type)
     };
+    
+    return enhancement;
   } catch (error) {
     console.error('Error generating meal enhancement:', error);
     // Return a fallback enhancement

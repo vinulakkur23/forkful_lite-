@@ -48,6 +48,7 @@ type Props = {
 
 interface MealEntry {
   id: string;
+  userId: string; // Add userId field
   photoUrl: string;
   rating: number;
   restaurant: string;
@@ -193,6 +194,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 
                 fetchedMeals.push({
                     id: doc.id,
+                    userId: data.userId, // Include the userId field
                     photoUrl: data.photoUrl,
                     rating: data.rating,
                     restaurant: data.restaurant || '',
@@ -620,38 +622,59 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     };
     
     // Function to render each meal item
-    const renderMealItem = ({ item }: { item: MealEntry }) => (
-        <TouchableOpacity 
-            style={styles.mealCard}
-            onPress={() => viewMealDetails(item)}
-        >
-            <View style={styles.imageContainer}>
-                {item.photoUrl && !imageErrors[item.id] ? (
-                    <Image 
-                        source={{ uri: item.photoUrl }} 
-                        style={styles.mealImage}
-                        onError={() => handleImageError(item.id)}
-                    />
-                ) : (
-                    <View style={styles.imagePlaceholder}>
-                        <Icon name="image" size={24} color="#ddd" />
-                    </View>
-                )}
-                
-                {/* Emoji rating overlay */}
-                <View style={styles.ratingOverlay}>
-                    <EmojiDisplay rating={item.rating} size={22} />
+    const renderMealItem = ({ item }: { item: MealEntry }) => {
+        const isUnrated = item.rating === 0;
+        
+        return (
+            <TouchableOpacity 
+                style={styles.mealCard}
+                onPress={() => {
+                    if (isUnrated) {
+                        // Navigate to EditMealScreen for unrated meals (just add rating and comments)
+                        navigation.navigate('EditMeal', {
+                            mealId: item.id,
+                            meal: item
+                        });
+                    } else {
+                        // Navigate to meal detail for rated meals
+                        viewMealDetails(item);
+                    }
+                }}
+            >
+                <View style={styles.imageContainer}>
+                    {item.photoUrl && !imageErrors[item.id] ? (
+                        <Image 
+                            source={{ uri: item.photoUrl }} 
+                            style={styles.mealImage}
+                            onError={() => handleImageError(item.id)}
+                        />
+                    ) : (
+                        <View style={styles.imagePlaceholder}>
+                            <Icon name="image" size={24} color="#ddd" />
+                        </View>
+                    )}
+                    
+                    {/* Show either rating or "Rate Meal" overlay */}
+                    {isUnrated ? (
+                        <View style={styles.rateMealOverlay}>
+                            <Text style={styles.rateMealText}>Rate Meal</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.ratingOverlay}>
+                            <EmojiDisplay rating={item.rating} size={22} />
+                        </View>
+                    )}
                 </View>
-            </View>
-            
-            <View style={styles.mealCardContent}>
-                <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Untitled meal'}</Text>
-                {item.restaurant && (
-                    <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
-                )}
-            </View>
-        </TouchableOpacity>
-    );
+                
+                <View style={styles.mealCardContent}>
+                    <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Untitled meal'}</Text>
+                    {item.restaurant && (
+                        <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
     
     // Render the main screen
     return (
@@ -935,6 +958,21 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         padding: 3,
         paddingHorizontal: 4,
+    },
+    rateMealOverlay: {
+        position: 'absolute',
+        bottom: 8,
+        left: 8,
+        backgroundColor: 'rgba(255, 107, 107, 0.9)', // Red color with 90% opacity
+        borderRadius: 15,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+    },
+    rateMealText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: 'bold',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
     mealCardContent: {
         padding: 10,

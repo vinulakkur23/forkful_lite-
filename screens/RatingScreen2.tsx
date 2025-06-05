@@ -35,7 +35,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 // Import our direct Places API service instead of going through the backend
-import { searchNearbyRestaurants, searchRestaurantsByText, Restaurant } from '../services/placesService';
+import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
 import Geolocation from '@react-native-community/geolocation';
 
@@ -60,6 +60,11 @@ declare module '../App' {
       likedComment?: string;
       dislikedComment?: string;
       suggestionData?: any;
+      meal?: string;
+      restaurant?: string;
+      mealType?: string;
+      isEditingExisting?: boolean;
+      existingMealId?: string;
       _uniqueKey: string;
     };
   }
@@ -96,12 +101,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // Track the last photo URI that we fetched restaurants for
   const trackedPhotoUri = useRef<string>('');
   
-  // Restaurant and meal state
+  // Restaurant and meal state - initialize with existing data if editing
   const [location, setLocation] = useState<LocationData | null>(null);
-  const [restaurant, setRestaurant] = useState("");
-  const [mealName, setMealName] = useState("");
-  // Add meal type selector state - default to "Restaurant"
-  const [mealType, setMealType] = useState<"Restaurant" | "Homemade">("Restaurant");
+  const [restaurant, setRestaurant] = useState(route.params.restaurant || "");
+  const [mealName, setMealName] = useState(route.params.meal || "");
+  // Add meal type selector state - use existing or default to "Restaurant"
+  const [mealType, setMealType] = useState<"Restaurant" | "Homemade">(route.params.mealType as "Restaurant" | "Homemade" || "Restaurant");
   const [suggestedRestaurants, setSuggestedRestaurants] = useState<Restaurant[]>([]);
   const [autocompleteRestaurants, setAutocompleteRestaurants] = useState<Restaurant[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -491,7 +496,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   };
   
   // Function to handle restaurant selection from autocomplete or modal
-  const handleRestaurantSelection = (restaurant: Restaurant) => {
+  const handleRestaurantSelection = async (restaurant: Restaurant) => {
     logWithSession(`Restaurant selected: ${restaurant.name}`);
     
     // IMPORTANT: Clear any pending search timers to prevent race conditions
@@ -507,14 +512,33 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setShowAutocomplete(false);
     setAutocompleteRestaurants([]);
     
+    // Check if we need to fetch detailed place information
+    let fullRestaurantData = restaurant;
+    
+    // If restaurant doesn't have geometry data (from autocomplete), fetch place details
+    if (!restaurant.geometry || !restaurant.geometry.location) {
+      logWithSession(`Fetching place details for selected restaurant: ${restaurant.name}`);
+      try {
+        const detailedRestaurant = await getPlaceDetails(restaurant.id);
+        if (detailedRestaurant) {
+          fullRestaurantData = detailedRestaurant;
+          logWithSession(`Successfully fetched place details with geometry data`);
+        } else {
+          logWithSession(`Failed to fetch place details, using basic restaurant data`);
+        }
+      } catch (error) {
+        logWithSession(`Error fetching place details: ${error}`);
+      }
+    }
+    
     // Update location if restaurant has location data
-    if (restaurant.geometry && restaurant.geometry.location) {
-      const city = extractCityFromRestaurant(restaurant);
+    if (fullRestaurantData.geometry && fullRestaurantData.geometry.location) {
+      const city = extractCityFromRestaurant(fullRestaurantData);
       
       // Create location object with restaurant data
       const restaurantLocation: LocationData = {
-        latitude: restaurant.geometry.location.lat,
-        longitude: restaurant.geometry.location.lng,
+        latitude: fullRestaurantData.geometry.location.lat,
+        longitude: fullRestaurantData.geometry.location.lng,
         source: 'restaurant_selection',
         priority: 1, // Highest priority
         city: city
@@ -522,6 +546,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       logWithSession(`Updated location from restaurant selection: ${JSON.stringify(restaurantLocation)}`);
       setLocation(restaurantLocation);
+    } else {
+      logWithSession(`No location data available for selected restaurant`);
     }
     
     // Always fetch menu items and meal suggestions for the selected restaurant
@@ -699,6 +725,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   
   // Handle autocomplete search for restaurants using DIRECT Places API
   const handleRestaurantSearch = async (text: string) => {
+    console.log(`🔍 handleRestaurantSearch called with: "${text}" (length: ${text.length})`);
     setRestaurant(text);
     
     // Flag that user is actively editing
@@ -706,6 +733,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     // Only show autocomplete when there's enough text
     if (text.length >= 2) {
+      console.log(`✅ Text length >= 2, setting up autocomplete for: "${text}"`);
       setShowAutocomplete(true);
       
       // Debounce the API call
@@ -714,11 +742,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         const currentSession = photoSessionRef.current;
         const searchText = text; // Capture the text at the time of search
         
-        // Double-check that user is still editing and hasn't selected a restaurant
-        if (!isUserEditingRestaurant) {
-          logWithSession(`User no longer editing restaurant, canceling search for "${searchText}"`);
-          return;
-        }
+        logWithSession(`Starting autocomplete search for: "${searchText}"`);
         
         setIsSearchingRestaurants(true);
         try {
@@ -731,14 +755,22 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             // Use direct Places API for text search
             const results = await searchRestaurantsByText(searchText, searchLocation);
             
-            // Verify we're still in the same session AND user is still editing AND the text hasn't changed
-            if (currentSession === photoSessionRef.current && 
-                isUserEditingRestaurant && 
-                restaurant === searchText) {
-              logWithSession(`Got ${results.length} autocomplete results from Places API for "${searchText}"`);
+            logWithSession(`Raw search results: ${results.length} restaurants found`);
+            if (results.length > 0) {
+              logWithSession(`First result: ${results[0].name} - ${results[0].vicinity}`);
+            }
+            
+            // Verify we're still in the same session (remove restaurant check as it causes race conditions)
+            if (currentSession === photoSessionRef.current) {
+              logWithSession(`✅ Setting ${results.length} autocomplete results for "${searchText}"`);
               setAutocompleteRestaurants(results.slice(0, MAX_AUTOCOMPLETE_RESULTS));
+              
+              // Force show autocomplete if we have results
+              if (results.length > 0) {
+                setShowAutocomplete(true);
+              }
             } else {
-              logWithSession(`Discarding search results for "${searchText}" - conditions changed`);
+              logWithSession(`❌ Discarding search results for "${searchText}" - session changed`);
             }
           } else {
             logWithSession(`No location available for restaurant search`);
@@ -922,7 +954,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                             setShowAutocomplete(false);
                           }}
                         >
-                          <MaterialIcon name="restaurant" size={16} color="#666" style={styles.autocompleteIcon} />
                           <View style={styles.autocompleteTextContainer}>
                             <Text style={styles.autocompleteItemName}>{item.name}</Text>
                             <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>

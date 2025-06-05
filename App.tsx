@@ -96,6 +96,9 @@ export type RootStackParamList = {
     rating: number;
     restaurant?: string;
     meal?: string;
+    mealType?: string;
+    likedComment?: string;
+    dislikedComment?: string;
     _uniqueKey?: string; // Ensure Result screen reloads
   };
   FoodPassport: {
