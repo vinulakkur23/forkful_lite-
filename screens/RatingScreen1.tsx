@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -101,6 +101,10 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   const [likedComment, setLikedComment] = useState<string>('');
   const [dislikedComment, setDislikedComment] = useState<string>('');
 
+  // References for text inputs
+  const likedCommentRef = useRef<TextInput>(null);
+  const dislikedCommentRef = useRef<TextInput>(null);
+
   // Add validation on component mount
   useEffect(() => {
     if (!photo || !photo.uri) {
@@ -146,6 +150,11 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     useCallback(() => {
       console.log("RatingScreen1 gained focus - refreshing UI elements");
       
+      // Reset form data for a fresh start
+      setRating(0);
+      setLikedComment('');
+      setDislikedComment('');
+      
       // Force re-render of stars and other UI components by updating screenKey
       setScreenKey(Date.now());
       
@@ -165,14 +174,19 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     setRating(selectedRating);
   };
 
-  // Handle return key press in text inputs
-  const handleSubmitEditing = (): void => {
+  // Handle return key press in liked comments text input
+  const handleLikedCommentsSubmit = (): void => {
+    // Move focus to the disliked comments text input
+    if (dislikedCommentRef.current) {
+      dislikedCommentRef.current.focus();
+    }
+  };
+
+  // Handle return key press in disliked comments text input
+  const handleDislikedCommentsSubmit = (): void => {
     // Dismiss keyboard/focus
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      const currentlyFocusedInput = TextInput.State?.currentlyFocusedInput?.();
-      if (currentlyFocusedInput) {
-        currentlyFocusedInput.blur();
-      }
+    if (dislikedCommentRef.current) {
+      dislikedCommentRef.current.blur();
     }
   };
 
@@ -398,7 +412,6 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
               rating={rating}
               onRatingChange={handleEmojiRating}
               size={45}
-              key={`emoji-rating-${screenKey}`}
             />
             
             {/* Rating Description */}
@@ -418,14 +431,15 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.commentTitle}>What did you like about this dish?</Text>
               <Text style={styles.commentSubtitle}>(This will help us give you better meal recommendations)</Text>
               <TextInput
+                ref={likedCommentRef}
                 style={styles.commentInput}
                 placeholder="Tell us what you liked about this meal..."
                 placeholderTextColor="#999"
                 multiline={true}
-                blurOnSubmit={true}
-                returnKeyType="done"
+                blurOnSubmit={false}
+                returnKeyType="next"
                 autoCapitalize="sentences"
-                onSubmitEditing={handleSubmitEditing}
+                onSubmitEditing={handleLikedCommentsSubmit}
                 onChangeText={setLikedComment}
                 value={likedComment}
                 maxLength={300}
@@ -437,6 +451,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.commentSection}>
               <Text style={styles.commentTitle}>What could be better?</Text>
               <TextInput
+                ref={dislikedCommentRef}
                 style={styles.commentInput}
                 placeholder="Tell us what could be improved..."
                 placeholderTextColor="#999"
@@ -444,7 +459,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
                 blurOnSubmit={true}
                 returnKeyType="done"
                 autoCapitalize="sentences"
-                onSubmitEditing={handleSubmitEditing}
+                onSubmitEditing={handleDislikedCommentsSubmit}
                 onChangeText={setDislikedComment}
                 value={dislikedComment}
                 maxLength={300}

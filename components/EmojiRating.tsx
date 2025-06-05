@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, TouchableOpacity, Image, StyleSheet, ActivityIndicator } from 'react-native';
 
 // Define the emoji ratings in order (swapped active/inactive so blue is active, gold is inactive)
 export const EMOJI_RATINGS = [
@@ -26,10 +26,20 @@ const EmojiRating: React.FC<Props> = ({
   interactive = true,
   style 
 }) => {
+  const [loadingImages, setLoadingImages] = useState<{[key: number]: boolean}>({});
+
   const handleEmojiPress = (emojiId: number) => {
     if (interactive && onRatingChange) {
       onRatingChange(emojiId);
     }
+  };
+
+  const handleImageLoadStart = (emojiId: number) => {
+    setLoadingImages(prev => ({ ...prev, [emojiId]: true }));
+  };
+
+  const handleImageLoadEnd = (emojiId: number) => {
+    setLoadingImages(prev => ({ ...prev, [emojiId]: false }));
   };
 
   return (
@@ -42,11 +52,21 @@ const EmojiRating: React.FC<Props> = ({
           activeOpacity={interactive ? 0.7 : 1}
           disabled={!interactive}
         >
-          <Image
-            source={rating === emoji.id ? emoji.active : emoji.inactive}
-            style={[styles.emoji, { width: size, height: size }]}
-            resizeMode="contain"
-          />
+          <View style={[styles.imageContainer, { width: size, height: size }]}>
+            <Image
+              source={rating === emoji.id ? emoji.active : emoji.inactive}
+              style={[styles.emoji, { width: size, height: size }]}
+              resizeMode="contain"
+              onLoadStart={() => handleImageLoadStart(emoji.id)}
+              onLoadEnd={() => handleImageLoadEnd(emoji.id)}
+              onError={() => handleImageLoadEnd(emoji.id)}
+            />
+            {loadingImages[emoji.id] && (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="small" color="#ccc" />
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       ))}
     </View>
@@ -63,9 +83,24 @@ const styles = StyleSheet.create({
     padding: 5,
     marginHorizontal: 2,
   },
+  imageContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   emoji: {
     width: 40,
     height: 40,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
 });
 
