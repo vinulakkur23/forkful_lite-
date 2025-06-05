@@ -17,7 +17,12 @@ export const API_CONFIG = {
     SUGGEST_MEAL: '/suggest-meal',
     SUGGEST_MEAL_FOR_RESTAURANT: '/suggest-meal-for-restaurant',
     EXTRACT_METADATA: '/extract-meal-metadata',
-    EXTRACT_METADATA_FROM_URL: '/extract-meal-metadata-from-url'
+    EXTRACT_METADATA_FROM_URL: '/extract-meal-metadata-from-url',
+    // Meal enhancement endpoints
+    MEAL_ENHANCEMENT_HAIKU: '/meal-enhancement/haiku',
+    MEAL_ENHANCEMENT_RESTAURANT: '/meal-enhancement/restaurant-history',
+    MEAL_ENHANCEMENT_FOOD: '/meal-enhancement/food-history',
+    MEAL_ENHANCEMENT_RANDOM: '/meal-enhancement/random'
   },
   
   // Timeout for API requests in milliseconds

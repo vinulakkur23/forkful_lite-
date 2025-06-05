@@ -1,0 +1,185 @@
+import { API_CONFIG } from '../config/api';
+
+export interface MealEnhancement {
+  type: 'haiku' | 'restaurant_history' | 'food_history';
+  content: string;
+  title: string;
+}
+
+// Generate a haiku about the meal from food image and dish name
+export const generateMealHaiku = async (dishName: string, imageUri?: string): Promise<string> => {
+  try {
+    console.log('🎋 Generating haiku for dish:', dishName);
+    
+    const formData = new FormData();
+    formData.append('dish_name', dishName);
+    
+    // Add image if provided
+    if (imageUri) {
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'meal.jpg',
+      } as any);
+    }
+
+    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_HAIKU), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const haiku = data.content || 'Food on the table\nMoments shared with those we love\nMemories made here';
+    
+    console.log('✅ Generated haiku:', haiku);
+    return haiku;
+  } catch (error) {
+    console.error('❌ Error generating haiku:', error);
+    return `Food on the table\nMoments shared with those we love\nMemories made here`;
+  }
+};
+
+// Generate restaurant history and popular dishes
+export const generateRestaurantHistory = async (restaurantName: string): Promise<string> => {
+  try {
+    console.log('🏪 Generating restaurant history for:', restaurantName);
+    
+    const formData = new FormData();
+    formData.append('restaurant_name', restaurantName);
+
+    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RESTAURANT), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const history = data.content || 'This establishment has been serving the community with delicious food and warm hospitality. Known for their commitment to quality ingredients and authentic flavors. Popular dishes include their signature specialties, seasonal favorites, and classic comfort foods.';
+    
+    console.log('✅ Generated restaurant history:', history);
+    return history;
+  } catch (error) {
+    console.error('❌ Error generating restaurant history:', error);
+    return 'This establishment has been serving the community with delicious food and warm hospitality. Known for their commitment to quality ingredients and authentic flavors. Popular dishes include their signature specialties, seasonal favorites, and classic comfort foods.';
+  }
+};
+
+// Generate food history based on dish name
+export const generateFoodHistory = async (dishName: string): Promise<string> => {
+  try {
+    console.log('🍽️ Generating food history for:', dishName);
+    
+    const formData = new FormData();
+    formData.append('dish_name', dishName);
+
+    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_FOOD), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const history = data.content || 'This dish has a rich culinary heritage that spans generations. It has been enjoyed by countless people across different cultures and regions. The preparation and enjoyment of this food represents a beautiful tradition of sharing meals and creating memories together.';
+    
+    console.log('✅ Generated food history:', history);
+    return history;
+  } catch (error) {
+    console.error('❌ Error generating food history:', error);
+    return 'This dish has a rich culinary heritage that spans generations. It has been enjoyed by countless people across different cultures and regions. The preparation and enjoyment of this food represents a beautiful tradition of sharing meals and creating memories together.';
+  }
+};
+
+// Main function to get a random meal enhancement
+export const getRandomMealEnhancement = async (
+  dishName: string,
+  restaurantName: string,
+  imageUri?: string,
+  likedComments?: string,
+  dislikedComments?: string
+): Promise<MealEnhancement> => {
+  console.log('🎲 Getting random meal enhancement from backend...');
+  
+  try {
+    const formData = new FormData();
+    formData.append('dish_name', dishName);
+    formData.append('restaurant_name', restaurantName);
+    
+    // Add comments if provided
+    if (likedComments) {
+      formData.append('liked_comments', likedComments);
+    }
+    if (dislikedComments) {
+      formData.append('disliked_comments', dislikedComments);
+    }
+    
+    // Add image if provided
+    if (imageUri) {
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'meal.jpg',
+      } as any);
+    }
+
+    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RANDOM), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return {
+      type: data.type || 'haiku',
+      content: data.content || 'Food on the table\nMoments shared with those we love\nMemories made here',
+      title: data.title || '✨ Something Special'
+    };
+  } catch (error) {
+    console.error('Error generating meal enhancement:', error);
+    // Return a fallback enhancement
+    return {
+      type: 'haiku',
+      content: `Food on the table\nMoments shared with those we love\nMemories made here`,
+      title: 'A Haiku for Your Meal'
+    };
+  }
+};
+
+// Helper function to get the title for each enhancement type
+export const getEnhancementTitle = (type: MealEnhancement['type']): string => {
+  switch (type) {
+    case 'haiku':
+      return 'A Haiku for Your Meal';
+    case 'restaurant_history':
+      return 'About This Restaurant';
+    case 'food_history':
+      return 'The Story of This Dish';
+    default:
+      return 'Something Special';
+  }
+};

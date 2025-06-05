@@ -15,6 +15,8 @@ import { processImageMetadata } from '../services/aiMetadataService';
 // Import achievement service
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
+// Import meal enhancement service
+import { getRandomMealEnhancement, getEnhancementTitle, MealEnhancement } from '../services/mealEnhancementService';
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -47,6 +49,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [mealId, setMealId] = useState<string | null>(null);
+  // Meal enhancement states
+  const [enhancement, setEnhancement] = useState<MealEnhancement | null>(null);
+  const [enhancementLoading, setEnhancementLoading] = useState(false);
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}`;
@@ -84,6 +89,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaved(false);
     setPhotoUrl(null);
     
+    // Load meal enhancement randomly
+    loadMealEnhancement();
+    
     // If user is logged in, save data automatically
     const user = auth().currentUser;
     if (user) {
@@ -98,6 +106,40 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log("ResultScreen with key unmounting:", instanceKey);
     };
   }, [instanceKey]); // Using instanceKey ensures this runs for each unique navigation
+
+  // Load a random meal enhancement
+  const loadMealEnhancement = async () => {
+    try {
+      setEnhancementLoading(true);
+      setEnhancement(null);
+      
+      console.log('🎲 Loading random meal enhancement...');
+      // Include city with restaurant name for more accurate location-specific results
+      const restaurantWithCity = restaurant && location?.city 
+        ? `${restaurant}, ${location.city}`
+        : restaurant || 'Local Restaurant';
+      
+      const enhancement = await getRandomMealEnhancement(
+        meal || 'Unknown Dish',
+        restaurantWithCity,
+        photo?.uri,
+        likedComment || undefined,
+        dislikedComment || undefined
+      );
+      
+      setEnhancement(enhancement);
+      console.log('✅ Enhancement loaded:', enhancement.type);
+    } catch (error) {
+      console.error('❌ Error loading meal enhancement:', error);
+      // Set a fallback enhancement
+      setEnhancement({
+        type: 'haiku',
+        content: 'Food on the table\nMoments shared with those we love\nMemories made here'
+      });
+    } finally {
+      setEnhancementLoading(false);
+    }
+  };
 
   const uploadImageToFirebase = async (): Promise<string> => {
     // Get current user directly from auth module
@@ -871,68 +913,28 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         </View>
 
-        {/* Meal details */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.mealName}>{meal || 'Untitled Meal'}</Text>
-          
-          <View style={styles.ratingContainer}>
-            <EmojiDisplay rating={rating} size={28} />
-          </View>
 
-          {mealType === "Restaurant" && restaurant && (
-            <View style={styles.restaurantRow}>
-              <Image
-                source={require('../assets/icons/restaurant-icon.png')}
-                style={styles.restaurantIcon}
-              />
-              <Text style={styles.restaurantName}>{restaurant}</Text>
+        {/* Meal Enhancement Section */}
+        <View style={styles.enhancementCard}>
+          {enhancementLoading ? (
+            <View style={styles.enhancementLoading}>
+              <ActivityIndicator size="small" color="#ff6b6b" />
+              <Text style={styles.enhancementLoadingText}>Generating something special...</Text>
             </View>
-          )}
-
-          {mealType === "Homemade" && (
-            <View style={styles.restaurantRow}>
-              <MaterialIcon name="home" size={18} color="#1a2b49" style={styles.infoIcon} />
-              <Text style={styles.restaurantName}>Homemade</Text>
-            </View>
-          )}
-
-          <View style={styles.locationRow}>
-            {location && location?.city && (
-              <View style={styles.cityContainer}>
-                <MaterialIcon name="location-on" size={18} color="#1a2b49" style={styles.infoIcon} />
-                <Text style={styles.cityText}>
-                  {location.city || ''}
-                </Text>
+          ) : enhancement ? (
+            <View style={styles.enhancementContent}>
+              <Text style={styles.enhancementTitle}>
+                {(enhancement.title || getEnhancementTitle(enhancement.type)).replace(/[🎋🏪🍽️✨]/g, '').trim()}
+              </Text>
+              <View style={styles.enhancementTextContainer}>
+                {enhancement.type === 'haiku' ? (
+                  <Text style={styles.enhancementHaiku}>{enhancement.content}</Text>
+                ) : (
+                  <Text style={styles.enhancementText}>{enhancement.content}</Text>
+                )}
               </View>
-            )}
-            
-            <Text style={styles.dateText}>
-              {new Date().toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </Text>
-          </View>
-
-          {/* Liked and Didn't Like sections */}
-          {(likedComment || dislikedComment) && (
-            <View style={styles.feedbackSection}>
-              {likedComment && (
-                <View style={styles.feedbackCard}>
-                  <Text style={styles.feedbackTitle}>What was Good:</Text>
-                  <Text style={styles.feedbackText}>{likedComment.trim()}</Text>
-                </View>
-              )}
-              
-              {dislikedComment && (
-                <View style={styles.feedbackCard}>
-                  <Text style={styles.feedbackTitle}>What could be Better:</Text>
-                  <Text style={styles.feedbackText}>{dislikedComment.trim()}</Text>
-                </View>
-              )}
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Action buttons - now part of scrollable content */}
@@ -941,7 +943,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             style={styles.shareButton}
             onPress={handleShare}
           >
-            <Text style={styles.shareButtonText}>Share</Text>
+            <Text style={styles.shareButtonText}>Share Review</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1252,6 +1254,81 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontWeight: '600',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Enhancement section styles
+  enhancementCard: {
+    backgroundColor: '#FAF3E0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  enhancementLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  enhancementLoadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  enhancementContent: {
+    alignItems: 'center',
+  },
+  enhancementTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  enhancementTextContainer: {
+    backgroundColor: '#FFF8E7',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    width: '100%',
+    borderLeftWidth: 3,
+    borderLeftColor: '#ff6b6b',
+  },
+  enhancementHaiku: {
+    fontSize: 16,
+    color: '#1a2b49',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  enhancementText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    textAlign: 'left',
+    lineHeight: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  regenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ff6b6b',
+  },
+  regenerateButtonText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#ff6b6b',
+    fontWeight: '500',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
