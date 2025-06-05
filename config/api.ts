@@ -22,6 +22,7 @@ export const API_CONFIG = {
     MEAL_ENHANCEMENT_HAIKU: '/meal-enhancement/haiku',
     MEAL_ENHANCEMENT_RESTAURANT: '/meal-enhancement/restaurant-history',
     MEAL_ENHANCEMENT_FOOD: '/meal-enhancement/food-history',
+    MEAL_ENHANCEMENT_PHOTO_RATING: '/meal-enhancement/photo-rating',
     MEAL_ENHANCEMENT_RANDOM: '/meal-enhancement/random'
   },
   
@@ -36,8 +37,8 @@ export const API_CONFIG = {
       // You'll need to use your computer's local IP address instead
       return this.BASE_URL;
     } else {
-      // Production environment
-      return 'https://your-production-api.onrender.com';
+      // Production environment - use the same Render URL
+      return 'https://dishitout-imageinhancer.onrender.com';
     }
   },
   

@@ -494,11 +494,18 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const handleRestaurantSelection = (restaurant: Restaurant) => {
     logWithSession(`Restaurant selected: ${restaurant.name}`);
     
+    // IMPORTANT: Clear any pending search timers to prevent race conditions
+    clearTimeout((window as any).restaurantInputTimer);
+    
     // Update restaurant name
     setRestaurant(restaurant.name);
     
     // Turn off editing mode since this was an explicit selection
     setIsUserEditingRestaurant(false);
+    
+    // Hide autocomplete immediately after selection
+    setShowAutocomplete(false);
+    setAutocompleteRestaurants([]);
     
     // Update location if restaurant has location data
     if (restaurant.geometry && restaurant.geometry.location) {
@@ -705,6 +712,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       clearTimeout((window as any).restaurantInputTimer);
       (window as any).restaurantInputTimer = setTimeout(async () => {
         const currentSession = photoSessionRef.current;
+        const searchText = text; // Capture the text at the time of search
+        
+        // Double-check that user is still editing and hasn't selected a restaurant
+        if (!isUserEditingRestaurant) {
+          logWithSession(`User no longer editing restaurant, canceling search for "${searchText}"`);
+          return;
+        }
         
         setIsSearchingRestaurants(true);
         try {
@@ -712,15 +726,19 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           const searchLocation = getBestAvailableLocation();
           
           if (searchLocation) {
-            logWithSession(`Searching restaurants with query "${text}" using Places API with location: ${searchLocation.source}`);
+            logWithSession(`Searching restaurants with query "${searchText}" using Places API with location: ${searchLocation.source}`);
             
             // Use direct Places API for text search
-            const results = await searchRestaurantsByText(text, searchLocation);
+            const results = await searchRestaurantsByText(searchText, searchLocation);
             
-            // Verify we're still in the same photo session before updating state
-            if (currentSession === photoSessionRef.current) {
-              logWithSession(`Got ${results.length} autocomplete results from Places API for "${text}"`);
+            // Verify we're still in the same session AND user is still editing AND the text hasn't changed
+            if (currentSession === photoSessionRef.current && 
+                isUserEditingRestaurant && 
+                restaurant === searchText) {
+              logWithSession(`Got ${results.length} autocomplete results from Places API for "${searchText}"`);
               setAutocompleteRestaurants(results.slice(0, MAX_AUTOCOMPLETE_RESULTS));
+            } else {
+              logWithSession(`Discarding search results for "${searchText}" - conditions changed`);
             }
           } else {
             logWithSession(`No location available for restaurant search`);
@@ -1272,6 +1290,7 @@ const styles = StyleSheet.create({
     padding: 15,
     alignItems: 'center',
     backgroundColor: '#FAF9F6', // Light off-white background
+    overflow: 'visible', // Allow dropdowns to extend outside
   },
   imageContainer: {
     width: '100%',
@@ -1331,6 +1350,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    overflow: 'visible', // Allow dropdown to extend outside
+    zIndex: 10, // Ensure this section is above the image
   },
   infoRow: {
     flexDirection: 'row',
@@ -1428,6 +1449,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     marginRight: 8,
+    zIndex: 999, // Ensure container is also high in z-order
   },
   autocompleteDropdown: {
     position: 'absolute',
@@ -1438,8 +1460,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
-    zIndex: 1000,
-    elevation: 8,
+    zIndex: 9999, // Very high z-index to ensure it's above everything
+    elevation: 999, // Very high elevation for Android
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,

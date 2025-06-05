@@ -1,9 +1,10 @@
 import { API_CONFIG } from '../config/api';
 
 export interface MealEnhancement {
-  type: 'haiku' | 'restaurant_history' | 'food_history';
+  type: 'haiku' | 'restaurant_history' | 'food_history' | 'photo_rating';
   content: string;
   title: string;
+  rating?: number; // Optional numeric rating for photo_rating type
 }
 
 // Generate a haiku about the meal from food image and dish name
@@ -108,6 +109,51 @@ export const generateFoodHistory = async (dishName: string): Promise<string> => 
   }
 };
 
+// Generate a photo quality rating
+export const getPhotoRating = async (imageUri: string): Promise<MealEnhancement> => {
+  try {
+    console.log('📸 Getting photo quality rating...');
+    
+    const formData = new FormData();
+    
+    // Add image
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'meal.jpg',
+    } as any);
+
+    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_PHOTO_RATING), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return {
+      type: 'photo_rating',
+      content: data.content || 'Your food photography scores 7/10!',
+      title: data.title || 'Photo Quality Rating',
+      rating: data.rating || 7
+    };
+  } catch (error) {
+    console.error('❌ Error getting photo rating:', error);
+    return {
+      type: 'photo_rating',
+      content: 'Your food photography scores 7/10!',
+      title: 'Photo Quality Rating',
+      rating: 7
+    };
+  }
+};
+
 // Main function to get a random meal enhancement
 export const getRandomMealEnhancement = async (
   dishName: string,
@@ -157,7 +203,8 @@ export const getRandomMealEnhancement = async (
     return {
       type: data.type || 'haiku',
       content: data.content || 'Food on the table\nMoments shared with those we love\nMemories made here',
-      title: data.title || '✨ Something Special'
+      title: data.title || '✨ Something Special',
+      rating: data.rating // Include rating if present (for photo_rating type)
     };
   } catch (error) {
     console.error('Error generating meal enhancement:', error);
@@ -179,6 +226,8 @@ export const getEnhancementTitle = (type: MealEnhancement['type']): string => {
       return 'About This Restaurant';
     case 'food_history':
       return 'The Story of This Dish';
+    case 'photo_rating':
+      return 'Photo Quality Rating';
     default:
       return 'Something Special';
   }

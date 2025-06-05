@@ -89,7 +89,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaved(false);
     setPhotoUrl(null);
     
-    // Load meal enhancement randomly
+    // Load meal enhancement randomly (now includes photo rating)
     loadMealEnhancement();
     
     // If user is logged in, save data automatically
@@ -924,11 +924,30 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           ) : enhancement ? (
             <View style={styles.enhancementContent}>
               <Text style={styles.enhancementTitle}>
-                {(enhancement.title || getEnhancementTitle(enhancement.type)).replace(/[🎋🏪🍽️✨]/g, '').trim()}
+                {(enhancement.title || getEnhancementTitle(enhancement.type)).replace(/[🎋🏪🍽️✨📸]/g, '').trim()}
               </Text>
               <View style={styles.enhancementTextContainer}>
                 {enhancement.type === 'haiku' ? (
                   <Text style={styles.enhancementHaiku}>{enhancement.content}</Text>
+                ) : enhancement.type === 'photo_rating' ? (
+                  <View style={styles.photoRatingContainer}>
+                    <Text style={styles.enhancementText}>{enhancement.content}</Text>
+                    {enhancement.rating && (
+                      <View style={styles.ratingStarsContainer}>
+                        {[...Array(10)].map((_, index) => (
+                          <Text 
+                            key={index} 
+                            style={[
+                              styles.ratingStar,
+                              index < enhancement.rating! ? styles.ratingStarFilled : styles.ratingStarEmpty
+                            ]}
+                          >
+                            ★
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 ) : (
                   <Text style={styles.enhancementText}>{enhancement.content}</Text>
                 )}
@@ -1330,6 +1349,26 @@ const styles = StyleSheet.create({
     color: '#ff6b6b',
     fontWeight: '500',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Photo rating specific styles
+  photoRatingContainer: {
+    alignItems: 'center',
+  },
+  ratingStarsContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratingStar: {
+    fontSize: 18,
+    marginHorizontal: 1,
+  },
+  ratingStarFilled: {
+    color: '#ffc008',
+  },
+  ratingStarEmpty: {
+    color: '#ddd',
   },
 });
 
