@@ -232,7 +232,7 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
             <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
           </TouchableOpacity>
           
-          {/* Achievement detail modal */}
+          {/* Achievement detail modal - zoomed stamp */}
           {selectedAchievement && (
             <View style={styles.detailOverlay}>
               <View style={styles.detailCard}>
@@ -243,43 +243,42 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
                   <Text style={styles.closeButtonX}>×</Text>
                 </TouchableOpacity>
                 
-                <View style={[
-                  styles.detailIconContainer,
-                  selectedAchievement.earned ? styles.earnedDetail : styles.unearnedDetail
-                ]}>
+                {/* Zoomed stamp image - same proportions as original stamp */}
+                <View style={styles.zoomedStampContainer}>
                   {selectedAchievement.earned ? (
                     <Image 
                       source={getStampImage(selectedAchievement.id)}
-                      style={styles.detailStampImage}
+                      style={styles.zoomedStampImage}
                       resizeMode="contain"
                     />
                   ) : (
-                    <Icon name="lock" size={60} color="#ccc" />
+                    <Icon name="lock" size={120} color="#ccc" />
                   )}
                 </View>
                 
-                <Text style={styles.detailName}>
-                  {selectedAchievement.name}
-                </Text>
-                
-                <Text style={styles.detailDescription}>
-                  {selectedAchievement.description}
-                </Text>
-                
-                {selectedAchievement.earned ? (
-                  <View style={styles.statusContainer}>
+                {/* Title and description at bottom */}
+                <View style={styles.stampInfo}>
+                  <Text style={styles.detailName}>
+                    {selectedAchievement.name}
+                  </Text>
+                  
+                  <Text style={styles.detailDescription}>
+                    {selectedAchievement.description}
+                  </Text>
+                  
+                  {selectedAchievement.earned ? (
                     <Text style={styles.statusText}>
                       Earned on {formatDate(selectedAchievement.earnedAt)}
                     </Text>
-                  </View>
-                ) : (
-                  <View style={styles.statusContainer}>
-                    <Icon name="lock" size={18} color="#888" />
-                    <Text style={styles.statusText}>
-                      Not earned yet
-                    </Text>
-                  </View>
-                )}
+                  ) : (
+                    <View style={styles.statusContainer}>
+                      <Icon name="lock" size={16} color="#888" />
+                      <Text style={[styles.statusText, { marginLeft: 6 }]}>
+                        Not earned yet
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
           )}
@@ -421,11 +420,18 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   detailCard: {
-    width: width * 0.8,
+    width: STAMP_SIZE * 2.5, // 2.5x the original stamp width
+    height: (STAMP_SIZE + 30) * 2.5, // 2.5x the original stamp height (including text area)
     backgroundColor: '#FAF3E0', // Updated to match app's card background color
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 25, // Proportionally scaled from original 10px
     alignItems: 'center',
+    justifyContent: 'center', // Center the content like original stamps
+    padding: 25, // Proportionally scaled from original 10px
+    elevation: 8, // Stronger shadow for the zoomed effect
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
   closeButton: {
     position: 'absolute',
@@ -446,49 +452,53 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  detailIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  // New zoomed stamp styles
+  zoomedStampContainer: {
+    width: 60 * 2.5, // 2.5x the original 60px image area
+    height: 60 * 2.5, // 2.5x the original 60px image area
+    borderRadius: 75, // Circular like the original (half of width/height)
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 25, // Proportionally scaled spacing
     overflow: 'hidden',
   },
-  detailStampImage: {
+  zoomedStampImage: {
     width: '100%',
     height: '100%',
   },
-  earnedDetail: {
-    backgroundColor: 'transparent',
-  },
-  unearnedDetail: {
-    backgroundColor: '#f0f0f0',
+  stampInfo: {
+    alignItems: 'center',
+    paddingHorizontal: 0,
+    flex: 1, // Take remaining space like original stamps
+    justifyContent: 'center',
   },
   detailName: {
-    fontSize: 24,
+    fontSize: 12 * 2.5, // 2.5x the original stamp name font size
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 12, // Proportionally scaled spacing
     textAlign: 'center',
-    color: '#1a2b49', // Updated to match app's text color
+    color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailDescription: {
-    fontSize: 16,
-    color: '#1a2b49', // Updated to match app's text color
+    fontSize: 14, // Slightly larger for readability in the description
+    color: '#1a2b49',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    lineHeight: 18,
   },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 5,
   },
   statusText: {
-    fontSize: 14,
-    color: '#1a2b49', // Updated to match app's text color
+    fontSize: 13,
+    color: '#666', // Slightly muted for the earned date
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
   },
   // Debug button styles
   debugButton: {
