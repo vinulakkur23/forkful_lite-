@@ -11,35 +11,61 @@ export const clearUserStamps = async () => {
     const userId = currentUser.uid;
     console.log(`Clearing stamps for user: ${userId}`);
 
-    // Get reference to user's achievements collection
-    const achievementsRef = firestore()
+    // Clear achievements from NEW format: users/{userId}/achievements subcollection
+    const newFormatRef = firestore()
       .collection('users')
       .doc(userId)
       .collection('achievements');
 
-    // Get all achievements
-    const snapshot = await achievementsRef.get();
+    const newFormatSnapshot = await newFormatRef.get();
     
-    if (snapshot.empty) {
+    // Also clear achievements from OLD format: userAchievements flat collection
+    const oldFormatRef = firestore().collection('userAchievements');
+    const oldFormatSnapshot = await oldFormatRef.where('userId', '==', userId).get();
+
+    const totalAchievements = newFormatSnapshot.size + oldFormatSnapshot.size;
+    
+    console.log(`New format achievements: ${newFormatSnapshot.size}`);
+    console.log(`Old format achievements: ${oldFormatSnapshot.size}`);
+    console.log(`Total achievements to clear: ${totalAchievements}`);
+    
+    if (totalAchievements === 0) {
       console.log('No stamps found to clear');
       return { success: true, message: 'No stamps found to clear' };
     }
 
-    console.log(`Found ${snapshot.size} stamps to clear`);
-
-    // Delete each achievement
-    const deletePromises = snapshot.docs.map(doc => {
-      console.log(`Deleting stamp: ${doc.id}`);
-      return doc.ref.delete();
+    // Log each stamp being found
+    console.log('New format stamps:');
+    newFormatSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      console.log(`  - ${doc.id}:`, data);
     });
+    
+    console.log('Old format stamps:');
+    oldFormatSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      console.log(`  - ${doc.id}:`, data);
+    });
+
+    // Delete achievements from both formats
+    const deletePromises = [
+      ...newFormatSnapshot.docs.map(doc => {
+        console.log(`Deleting new format stamp: ${doc.id}`);
+        return doc.ref.delete();
+      }),
+      ...oldFormatSnapshot.docs.map(doc => {
+        console.log(`Deleting old format stamp: ${doc.id}`);
+        return doc.ref.delete();
+      })
+    ];
 
     await Promise.all(deletePromises);
 
     console.log('All stamps cleared successfully');
     return { 
       success: true, 
-      message: `Successfully cleared ${snapshot.size} stamps`,
-      clearedCount: snapshot.size
+      message: `Successfully cleared ${totalAchievements} stamps`,
+      clearedCount: totalAchievements
     };
 
   } catch (error) {

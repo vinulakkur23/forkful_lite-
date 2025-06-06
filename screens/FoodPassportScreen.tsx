@@ -161,21 +161,39 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     }, [meals, activeFilters]);
     
     // Refresh data when screen comes into focus (handles returning from deletion)
+    const lastFocusTime = useRef<number>(0);
+    
     useEffect(() => {
-        if (isFocused && userInfo && !loading) {
-            console.log('FoodPassportScreen focused, refreshing meal data...');
-            fetchMealEntries();
+        if (isFocused && userInfo) {
+            const now = Date.now();
+            // Only refresh if it's been more than 1 second since last focus refresh
+            if (now - lastFocusTime.current > 1000) {
+                console.log('FoodPassportScreen focused, refreshing meal data...');
+                lastFocusTime.current = now;
+                fetchMealEntries();
+            }
         }
     }, [isFocused]);
     
+    const isMountedRef = useRef(true);
+    
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+    
     const fetchMealEntries = async () => {
         try {
+            if (!isMountedRef.current) return;
             setLoading(true);
             const targetUserId = userId || auth().currentUser?.uid;
             
             if (!targetUserId) {
-                setError('User not authenticated');
-                setLoading(false);
+                if (isMountedRef.current) {
+                    setError('User not authenticated');
+                    setLoading(false);
+                }
                 return;
             }
             
@@ -219,6 +237,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 });
             });
 
+            if (!isMountedRef.current) return;
             setMeals(fetchedMeals);
             // Filtered meals will be updated via the useEffect
 
@@ -232,6 +251,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
             const userAchievements = await getUserAchievements(targetUserId);
             const badgeCount = userAchievements.length;
 
+            if (!isMountedRef.current) return;
             setProfileStats({
                 totalMeals,
                 totalCheers,
@@ -320,11 +340,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
             }
         } catch (err: any) {
             console.error('Error fetching meal entries:', err);
-            setError(`Failed to load meals: ${err.message}`);
-            Alert.alert('Error', 'Failed to load your food passport entries');
+            if (isMountedRef.current) {
+                setError(`Failed to load meals: ${err.message}`);
+                Alert.alert('Error', 'Failed to load your food passport entries');
+            }
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     };
     
@@ -462,8 +486,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     };
     
     const handleImageError = (mealId: string) => {
-        console.log(`Image load error for meal: ${mealId}`);
-        setImageErrors(prev => ({...prev, [mealId]: true}));
+        // Prevent excessive logging of the same image error
+        if (!imageErrors[mealId]) {
+            console.log(`Image load error for meal: ${mealId}`);
+            setImageErrors(prev => ({...prev, [mealId]: true}));
+        }
     };
 
     // Simplified Image Picker function for debugging
@@ -656,9 +683,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                     
                     {/* Show either rating or "Rate Meal" overlay */}
                     {isUnrated ? (
-                        <View style={styles.rateMealOverlay}>
-                            <Text style={styles.rateMealText}>Rate Meal</Text>
-                        </View>
+                        <>
+                            {/* Gray wash overlay over entire image */}
+                            <View style={styles.imageWashOverlay} />
+                            {/* Rate Meal text overlay */}
+                            <View style={styles.rateMealOverlay}>
+                                <Text style={styles.rateMealText}>Click to review meal</Text>
+                            </View>
+                        </>
                     ) : (
                         <View style={styles.ratingOverlay}>
                             <EmojiDisplay rating={item.rating} size={22} />
@@ -959,20 +991,34 @@ const styles = StyleSheet.create({
         padding: 3,
         paddingHorizontal: 4,
     },
+    imageWashOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(128, 128, 128, 0.7)', // Gray overlay with 70% opacity
+    },
     rateMealOverlay: {
         position: 'absolute',
         bottom: 8,
         left: 8,
-        backgroundColor: 'rgba(255, 107, 107, 0.9)', // Red color with 90% opacity
-        borderRadius: 15,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
+        backgroundColor: 'rgba(250, 248, 230, 0.8)', // Same cream color/opacity as emoji overlay
+        borderRadius: 15, // Same border radius as emoji overlay
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 4,
     },
     rateMealText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: 'bold',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: '#1a2b49', // Navy blue text color
+        fontSize: 10, // Smaller font size
+        fontWeight: 'normal', // Not bold
+        fontFamily: 'Inter-Regular', // Inter font
+        textAlign: 'center',
     },
     mealCardContent: {
         padding: 10,

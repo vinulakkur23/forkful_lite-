@@ -86,7 +86,15 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
         'stumptown_starter': require('../assets/stamps/stumptown_starter.png'),
         'big_apple_bite': require('../assets/stamps/big_apple_bite.png'),
         'catch_of_the_day': require('../assets/stamps/catch_of_the_day.png'),
-        'plant_curious': require('../assets/stamps/plant_curious.png')
+        'plant_curious': require('../assets/stamps/plant_curious.png'),
+        'plantlandia': require('../assets/stamps/plantlandia.png'),
+        'brew_and_chew': require('../assets/stamps/brew_and_chew.png'),
+        'taco_tuesday': require('../assets/stamps/taco_tuesday.png'),
+        'dreaming_of_sushi': require('../assets/stamps/dreaming_of_sushi.png'),
+        'takeout_tour': require('../assets/stamps/takeout_tour.png'),
+        'urban_explorer': require('../assets/stamps/urban_explorer.png'),
+        'flavor_nomad': require('../assets/stamps/flavor_nomad.png'),
+        'world_on_a_plate': require('../assets/stamps/word_on_a_plate.png')
       };
       
       // If we have a bundled image for this achievement, use it

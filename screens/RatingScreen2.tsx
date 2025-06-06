@@ -125,6 +125,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [isUserEditingRestaurant, setIsUserEditingRestaurant] = useState(false);
   const [isUserEditingMeal, setIsUserEditingMeal] = useState(false);
   
+  // Track if user has made an explicit restaurant selection (prevent auto-override)
+  const [hasExplicitRestaurantSelection, setHasExplicitRestaurantSelection] = useState(false);
+  
   // Device location state
   const [deviceLocation, setDeviceLocation] = useState<LocationData | null>(null);
   const [isLoadingDeviceLocation, setIsLoadingDeviceLocation] = useState(false);
@@ -323,8 +326,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         
         setSuggestedRestaurants(restaurants);
         
-        // Only update restaurant field if user isn't currently editing
-        if (!isUserEditingRestaurant) {
+        // Only update restaurant field if user isn't currently editing AND hasn't made an explicit selection
+        if (!isUserEditingRestaurant && !hasExplicitRestaurantSelection) {
           logWithSession(`Auto-selecting first restaurant: ${restaurants[0].name}`);
           setRestaurant(restaurants[0].name);
           
@@ -363,6 +366,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           // Don't auto-populate the meal field anymore
           // Instead we'll just rely on the suggestions button to show options
           logWithSession("Not auto-filling meal field - user will select from suggestions");
+        } else {
+          logWithSession(`Skipping auto-selection - isUserEditingRestaurant: ${isUserEditingRestaurant}, hasExplicitRestaurantSelection: ${hasExplicitRestaurantSelection}`);
         }
       } else {
         logWithSession("No restaurant suggestions found");
@@ -508,6 +513,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // Turn off editing mode since this was an explicit selection
     setIsUserEditingRestaurant(false);
     
+    // Mark that user has made an explicit restaurant selection
+    setHasExplicitRestaurantSelection(true);
+    
     // Hide autocomplete immediately after selection
     setShowAutocomplete(false);
     setAutocompleteRestaurants([]);
@@ -605,6 +613,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setShowAutocomplete(false);
     setIsUserEditingRestaurant(false);
     setIsUserEditingMeal(false);
+    setHasExplicitRestaurantSelection(false); // Reset for new photo
     setIsLoadingSuggestions(false);
     setIsSearchingRestaurants(false);
     setIsLoadingMealSuggestions(false);

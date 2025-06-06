@@ -98,6 +98,16 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Track if we're showing limited results
   const [showingLimitedResults, setShowingLimitedResults] = useState(false);
   
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  
   // Tab view state - initialize with route param if provided
   const initialTabIndex = route.params?.tabIndex || 0;
   
@@ -140,16 +150,20 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     Geolocation.getCurrentPosition(
       position => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setLocationError(null);
+        if (isMountedRef.current) {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          setLocationError(null);
+        }
       },
       error => {
         console.log('Location error:', error);
-        setLocationError(error.message);
-        Alert.alert('Location Error', 'Could not get your location. Showing all meals instead.');
+        if (isMountedRef.current) {
+          setLocationError(error.message);
+          Alert.alert('Location Error', 'Could not get your location. Showing all meals instead.');
+        }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
@@ -158,7 +172,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Check if user is logged in and set up saved meals listener
   useEffect(() => {
     const currentUser = auth().currentUser;
-    setUser(currentUser);
+    if (isMountedRef.current) {
+      setUser(currentUser);
+    }
     
     // Set up real-time listener for saved meals
     if (currentUser) {
@@ -167,15 +183,17 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         .doc(currentUser.uid)
         .collection('savedMeals')
         .onSnapshot(snapshot => {
-          const savedMealIds = new Set(snapshot.docs.map(doc => doc.id));
-          savedMealsRef.current = savedMealIds;
-          
-          // Update all visible cards
-          Object.keys(cardRefs.current).forEach(mealId => {
-            if (cardRefs.current[mealId]?.updateHeartVisibility) {
-              cardRefs.current[mealId].updateHeartVisibility(savedMealIds.has(mealId));
-            }
-          });
+          if (isMountedRef.current) {
+            const savedMealIds = new Set(snapshot.docs.map(doc => doc.id));
+            savedMealsRef.current = savedMealIds;
+            
+            // Update all visible cards
+            Object.keys(cardRefs.current).forEach(mealId => {
+              if (cardRefs.current[mealId]?.updateHeartVisibility) {
+                cardRefs.current[mealId].updateHeartVisibility(savedMealIds.has(mealId));
+              }
+            });
+          }
         }, error => {
           console.error('Error listening to saved meals:', error);
         });
@@ -232,6 +250,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const fetchNearbyMeals = async () => {
     try {
+      if (!isMountedRef.current) return;
       setLoading(true);
       
       // Get the current user's ID
@@ -333,14 +352,19 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         console.log(`Limiting display to closest ${MAX_MEALS_TO_DISPLAY} meals for performance`);
       }
       
+      if (!isMountedRef.current) return;
       setAllNearbyMeals(limitedMeals);
       // Filtered meals will be updated via the useEffect
     } catch (error) {
       console.error('Error fetching nearby meals:', error);
-      Alert.alert('Error', 'Failed to load nearby meals');
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to load nearby meals');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -474,8 +498,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleImageError = (mealId: string) => {
-    console.log(`Image load error for meal: ${mealId}`);
-    setImageErrors(prev => ({...prev, [mealId]: true}));
+    // Prevent excessive logging of the same image error
+    if (!imageErrors[mealId] && isMountedRef.current) {
+      console.log(`Image load error for meal: ${mealId}`);
+      setImageErrors(prev => ({...prev, [mealId]: true}));
+    }
   };
 
   const renderEmoji = (rating: number) => {

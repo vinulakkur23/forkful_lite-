@@ -50,9 +50,11 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
       
       // Get user's earned achievements
       const targetUserId = userId || auth().currentUser?.uid;
+      console.log(`🏆 StampsScreen loading achievements for user: ${targetUserId}`);
       
       // Now we can get achievements for any user
       const userAchievements = await getUserAchievements(targetUserId);
+      console.log(`🏆 Found ${userAchievements.length} user achievements:`, userAchievements.map(a => a.achievementId));
       setUserAchievements(userAchievements);
       
       // Get all available achievements
@@ -111,7 +113,7 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
         'takeout_tour': require('../assets/stamps/takeout_tour.png'),
         'urban_explorer': require('../assets/stamps/urban_explorer.png'),
         'flavor_nomad': require('../assets/stamps/flavor_nomad.png'),
-        'world_on_a_plate': require('../assets/stamps/world_on_a_plate.png')
+        'world_on_a_plate': require('../assets/stamps/word_on_a_plate.png')
       };
       
       // If we have a bundled image for this achievement, use it
