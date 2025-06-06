@@ -16,6 +16,11 @@ import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from './SimpleFilterComponent';
 import EmojiDisplay from './EmojiDisplay';
 
+// Map button icons - same as MapScreen
+const MAP_ICONS = {
+  myLocation: require('../assets/icons/map/my-location.png'),
+};
+
 interface MealEntry {
   id: string;
   photoUrl: string;
@@ -394,6 +399,7 @@ const HomeMapComponent: React.FC<Props> = ({
                     source={{ uri: currentMeal.photoUrl }}
                     style={styles.markerPhoto}
                     onError={() => onImageError(currentMeal.id)}
+                    resizeMode="cover"
                   />
                 ) : (
                   <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
@@ -426,6 +432,7 @@ const HomeMapComponent: React.FC<Props> = ({
                       source={{ uri: currentMeal.photoUrl }}
                       style={styles.calloutImageLarge}
                       onError={() => onImageError(currentMeal.id)}
+                      resizeMode="cover"
                     />
                   ) : (
                     <View style={styles.calloutImageLargePlaceholder}>
@@ -480,7 +487,10 @@ const HomeMapComponent: React.FC<Props> = ({
           style={styles.floatingLocationButton}
           onPress={centerOnUserLocation}
         >
-          <Icon name="my-location" size={24} color="#E63946" />
+          <Image 
+            source={MAP_ICONS.myLocation} 
+            style={[styles.buttonIcon, { tintColor: 'white' }]} 
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -654,7 +664,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   floatingLocationButton: {
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(230, 57, 70, 0.8)', // Match MapScreen background
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -665,8 +675,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
-    borderWidth: 1,
-    borderColor: '#E63946',
+    // Removed border to match MapScreen
+  },
+  buttonIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
+    tintColor: '#ffffff', // White tint for the icon - using full hex
   },
   limitedResultsIndicator: {
     position: 'absolute',

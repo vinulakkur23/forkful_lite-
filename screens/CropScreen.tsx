@@ -11,6 +11,7 @@ import {
   StatusBar,
   SafeAreaView
 } from 'react-native';
+import ImageResizer from 'react-native-image-resizer';
 import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -451,6 +452,45 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   }, []);
 
   // Open the cropper directly
+  // Helper function to compress image
+  const compressImage = async (imagePath: string): Promise<string> => {
+    try {
+      console.log('Compressing image to reduce file size and AI processing costs...');
+      
+      // Compress with quality settings optimized for AI processing
+      // Lower resolution saves significantly on AI vision API costs (charged per pixel)
+      const compressedImage = await ImageResizer.createResizedImage(
+        imagePath,
+        800, // Max width - good balance between quality and cost
+        800, // Max height - good balance between quality and cost  
+        'JPEG', // Format
+        85, // Quality (85% is sweet spot for good quality + smaller size)
+        0, // Rotation
+        undefined, // Output path (auto-generated)
+        false, // Keep metadata
+        {
+          mode: 'contain', // Maintain aspect ratio
+          onlyScaleDown: true, // Don't upscale if image is smaller
+        }
+      );
+      
+      console.log('Image compressed successfully. Original:', imagePath, 'Compressed:', compressedImage.uri);
+      console.log('Compression details:', {
+        originalSize: 'Unknown',
+        newSize: `${compressedImage.width}x${compressedImage.height}`,
+        quality: '85%',
+        format: 'JPEG'
+      });
+      
+      return compressedImage.uri;
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      // If compression fails, return original path
+      console.log('Falling back to original image due to compression error');
+      return imagePath;
+    }
+  };
+
   const openCropper = async () => {
     try {
       // Check if already processing or component unmounted
@@ -499,8 +539,11 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         mediaType: 'photo',
       });
       
-      // If component is still mounted, navigate to next screen
+      // If component is still mounted, compress image and navigate to next screen
       if (isMounted.current) {
+        // Compress the cropped image to reduce file size and AI processing costs
+        const compressedImageUri = await compressImage(result.path);
+        
         // Generate a unique navigation key
         const timestamp = new Date().getTime();
         
@@ -518,7 +561,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           console.log('Camera photo detected - navigating directly to RatingScreen2 (meal not eaten yet)');
           navigation.navigate('RatingScreen2', {
             photo: {
-              uri: result.path,
+              uri: compressedImageUri, // Use compressed image
               width: result.width,
               height: result.height,
             },
@@ -531,13 +574,13 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         } else {
           // Gallery photos: Go to RatingScreen1 (meal already eaten, rate the experience)
-          console.log('Gallery photo detected - navigating to RatingScreen1 with cropped image:', result.path);
+          console.log('Gallery photo detected - navigating to RatingScreen1 with cropped image:', compressedImageUri);
           console.log('Passing prefetched suggestions:', 
             cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
           
           navigation.navigate('RatingScreen1', {
             photo: {
-              uri: result.path,
+              uri: compressedImageUri, // Use compressed image
               width: result.width,
               height: result.height,
             },
@@ -552,7 +595,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         }
         
-        console.log('Passing location data to RatingScreen1:', 
+        console.log('Passing location data to RatingScreen:', 
           locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');
         
         // Don't clear the global cache here since EditPhoto will pass it along to Rating

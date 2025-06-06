@@ -1163,7 +1163,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 30,
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'rgba(255, 107, 107, 0.7)', // Added transparency (70% opacity)
     paddingHorizontal: 16,
     height: 48,
     borderRadius: 24,

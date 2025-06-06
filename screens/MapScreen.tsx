@@ -971,7 +971,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   floatingButton: {
-    backgroundColor: 'rgba(230, 57, 70, 0.5)', // Lobster red with much lower opacity
+    backgroundColor: 'rgba(230, 57, 70, 0.8)', // Increased opacity to 0.8
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
@@ -990,6 +990,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     resizeMode: 'contain',
+    tintColor: '#fff', // White tint for the icons
   },
   callout: {
     width: 160,
