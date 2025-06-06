@@ -667,21 +667,32 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </Text>
         </TouchableOpacity>
         
-        {/* Liked and Didn't Like sections */}
-        {(meal.comments?.liked || meal.comments?.disliked) && (
+        {/* Comments section - handle both new thoughts format and legacy liked/disliked format */}
+        {(meal.comments?.thoughts || meal.comments?.liked || meal.comments?.disliked) && (
           <View style={styles.feedbackSection}>
-            {meal.comments?.liked && (
-              <View style={[styles.feedbackItem, !meal.comments?.disliked && {marginBottom: 0}]}>
-                <Text style={styles.feedbackLabel}>What was Good:</Text>
-                <Text style={styles.feedbackText}>{meal.comments.liked}</Text>
-              </View>
-            )}
-            
-            {meal.comments?.disliked && (
+            {meal.comments?.thoughts ? (
+              // New thoughts format
               <View style={[styles.feedbackItem, {marginBottom: 0}]}>
-                <Text style={styles.feedbackLabel}>What could be Better:</Text>
-                <Text style={styles.feedbackText}>{meal.comments.disliked}</Text>
+                <Text style={styles.feedbackLabel}>How was the Meal?</Text>
+                <Text style={styles.feedbackText}>{meal.comments.thoughts}</Text>
               </View>
+            ) : (
+              // Legacy format - keep for backward compatibility
+              <>
+                {meal.comments?.liked && (
+                  <View style={[styles.feedbackItem, !meal.comments?.disliked && {marginBottom: 0}]}>
+                    <Text style={styles.feedbackLabel}>What was Good:</Text>
+                    <Text style={styles.feedbackText}>{meal.comments.liked}</Text>
+                  </View>
+                )}
+                
+                {meal.comments?.disliked && (
+                  <View style={[styles.feedbackItem, {marginBottom: 0}]}>
+                    <Text style={styles.feedbackLabel}>What could be Better:</Text>
+                    <Text style={styles.feedbackText}>{meal.comments.disliked}</Text>
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
@@ -805,7 +816,16 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
             <TouchableOpacity
               style={styles.editButton}
-              onPress={() => navigation.navigate('EditMeal', { mealId: mealId, meal })}
+              onPress={() => navigation.navigate('EditMeal', { 
+                mealId: mealId, 
+                meal,
+                // Pass navigation context so EditMeal can navigate back properly
+                previousScreen: route.params?.previousScreen || 'FoodPassport',
+                previousTabIndex: route.params?.previousTabIndex,
+                passportUserId: route.params?.passportUserId,
+                passportUserName: route.params?.passportUserName,
+                passportUserPhoto: route.params?.passportUserPhoto
+              })}
             >
               <Text style={styles.buttonText}>Edit</Text>
             </TouchableOpacity>

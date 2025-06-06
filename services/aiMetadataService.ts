@@ -19,7 +19,9 @@ export interface AIMetadata {
 
 interface MealContext {
   mealName?: string;
-  restaurantName?: string; 
+  restaurantName?: string;
+  thoughts?: string;
+  // Keep for backward compatibility
   likedComments?: string;
   dislikedComments?: string;
 }
@@ -120,11 +122,20 @@ export const processImageMetadata = async (
         if (context.restaurantName) {
           formData.append('restaurant_name', context.restaurantName);
         }
-        if (context.likedComments) {
-          formData.append('liked_comments', context.likedComments);
-        }
-        if (context.dislikedComments) {
-          formData.append('disliked_comments', context.dislikedComments);
+        // Handle both new thoughts format and legacy liked/disliked format
+        if (context.thoughts) {
+          // For the new thoughts format, we could split it or send as combined
+          // For now, we'll send the thoughts as both liked and disliked for backend compatibility
+          formData.append('liked_comments', context.thoughts);
+          formData.append('disliked_comments', ''); // Empty since it's combined in thoughts
+        } else {
+          // Fallback to legacy format for backward compatibility
+          if (context.likedComments) {
+            formData.append('liked_comments', context.likedComments);
+          }
+          if (context.dislikedComments) {
+            formData.append('disliked_comments', context.dislikedComments);
+          }
         }
         console.log('Added context to request:', context);
       }
@@ -196,11 +207,19 @@ export const processImageMetadata = async (
             if (context.restaurantName) {
               urlFormData.append('restaurant_name', context.restaurantName);
             }
-            if (context.likedComments) {
-              urlFormData.append('liked_comments', context.likedComments);
-            }
-            if (context.dislikedComments) {
-              urlFormData.append('disliked_comments', context.dislikedComments);
+            // Handle both new thoughts format and legacy liked/disliked format
+            if (context.thoughts) {
+              // For the new thoughts format, send as liked_comments
+              urlFormData.append('liked_comments', context.thoughts);
+              urlFormData.append('disliked_comments', ''); // Empty since it's combined
+            } else {
+              // Fallback to legacy format for backward compatibility
+              if (context.likedComments) {
+                urlFormData.append('liked_comments', context.likedComments);
+              }
+              if (context.dislikedComments) {
+                urlFormData.append('disliked_comments', context.dislikedComments);
+              }
             }
           }
 

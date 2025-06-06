@@ -23,16 +23,33 @@ export const generateMealHaiku = async (dishName: string, imageUri?: string): Pr
       } as any);
     }
 
-    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_HAIKU), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    let response;
+    try {
+      response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_HAIKU), {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Haiku generation timed out. Please try again.');
+      }
+      throw fetchError;
     }
 
     const data = await response.json();
@@ -52,16 +69,33 @@ export const generateRestaurantHistory = async (restaurantName: string): Promise
     const formData = new FormData();
     formData.append('restaurant_name', restaurantName);
 
-    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RESTAURANT), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    let response;
+    try {
+      response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RESTAURANT), {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Restaurant history generation timed out. Please try again.');
+      }
+      throw fetchError;
     }
 
     const data = await response.json();
@@ -81,16 +115,33 @@ export const generateFoodHistory = async (dishName: string): Promise<string> => 
     const formData = new FormData();
     formData.append('dish_name', dishName);
 
-    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_FOOD), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    let response;
+    try {
+      response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_FOOD), {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Food history generation timed out. Please try again.');
+      }
+      throw fetchError;
     }
 
     const data = await response.json();
@@ -116,31 +167,47 @@ export const getPhotoRating = async (imageUri: string): Promise<MealEnhancement>
       name: 'meal.jpg',
     } as any);
 
-    const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_PHOTO_RATING), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+    try {
+      const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_PHOTO_RATING), {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        type: 'photo_rating',
+        content: data.content || 'Your food photography scores 7/10!',
+        title: data.title || 'Photo Quality Rating',
+        rating: data.rating || 7
+      };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Photo rating request timed out. Please try again.');
+      }
+      throw fetchError;
     }
-
-    const data = await response.json();
-    
-    return {
-      type: 'photo_rating',
-      content: data.content || 'Your food photography scores 7/10!',
-      title: data.title || 'Photo Quality Rating',
-      rating: data.rating || 7
-    };
   } catch (error) {
     console.error('Error getting photo rating:', error);
     return {
       type: 'photo_rating',
-      content: 'Your food photography scores 7/10!',
+      content: 'Your food photography scores 7/10! (Unable to analyze photo quality at this time)',
       title: 'Photo Quality Rating',
       rating: 7
     };
@@ -179,17 +246,33 @@ export const getRandomMealEnhancement = async (
 
     const apiUrl = API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_RANDOM);
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error: ${response.status} - ${errorText}`);
+    let response;
+    try {
+      response = await fetch(apiUrl, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Enhancement request timed out. Please try again.');
+      }
+      throw fetchError;
     }
 
     const data = await response.json();

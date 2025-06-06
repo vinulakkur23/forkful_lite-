@@ -119,11 +119,8 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [deviceLocation, setDeviceLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [isLoadingDeviceLocation, setIsLoadingDeviceLocation] = useState(false);
 
-  // Comment sections with multiple text fields per section
-  const [likedComment1, setLikedComment1] = useState<string>('');
-  const [likedComment2, setLikedComment2] = useState<string>('');
-  const [dislikedComment1, setDislikedComment1] = useState<string>('');
-  const [dislikedComment2, setDislikedComment2] = useState<string>('');
+  // Single thoughts comment field
+  const [thoughts, setThoughts] = useState<string>('');
 
   // Add meal type selector state - default to "Restaurant"
   const [mealType, setMealType] = useState<"Restaurant" | "Homemade">("Restaurant");
@@ -537,29 +534,6 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log(`Navigating to Result with fresh image: ${freshPhoto.uri}`);
 
       // Navigate to Result screen with the fresh photo and session ID
-      // Combine and format comments from the separate fields
-      const formatComments = (comment1: string, comment2: string): string => {
-        let result = '';
-
-        // Add first comment if it's not empty
-        if (comment1.trim()) {
-          result += '• ' + comment1.trim();
-        }
-
-        // Add second comment if it's not empty
-        if (comment2.trim()) {
-          // Add a line break if we already have content
-          if (result) result += '\n';
-          result += '• ' + comment2.trim();
-        }
-
-        return result;
-      };
-
-      // Format and combine the comments from each section
-      const formattedLikedComment = formatComments(likedComment1, likedComment2);
-      const formattedDislikedComment = formatComments(dislikedComment1, dislikedComment2);
-
       navigation.navigate('Result', {
         photo: freshPhoto,
         location: location,
@@ -567,8 +541,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
         restaurant: mealType === "Restaurant" ? restaurant : "", // Only include restaurant for Restaurant type
         meal: mealName,
         mealType: mealType, // Include the meal type in the data for Firebase
-        likedComment: formattedLikedComment, // Include what the user liked
-        dislikedComment: formattedDislikedComment, // Include what the user didn't like
+        thoughts: thoughts, // Include the user's thoughts
         _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
       });
     } catch (error) {
@@ -796,79 +769,22 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsContainer}>
-            {/* Liked Comments Section */}
             <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>What did you like about this dish?</Text>
-              <Text style={styles.commentSubtitle}>(This will help us give you better meal recommendations)</Text>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="First thing you liked..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setLikedComment1}
-                  value={likedComment1}
-                  maxLength={150}
-                />
-              </View>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="Second thing you liked..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setLikedComment2}
-                  value={likedComment2}
-                  maxLength={150}
-                />
-              </View>
-            </View>
-
-            {/* Disliked Comments Section */}
-            <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>What did you not like?</Text>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="First thing you didn't like..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setDislikedComment1}
-                  value={dislikedComment1}
-                  maxLength={150}
-                />
-              </View>
-              <View style={styles.bulletContainer}>
-                <Text style={styles.bullet}>•</Text>
-                <TextInput
-                  style={styles.bulletInput}
-                  placeholder="Second thing you didn't like..."
-                  placeholderTextColor="#999"
-                  multiline={true}
-                  blurOnSubmit={true}
-                  returnKeyType="done"
-                  autoCapitalize="sentences"
-                  onSubmitEditing={handleSubmitEditing}
-                  onChangeText={setDislikedComment2}
-                  value={dislikedComment2}
-                  maxLength={150}
-                />
-              </View>
+              <Text style={styles.commentTitle}>How was your Meal?</Text>
+              <Text style={styles.commentSubtitle}>Sharing will help us understand your tastes and personalize dish recommendations.</Text>
+              <TextInput
+                style={styles.thoughtsInput}
+                placeholder="What did you enjoy about this meal? What could be better?"
+                placeholderTextColor="#999"
+                multiline={true}
+                blurOnSubmit={true}
+                returnKeyType="done"
+                autoCapitalize="sentences"
+                onSubmitEditing={handleSubmitEditing}
+                onChangeText={setThoughts}
+                value={thoughts}
+                maxLength={600}
+              />
             </View>
           </View>
 
@@ -1240,29 +1156,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontStyle: 'italic',
   },
-  bulletContainer: {
-    flexDirection: 'row',
-    marginBottom: 5, // Reduced spacing between bullet points
-    alignItems: 'flex-start',
-  },
-  bullet: {
-    fontSize: 18,
-    marginRight: 8,
-    color: '#666',
-    lineHeight: 35, // Increased to align with input
-    width: 15, // Fixed width
-  },
-  bulletInput: {
-    flex: 1,
+  thoughtsInput: {
+    width: '100%',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 5,
-    padding: 8,
-    minHeight: 40,
+    padding: 12,
+    minHeight: 80,
     fontSize: 14,
     backgroundColor: 'white',
     color: '#333',
-    textAlignVertical: 'top', // Better position for cursor in Android
+    textAlignVertical: 'top', // For Android to align text to top
   },
   commentInput: {
     flex: 1,
@@ -1296,7 +1200,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   ratingText: {
-    fontSize: 18,
+    fontSize: 12,
     color: '#666',
     marginVertical: 5, // Reduced margin
   },

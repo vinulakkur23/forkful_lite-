@@ -102,13 +102,11 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [screenKey, setScreenKey] = useState(Date.now()); // Used to force re-render when needed
 
-  // Comments for both liked and disliked
-  const [likedComment, setLikedComment] = useState<string>('');
-  const [dislikedComment, setDislikedComment] = useState<string>('');
+  // Single thoughts comment field
+  const [thoughts, setThoughts] = useState<string>('');
 
-  // References for text inputs
-  const likedCommentRef = useRef<TextInput>(null);
-  const dislikedCommentRef = useRef<TextInput>(null);
+  // Reference for text input
+  const thoughtsRef = useRef<TextInput>(null);
 
   // Add validation on component mount
   useEffect(() => {
@@ -157,8 +155,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
       
       // Reset form data for a fresh start
       setRating(0);
-      setLikedComment('');
-      setDislikedComment('');
+      setThoughts('');
       
       // Force re-render of stars and other UI components by updating screenKey
       setScreenKey(Date.now());
@@ -179,19 +176,11 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
     setRating(selectedRating);
   };
 
-  // Handle return key press in liked comments text input
-  const handleLikedCommentsSubmit = (): void => {
-    // Move focus to the disliked comments text input
-    if (dislikedCommentRef.current) {
-      dislikedCommentRef.current.focus();
-    }
-  };
-
-  // Handle return key press in disliked comments text input
-  const handleDislikedCommentsSubmit = (): void => {
+  // Handle return key press in thoughts text input
+  const handleThoughtsSubmit = (): void => {
     // Dismiss keyboard/focus
-    if (dislikedCommentRef.current) {
-      dislikedCommentRef.current.blur();
+    if (thoughtsRef.current) {
+      thoughtsRef.current.blur();
     }
   };
 
@@ -278,8 +267,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         photo: freshPhoto,
         location: location,
         rating: rating,
-        likedComment: likedComment.trim(),
-        dislikedComment: dislikedComment.trim(),
+        thoughts: thoughts.trim(),
         suggestionData: route.params.suggestionData, // Pass along any suggestion data
         // Pass along editing parameters if we're editing an existing meal
         meal: route.params.meal,
@@ -402,8 +390,7 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         photo: freshPhoto,
         location: location,
         rating: 3, // Always 3 (good) emoji rating for quick continue
-        likedComment: '', // Empty comments for quick continue
-        dislikedComment: '',
+        thoughts: '', // Empty thoughts for quick continue
         suggestionData: route.params.suggestionData,
         _uniqueKey: sessionId
       });
@@ -471,44 +458,23 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsContainer}>
-            {/* Liked Comments Section */}
             <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>What did you like about this dish?</Text>
-              <Text style={styles.commentSubtitle}>(This will help us give you better meal recommendations)</Text>
+              <Text style={styles.commentTitle}>How was your Meal?</Text>
+              <Text style={styles.commentSubtitle}>Sharing will help us understand your tastes and personalize dish recommendations.</Text>
               <TextInput
-                ref={likedCommentRef}
-                style={styles.commentInput}
-                placeholder="Tell us what you liked about this meal..."
-                placeholderTextColor="#999"
-                multiline={true}
-                blurOnSubmit={false}
-                returnKeyType="next"
-                autoCapitalize="sentences"
-                onSubmitEditing={handleLikedCommentsSubmit}
-                onChangeText={setLikedComment}
-                value={likedComment}
-                maxLength={300}
-                numberOfLines={4}
-              />
-            </View>
-
-            {/* Disliked Comments Section */}
-            <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>What could be better?</Text>
-              <TextInput
-                ref={dislikedCommentRef}
-                style={styles.commentInput}
-                placeholder="Tell us what could be improved..."
+                ref={thoughtsRef}
+                style={styles.thoughtsInput}
+                placeholder="What did you enjoy about this meal? What could be better?"
                 placeholderTextColor="#999"
                 multiline={true}
                 blurOnSubmit={true}
                 returnKeyType="done"
                 autoCapitalize="sentences"
-                onSubmitEditing={handleDislikedCommentsSubmit}
-                onChangeText={setDislikedComment}
-                value={dislikedComment}
-                maxLength={300}
-                numberOfLines={4}
+                onSubmitEditing={handleThoughtsSubmit}
+                onChangeText={setThoughts}
+                value={thoughts}
+                maxLength={600}
+                numberOfLines={6}
               />
             </View>
           </View>
@@ -632,7 +598,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#1a2b49',
     textAlign: 'center',
     fontStyle: 'italic',
@@ -691,6 +657,19 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     padding: 10,
     minHeight: 80,
+    fontSize: 14,
+    backgroundColor: 'white',
+    color: '#1a2b49',
+    textAlignVertical: 'top',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  thoughtsInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 12,
+    minHeight: 120,
     fontSize: 14,
     backgroundColor: 'white',
     color: '#1a2b49',

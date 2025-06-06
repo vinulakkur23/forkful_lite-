@@ -660,7 +660,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                         // Navigate to EditMealScreen for unrated meals (just add rating and comments)
                         navigation.navigate('EditMeal', {
                             mealId: item.id,
-                            meal: item
+                            meal: item,
+                            // Pass navigation context so EditMeal can navigate back properly
+                            previousScreen: 'FoodPassport',
+                            previousTabIndex: tabIndex,
+                            passportUserId: userId,
+                            passportUserName: userName,
+                            passportUserPhoto: userPhoto
                         });
                     } else {
                         // Navigate to meal detail for rated meals

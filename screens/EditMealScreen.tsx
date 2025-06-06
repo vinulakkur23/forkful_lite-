@@ -42,8 +42,26 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // State for editable fields
   const [rating, setRating] = useState<number>(meal.rating || 0);
-  const [likedComment, setLikedComment] = useState<string>(meal.comments?.liked || '');
-  const [dislikedComment, setDislikedComment] = useState<string>(meal.comments?.disliked || '');
+  const [thoughts, setThoughts] = useState<string>(() => {
+    // Handle both new thoughts format and legacy liked/disliked format
+    if (meal.comments?.thoughts) {
+      // New format - use thoughts directly
+      return meal.comments.thoughts;
+    } else {
+      // Legacy format - combine liked and disliked comments
+      const liked = meal.comments?.liked || '';
+      const disliked = meal.comments?.disliked || '';
+      
+      if (liked && disliked) {
+        return `${liked}\n\n${disliked}`;
+      } else if (liked) {
+        return liked;
+      } else if (disliked) {
+        return disliked;
+      }
+    }
+    return '';
+  });
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
@@ -51,8 +69,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     console.log('EditMealScreen - Initial meal data:', {
       rating: meal.rating,
-      liked: meal.comments?.liked,
-      disliked: meal.comments?.disliked,
+      thoughtsNew: meal.comments?.thoughts,
+      thoughtsLegacyLiked: meal.comments?.liked,
+      thoughtsLegacyDisliked: meal.comments?.disliked,
       hasComments: !!meal.comments,
       allKeys: Object.keys(meal)
     });
@@ -62,9 +81,27 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     console.log('EditMealScreen - Meal data changed, updating state');
     setRating(meal.rating || 0);
-    setLikedComment(meal.comments?.liked || '');
-    setDislikedComment(meal.comments?.disliked || '');
-  }, [meal.rating, meal.comments?.liked, meal.comments?.disliked]);
+    
+    // Handle both new thoughts format and legacy liked/disliked format
+    if (meal.comments?.thoughts) {
+      // New format - use thoughts directly
+      setThoughts(meal.comments.thoughts);
+    } else {
+      // Legacy format - combine liked and disliked comments
+      const liked = meal.comments?.liked || '';
+      const disliked = meal.comments?.disliked || '';
+      
+      if (liked && disliked) {
+        setThoughts(`${liked}\n\n${disliked}`);
+      } else if (liked) {
+        setThoughts(liked);
+      } else if (disliked) {
+        setThoughts(disliked);
+      } else {
+        setThoughts('');
+      }
+    }
+  }, [meal.rating, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
   
   // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
@@ -84,11 +121,30 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Update hasUnsavedChanges when any editable field changes
   useEffect(() => {
     const isRatingChanged = rating !== meal.rating;
-    const isLikedChanged = likedComment !== (meal.comments?.liked || '');
-    const isDislikedChanged = dislikedComment !== (meal.comments?.disliked || '');
+    const originalThoughts = (() => {
+      // Handle both new thoughts format and legacy liked/disliked format
+      if (meal.comments?.thoughts) {
+        // New format - use thoughts directly
+        return meal.comments.thoughts;
+      } else {
+        // Legacy format - combine liked and disliked comments
+        const liked = meal.comments?.liked || '';
+        const disliked = meal.comments?.disliked || '';
+        
+        if (liked && disliked) {
+          return `${liked}\n\n${disliked}`;
+        } else if (liked) {
+          return liked;
+        } else if (disliked) {
+          return disliked;
+        }
+      }
+      return '';
+    })();
+    const isThoughtsChanged = thoughts !== originalThoughts;
     
-    setHasUnsavedChanges(isRatingChanged || isLikedChanged || isDislikedChanged);
-  }, [rating, likedComment, dislikedComment, meal]);
+    setHasUnsavedChanges(isRatingChanged || isThoughtsChanged);
+  }, [rating, thoughts, meal]);
 
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
@@ -100,6 +156,39 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     setImageError(true);
   };
   
+  // Navigate back to the correct screen
+  const goBack = () => {
+    const previousScreen = route.params?.previousScreen;
+    const previousTabIndex = route.params?.previousTabIndex;
+    const passportUserId = route.params?.passportUserId;
+    const passportUserName = route.params?.passportUserName;
+    const passportUserPhoto = route.params?.passportUserPhoto;
+    
+    if (previousScreen === 'FoodPassport') {
+      if (passportUserId) {
+        // Navigate back to the specific user's passport
+        navigation.navigate('FoodPassport', {
+          userId: passportUserId,
+          userName: passportUserName,
+          userPhoto: passportUserPhoto,
+          tabIndex: previousTabIndex
+        });
+      } else {
+        // Navigate back to own passport
+        navigation.navigate('FoodPassport', {
+          tabIndex: previousTabIndex
+        });
+      }
+    } else if (previousScreen === 'Home') {
+      // Navigate back to Home with the correct tab index
+      navigation.navigate('Home', { tabIndex: previousTabIndex });
+    } else if (previousScreen) {
+      navigation.navigate(previousScreen);
+    } else {
+      navigation.goBack();
+    }
+  };
+
   // Show confirmation dialog when attempting to leave with unsaved changes
   const handleBackPress = () => {
     if (hasUnsavedChanges) {
@@ -108,11 +197,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         "You have unsaved changes. Are you sure you want to discard them?",
         [
           { text: "Stay", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: () => navigation.goBack() }
+          { text: "Discard", style: "destructive", onPress: () => goBack() }
         ]
       );
     } else {
-      navigation.goBack();
+      goBack();
     }
   };
 
@@ -125,9 +214,28 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     }
     
     // Check if anything has actually changed
-    if (rating === meal.rating && 
-        likedComment === (meal.comments?.liked || '') &&
-        dislikedComment === (meal.comments?.disliked || '')) {
+    const originalThoughts = (() => {
+      // Handle both new thoughts format and legacy liked/disliked format
+      if (meal.comments?.thoughts) {
+        // New format - use thoughts directly
+        return meal.comments.thoughts;
+      } else {
+        // Legacy format - combine liked and disliked comments
+        const liked = meal.comments?.liked || '';
+        const disliked = meal.comments?.disliked || '';
+        
+        if (liked && disliked) {
+          return `${liked}\n\n${disliked}`;
+        } else if (liked) {
+          return liked;
+        } else if (disliked) {
+          return disliked;
+        }
+      }
+      return '';
+    })();
+    
+    if (rating === meal.rating && thoughts === originalThoughts) {
       Alert.alert(
         "No Changes",
         "You haven't made any changes to this meal.",
@@ -150,8 +258,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       const updateData: any = {
         rating,
         comments: {
-          liked: likedComment,
-          disliked: dislikedComment
+          thoughts: thoughts
         },
         updatedAt: firestore.FieldValue.serverTimestamp()
       };
@@ -179,7 +286,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           text: "OK", 
           onPress: () => navigation.navigate('MealDetail', { 
             mealId: mealId,
-            justEdited: true 
+            justEdited: true,
+            // Pass through navigation context
+            previousScreen: route.params?.previousScreen,
+            previousTabIndex: route.params?.previousTabIndex,
+            passportUserId: route.params?.passportUserId,
+            passportUserName: route.params?.passportUserName,
+            passportUserPhoto: route.params?.passportUserPhoto
           }) 
         }]
       );
@@ -279,28 +392,17 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <Text style={styles.sectionTitle}>What was Good:</Text>
+            <Text style={styles.sectionTitle}>How was your Meal?</Text>
+            <Text style={styles.sectionSubtitle}>Sharing will help us understand your tastes and personalize dish recommendations.</Text>
             <TextInput
-              key={`liked-${mealId}`}
+              key={`thoughts-${mealId}`}
               style={styles.commentInput}
-              placeholder="What did you enjoy about this meal..."
+              placeholder="What did you enjoy about this meal? What could be better?"
               placeholderTextColor="#999"
               multiline={true}
-              value={likedComment}
-              onChangeText={setLikedComment}
-              maxLength={300}
-            />
-
-            <Text style={styles.sectionTitle}>What could be Better:</Text>
-            <TextInput
-              key={`disliked-${mealId}`}
-              style={styles.commentInput}
-              placeholder="What could be improved..."
-              placeholderTextColor="#999"
-              multiline={true}
-              value={dislikedComment}
-              onChangeText={setDislikedComment}
-              maxLength={300}
+              value={thoughts}
+              onChangeText={setThoughts}
+              maxLength={600}
             />
           </View>
         </View>
@@ -456,8 +558,15 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 10,
+    marginBottom: 4,
     color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#1a2b49',
+    marginBottom: 10,
+    fontStyle: 'italic',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingContainer: {
@@ -474,7 +583,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#1a2b49',
     textAlign: 'center',
     fontStyle: 'italic',

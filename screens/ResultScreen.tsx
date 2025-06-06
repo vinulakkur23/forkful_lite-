@@ -41,6 +41,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     restaurant,
     meal,
     mealType = "Restaurant",
+    thoughts = '',
+    // Keep for backward compatibility
     likedComment = '',
     dislikedComment = ''
   } = route.params;
@@ -641,9 +643,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           mealType: mealType || 'Restaurant', // Include the meal type
           // Store city as a top-level field for easier access and querying
           city: cityInfo ? cityInfo.trim() : '',
-          // Include user comments about what they liked and didn't like
-          // Save comments with proper formatting
-          comments: {
+          // Include user comments/thoughts about the meal
+          comments: thoughts ? {
+            thoughts: thoughts
+          } : {
+            // Fallback to old format for backward compatibility
             liked: likedComment || '',
             disliked: dislikedComment || ''
           },
@@ -694,6 +698,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         processImageMetadata(docRef.id, imageUrl, {
           mealName: meal || undefined,
           restaurantName: restaurant || undefined,
+          thoughts: thoughts || undefined,
+          // Keep for backward compatibility
           likedComments: likedComment || undefined,
           dislikedComments: dislikedComment || undefined
         })

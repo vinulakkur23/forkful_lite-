@@ -212,7 +212,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Apply filter whenever meals or active filters change
   useEffect(() => {
     console.log('HomeScreen: activeFilters changed:', activeFilters);
-    applyFilter();
+    // Add a small delay to prevent rapid successive calls
+    const timeoutId = setTimeout(() => {
+      if (isMountedRef.current) {
+        applyFilter();
+      }
+    }, 50);
+    
+    return () => clearTimeout(timeoutId);
   }, [allNearbyMeals, activeFilters]);
 
   // Restore scroll position when returning to this screen

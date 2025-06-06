@@ -57,6 +57,8 @@ declare module '../App' {
         priority?: number;
       } | null;
       rating: number;
+      thoughts?: string;
+      // Keep for backward compatibility
       likedComment?: string;
       dislikedComment?: string;
       suggestionData?: any;
@@ -93,7 +95,7 @@ interface LocationData {
 }
 
 const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, rating, likedComment, dislikedComment } = route.params;
+  const { photo, rating, thoughts, likedComment, dislikedComment } = route.params;
   
   // Create a session ID to track this specific photo instance
   const photoSessionRef = useRef<string>(`photo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
@@ -842,6 +844,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         restaurant: mealType === "Restaurant" ? restaurant : "", // Only include restaurant for Restaurant type
         meal: mealName,
         mealType: mealType, // Include the meal type for saving to Firebase
+        thoughts: thoughts,
+        // Keep for backward compatibility
         likedComment: likedComment,
         dislikedComment: dislikedComment,
         _uniqueKey: sessionId
