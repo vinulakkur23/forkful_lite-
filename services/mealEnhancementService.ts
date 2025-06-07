@@ -5,6 +5,7 @@ export interface MealEnhancement {
   content: string;
   title: string;
   rating?: number; // Optional numeric rating for photo_rating type
+  photo_score?: number; // Optional photo score (always calculated when image present)
 }
 
 // Generate a haiku about the meal from food image and dish name
@@ -281,7 +282,8 @@ export const getRandomMealEnhancement = async (
       type: data.type || 'haiku',
       content: data.content || 'Food on the table\nMoments shared with those we love\nMemories made here',
       title: data.title || '✨ Something Special',
-      rating: data.rating // Include rating if present (for photo_rating type)
+      rating: data.rating, // Include rating if present (for photo_rating type)
+      photo_score: data.photo_score // Include photo score if present (always when image provided)
     };
     
     return enhancement;
@@ -293,6 +295,54 @@ export const getRandomMealEnhancement = async (
       content: `Food on the table\nMoments shared with those we love\nMemories made here`,
       title: 'A Haiku for Your Meal'
     };
+  }
+};
+
+// Get just the photo score (no feedback) - for saving to Firebase
+export const getPhotoScore = async (imageUri: string): Promise<number> => {
+  try {
+    const formData = new FormData();
+    
+    // Add image
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'meal.jpg',
+    } as any);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+
+    try {
+      const response = await fetch(API_CONFIG.getUrl(API_CONFIG.ENDPOINTS.MEAL_ENHANCEMENT_PHOTO_SCORE), {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return data.rating || 5; // Default to 5 if no rating
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Photo score request timed out.');
+      }
+      throw fetchError;
+    }
+  } catch (error) {
+    console.error('Error getting photo score:', error);
+    return 5; // Default score on error
   }
 };
 

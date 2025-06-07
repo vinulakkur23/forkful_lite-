@@ -17,7 +17,7 @@ import { processImageMetadata } from '../services/aiMetadataService';
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
 // Import meal enhancement service
-import { getRandomMealEnhancement, getEnhancementTitle, MealEnhancement } from '../services/mealEnhancementService';
+import { getRandomMealEnhancement, getEnhancementTitle, MealEnhancement, getPhotoScore } from '../services/mealEnhancementService';
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -55,6 +55,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // Meal enhancement states
   const [enhancement, setEnhancement] = useState<MealEnhancement | null>(null);
   const [enhancementLoading, setEnhancementLoading] = useState(false);
+  const [photoScore, setPhotoScore] = useState<number | null>(null); // Store photo score from enhancement
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}`;
@@ -122,6 +123,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         ? `${restaurant}, ${location.city}`
         : restaurant || 'Local Restaurant';
       
+      // First, get the random enhancement
       const enhancement = await getRandomMealEnhancement(
         meal || 'Unknown Dish',
         restaurantWithCity,
@@ -131,6 +133,24 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       );
       
       setEnhancement(enhancement);
+      
+      // Only calculate photo score separately if enhancement is NOT photo_rating
+      if (enhancement.type === 'photo_rating' && enhancement.rating) {
+        // Use the score from the photo rating enhancement
+        setPhotoScore(enhancement.rating);
+        console.log(`📸 Photo score from rating enhancement: ${enhancement.rating}/10`);
+      } else if (photo?.uri) {
+        // Calculate photo score separately since enhancement didn't provide it
+        try {
+          const calculatedPhotoScore = await getPhotoScore(photo.uri);
+          setPhotoScore(calculatedPhotoScore);
+          console.log(`📸 Photo score calculated separately: ${calculatedPhotoScore}/10`);
+        } catch (error) {
+          console.error('Error calculating photo score:', error);
+          setPhotoScore(6.5); // Default fallback
+        }
+      }
+      
       console.log('✅ Enhancement loaded:', enhancement.type);
     } catch (error) {
       console.error('❌ Error loading meal enhancement:', error);
@@ -631,6 +651,23 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Extra logging for debugging
         console.log("Final city info to be saved:", cityInfo);
         
+        // Use photo score from enhancement if available, otherwise calculate it
+        let finalPhotoScore = photoScore || 5; // Use enhancement score or default
+        
+        // If we don't have a photo score from enhancement, calculate it now
+        if (!photoScore) {
+          try {
+            console.log("Calculating photo score for Firebase (no enhancement score available)...");
+            finalPhotoScore = await getPhotoScore(imageUrl);
+            console.log(`Photo score calculated: ${finalPhotoScore}/10`);
+          } catch (scoreError) {
+            console.error("Error calculating photo score:", scoreError);
+            finalPhotoScore = 5; // Continue with default score
+          }
+        } else {
+          console.log(`Using photo score from enhancement: ${finalPhotoScore}/10`);
+        }
+        
         // Save meal data to Firestore, ensuring location data is preserved
         const mealData = {
           userId: user.uid,
@@ -671,7 +708,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           createdAt: firestore.FieldValue.serverTimestamp(),
           sessionId,
           platform: Platform.OS,
-          appVersion: '1.0.0' // Add app version for debugging
+          appVersion: '1.0.0', // Add app version for debugging
+          photoScore: finalPhotoScore // Always save the photo quality score
         };
         
         // Final log of what's being saved to database
@@ -941,17 +979,26 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.enhancementText}>{enhancement.content}</Text>
                     {enhancement.rating && (
                       <View style={styles.ratingStarsContainer}>
-                        {[...Array(10)].map((_, index) => (
-                          <Text 
-                            key={index} 
-                            style={[
-                              styles.ratingStar,
-                              index < enhancement.rating! ? styles.ratingStarFilled : styles.ratingStarEmpty
-                            ]}
-                          >
-                            ★
-                          </Text>
-                        ))}
+                        {[...Array(10)].map((_, index) => {
+                          const starValue = index + 1;
+                          const rating = enhancement.rating!;
+                          let starStyle = styles.ratingStarEmpty;
+                          
+                          if (rating >= starValue) {
+                            starStyle = styles.ratingStarFilled;
+                          } else if (rating >= starValue - 0.5) {
+                            starStyle = styles.ratingStarHalf;
+                          }
+                          
+                          return (
+                            <Text 
+                              key={index} 
+                              style={[styles.ratingStar, starStyle]}
+                            >
+                              ★
+                            </Text>
+                          );
+                        })}
                       </View>
                     )}
                   </View>
@@ -1373,6 +1420,9 @@ const styles = StyleSheet.create({
   },
   ratingStarFilled: {
     color: '#ffc008',
+  },
+  ratingStarHalf: {
+    color: '#ffdb4d', // Lighter shade for half stars
   },
   ratingStarEmpty: {
     color: '#ddd',
