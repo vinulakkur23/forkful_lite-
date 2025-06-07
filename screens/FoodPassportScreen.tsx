@@ -34,6 +34,7 @@ import MapView, { Marker, Callout } from 'react-native-maps';
 import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
+import { refreshUserCounts } from '../services/countRefreshService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -772,6 +773,38 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                                 </>
                                             )}
                                         </View>
+                                        {/* Debug button - only show for own profile */}
+                                        {(!userId || userId === auth().currentUser?.uid) && (
+                                            <TouchableOpacity 
+                                                style={styles.debugButton}
+                                                onPress={async () => {
+                                                    Alert.alert(
+                                                        "Refresh Counts",
+                                                        "This will recalculate your achievement counts (cities, cuisines, sushi, takeout) based on your actual meals. Continue?",
+                                                        [
+                                                            { text: "Cancel", style: "cancel" },
+                                                            { 
+                                                                text: "Refresh", 
+                                                                onPress: async () => {
+                                                                    const result = await refreshUserCounts();
+                                                                    if (result.success && result.counts) {
+                                                                        Alert.alert(
+                                                                            "Counts Refreshed",
+                                                                            `Updated counts:\n• Cities: ${result.counts.cities}\n• Cuisines: ${result.counts.cuisines}\n• Sushi meals: ${result.counts.sushi}\n• Takeout meals: ${result.counts.takeout}`,
+                                                                            [{ text: "OK", onPress: () => fetchMealEntries() }]
+                                                                        );
+                                                                    } else {
+                                                                        Alert.alert("Error", result.error || "Failed to refresh counts");
+                                                                    }
+                                                                }
+                                                            }
+                                                        ]
+                                                    );
+                                                }}
+                                            >
+                                                <Text style={styles.debugButtonText}>🔄 Refresh Counts</Text>
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 </View>
                             </View>
@@ -1125,6 +1158,22 @@ const styles = StyleSheet.create({
         fontSize: 20,
         textAlign: 'center',
         lineHeight: 20,
+    },
+    debugButton: {
+        marginTop: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        backgroundColor: 'rgba(230, 57, 70, 0.1)',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(230, 57, 70, 0.3)',
+        alignSelf: 'flex-start',
+    },
+    debugButtonText: {
+        fontSize: 12,
+        color: '#E63946',
+        fontWeight: '500',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
 });
 
