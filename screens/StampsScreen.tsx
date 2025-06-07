@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
-import { firebase, auth } from '../firebaseConfig';
+import { firebase, auth, firestore } from '../firebaseConfig';
 import { Achievement, UserAchievement } from '../types/achievements';
 import { getUserAchievements, getAchievementById, getAllAchievements } from '../services/achievementService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -32,16 +33,28 @@ type Props = {
   userId?: string;
 };
 
+interface TopRatedPhoto {
+  id: string;
+  photoUrl: string;
+  photoScore: number;
+  meal?: string;
+  restaurant?: string;
+}
+
 const StampsScreen: React.FC<Props> = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementItems, setAchievementItems] = useState<AchievementDisplayItem[]>([]);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDisplayItem | null>(null);
+  const [topRatedPhotos, setTopRatedPhotos] = useState<TopRatedPhoto[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState<TopRatedPhoto | null>(null);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
   useEffect(() => {
     loadAchievements();
+    loadTopRatedPhotos();
   }, [userId]);
 
   const loadAchievements = async () => {
@@ -80,6 +93,44 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
       Alert.alert('Error', 'Failed to load achievements');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTopRatedPhotos = async () => {
+    try {
+      setPhotosLoading(true);
+      
+      const targetUserId = userId || auth().currentUser?.uid;
+      if (!targetUserId) return;
+
+      console.log(`📸 Loading top rated photos for user: ${targetUserId}`);
+      
+      // Query user's meals with photo scores, ordered by score descending, limit to 3
+      const mealsQuery = await firestore()
+        .collection('mealEntries')
+        .where('userId', '==', targetUserId)
+        .where('photoScore', '>=', 1) // Only include photos with scores
+        .orderBy('photoScore', 'desc')
+        .limit(3)
+        .get();
+
+      const photos: TopRatedPhoto[] = mealsQuery.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          photoUrl: data.photoUrl,
+          photoScore: data.photoScore || 0,
+          meal: data.meal,
+          restaurant: data.restaurant
+        };
+      });
+
+      console.log(`📸 Found ${photos.length} top rated photos:`, photos.map(p => `${p.meal} - ${p.photoScore}`));
+      setTopRatedPhotos(photos);
+    } catch (error) {
+      console.error('Error loading top rated photos:', error);
+    } finally {
+      setPhotosLoading(false);
     }
   };
 
@@ -198,8 +249,34 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
     );
   };
 
+  const renderTopPhotoItem = ({ item }: { item: TopRatedPhoto }) => (
+    <TouchableOpacity 
+      style={styles.topPhotoItem}
+      onPress={() => setSelectedPhoto(item)}
+    >
+      <View style={styles.photoContainer}>
+        {/* Background photo - smaller, centered within frame */}
+        <Image
+          source={{ uri: item.photoUrl }}
+          style={styles.topPhotoImage}
+          resizeMode="cover"
+        />
+        {/* PNG frame overlay - larger to frame the photo */}
+        <Image
+          source={require('../assets/icons/frames/photo-frame.png')}
+          style={styles.photoFrameOverlay}
+          resizeMode="contain"
+        />
+      </View>
+      <Text style={styles.photoScore}>{item.photoScore.toFixed(1)}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+    >
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
@@ -207,12 +284,16 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
         </View>
       ) : (
         <>
+          {/* Stamps Section */}
+          <Text style={styles.sectionTitle}>Stamps</Text>
+          
           <FlatList
             data={achievementItems.filter(item => item.earned)}
             renderItem={renderAchievementItem}
             keyExtractor={item => item.id}
             numColumns={3}
             contentContainerStyle={styles.stampsList}
+            scrollEnabled={false}
           />
           
           {/* Empty state */}
@@ -226,6 +307,23 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
             </View>
           )}
 
+          {/* Top Rated Photos Section */}
+          {!photosLoading && topRatedPhotos.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>These could Hang up on a Wall</Text>
+              <Text style={styles.subtitle}>(Your best, ai-rated food photography)</Text>
+              
+              <FlatList
+                data={topRatedPhotos}
+                renderItem={renderTopPhotoItem}
+                keyExtractor={item => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.topPhotosList}
+              />
+            </>
+          )}
+
           {/* DEBUG: Clear stamps button - show for testing */}
           <TouchableOpacity 
             style={styles.debugButton}
@@ -234,6 +332,49 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
             <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
           </TouchableOpacity>
           
+          {/* Photo detail modal */}
+          {selectedPhoto && (
+            <View style={styles.photoDetailOverlay}>
+              <TouchableOpacity 
+                style={styles.photoDetailOverlay}
+                onPress={() => setSelectedPhoto(null)}
+                activeOpacity={1}
+              >
+                <View style={styles.photoDetailContainer}>
+                  <TouchableOpacity 
+                    style={styles.photoCloseButton}
+                    onPress={() => setSelectedPhoto(null)}
+                  >
+                    <Text style={styles.closeButtonX}>×</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.enlargedPhotoContainer}>
+                    <Image
+                      source={{ uri: selectedPhoto.photoUrl }}
+                      style={styles.enlargedPhoto}
+                      resizeMode="cover"
+                    />
+                    <Image
+                      source={require('../assets/icons/frames/photo-frame-large.png')}
+                      style={styles.enlargedPhotoFrame}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  
+                  <View style={styles.photoDetailInfo}>
+                    <Text style={styles.photoDetailScore}>Rating: {selectedPhoto.photoScore.toFixed(1)}/10</Text>
+                    {selectedPhoto.meal && (
+                      <Text style={styles.photoDetailMeal}>{selectedPhoto.meal}</Text>
+                    )}
+                    {selectedPhoto.restaurant && (
+                      <Text style={styles.photoDetailRestaurant}>{selectedPhoto.restaurant}</Text>
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Achievement detail modal - zoomed stamp */}
           {selectedAchievement && (
             <View style={styles.detailOverlay}>
@@ -286,7 +427,7 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
           )}
         </>
       )}
-    </View>
+    </ScrollView>
   );
 };
 
@@ -294,6 +435,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f8f8',
+  },
+  scrollContent: {
+    paddingBottom: 50, // Extra space at bottom for comfortable scrolling
   },
   loadingContainer: {
     flex: 1,
@@ -522,6 +666,122 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Top Photos Section Styles
+  topPhotosList: {
+    paddingHorizontal: 15,
+    paddingBottom: 20,
+  },
+  topPhotoItem: {
+    alignItems: 'center',
+    marginRight: 30, // Even more space between photos
+  },
+  photoContainer: {
+    position: 'relative',
+    width: 120, // Even bigger container for frame
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topPhotoImage: {
+    width: 80, // Slightly bigger photo
+    height: 80,
+    borderRadius: 8,
+    position: 'absolute',
+  },
+  photoFrameOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 120, // Full frame size
+    height: 120,
+    zIndex: 1,
+  },
+  photoScore: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ffc008',
+    marginTop: 5,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Photo Modal Styles
+  photoDetailOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 200,
+  },
+  photoDetailContainer: {
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    backgroundColor: '#FAF3E0',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+  },
+  photoCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 5,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  enlargedPhotoContainer: {
+    position: 'relative',
+    width: 320,
+    height: 320,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  enlargedPhoto: {
+    width: 210,
+    height: 210,
+    borderRadius: 15,
+    position: 'absolute',
+  },
+  enlargedPhotoFrame: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 320,
+    height: 320,
+    zIndex: 1,
+  },
+  photoDetailInfo: {
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  photoDetailScore: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffc008',
+    marginBottom: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  photoDetailMeal: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a2b49',
+    marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
+  },
+  photoDetailRestaurant: {
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
   },
 });
 
