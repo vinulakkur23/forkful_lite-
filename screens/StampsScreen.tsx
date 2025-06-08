@@ -105,13 +105,12 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
 
       console.log(`📸 Loading top rated photos for user: ${targetUserId}`);
       
-      // Query user's meals with photo scores, ordered by score descending, limit to 3
+      // Query user's meals with photo scores above 5.2, ordered by score descending
       const mealsQuery = await firestore()
         .collection('mealEntries')
         .where('userId', '==', targetUserId)
-        .where('photoScore', '>=', 1) // Only include photos with scores
+        .where('photoScore', '>=', 5.2) // Only include photos with scores above 5.2
         .orderBy('photoScore', 'desc')
-        .limit(3)
         .get();
 
       const photos: TopRatedPhoto[] = mealsQuery.docs.map(doc => {
@@ -268,7 +267,6 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
           resizeMode="contain"
         />
       </View>
-      <Text style={styles.photoScore}>{item.photoScore.toFixed(1)}</Text>
     </TouchableOpacity>
   );
 
@@ -362,7 +360,6 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
                   </View>
                   
                   <View style={styles.photoDetailInfo}>
-                    <Text style={styles.photoDetailScore}>Rating: {selectedPhoto.photoScore.toFixed(1)}/10</Text>
                     {selectedPhoto.meal && (
                       <Text style={styles.photoDetailMeal}>{selectedPhoto.meal}</Text>
                     )}
@@ -697,13 +694,6 @@ const styles = StyleSheet.create({
     height: 120,
     zIndex: 1,
   },
-  photoScore: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ffc008',
-    marginTop: 5,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
   // Photo Modal Styles
   photoDetailOverlay: {
     position: 'absolute',
@@ -761,13 +751,6 @@ const styles = StyleSheet.create({
   photoDetailInfo: {
     alignItems: 'center',
     marginTop: 15,
-  },
-  photoDetailScore: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffc008',
-    marginBottom: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   photoDetailMeal: {
     fontSize: 16,

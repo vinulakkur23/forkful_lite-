@@ -4,6 +4,7 @@ const {initializeApp} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 const {getStorage} = require('firebase-admin/storage');
 const sharp = require('sharp');
+const fetch = require('node-fetch');
 
 // Initialize Firebase Admin
 initializeApp();
@@ -303,8 +304,9 @@ exports.compressExistingImages = onRequest(async (req, res) => {
         // Download the file
         const [fileBuffer] = await file.download();
         
-        // Compress the image using Sharp (same settings as your app)
+        // Compress the image using Sharp (preserve original orientation)
         const compressedBuffer = await sharp(fileBuffer)
+          .rotate() // Auto-rotate based on EXIF data to correct orientation
           .resize(800, 800, {
             fit: 'inside',
             withoutEnlargement: true,
@@ -382,6 +384,135 @@ exports.compressExistingImages = onRequest(async (req, res) => {
   } catch (error) {
     console.error('Error in image compression:', error);
     res.status(500).json({error: `Failed to compress images: ${error.message}`});
+  }
+});
+
+// Function to rate all photos using the photo rating API (including re-rating existing scores)
+exports.rateUnratedPhotos = onRequest(async (req, res) => {
+  console.log('Rate all photos function called via HTTP');
+  
+  try {
+    console.log('Starting rating of all photos (including re-rating)...');
+    
+    // Get all meal entries that have photos but no photoScore
+    const unratedQuery = await db.collection('mealEntries')
+      .where('photoUrl', '!=', null)
+      .get();
+    
+    console.log(`Found ${unratedQuery.docs.length} total meal entries with photos`);
+    
+    // Don't filter - process all meals with photos to re-rate them
+    const unratedMeals = unratedQuery.docs;
+    
+    console.log(`Found ${unratedMeals.length} meals with photos to rate/re-rate`);
+    
+    if (unratedMeals.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No photos found to rate',
+        processed: 0,
+        errors: 0
+      });
+    }
+    
+    let processedCount = 0;
+    let errorCount = 0;
+    const results = [];
+    
+    // Process slowly to avoid rate limits - 5 per minute = 1 every 12 seconds
+    const batchSize = 1; // Process one at a time
+    const delayBetweenPhotos = 12000; // 12 seconds between each photo
+    
+    for (let i = 0; i < unratedMeals.length; i += batchSize) {
+      const doc = unratedMeals[i];
+      console.log(`Processing photo ${i + 1} of ${unratedMeals.length} (${Math.round((i / unratedMeals.length) * 100)}% complete)`);
+      
+      // Process single photo
+      const processPhoto = async () => {
+        try {
+          const mealData = doc.data();
+          const mealId = doc.id;
+          
+          console.log(`Rating photo for meal: ${mealId}`);
+          
+          // Call the photo rating API endpoint
+          const ratingResponse = await fetch('https://dishitout-imageinhancer.onrender.com/rate-photo', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `image_url=${encodeURIComponent(mealData.photoUrl)}`
+          });
+          
+          if (!ratingResponse.ok) {
+            throw new Error(`API request failed: ${ratingResponse.status}`);
+          }
+          
+          const ratingData = await ratingResponse.json();
+          const photoScore = ratingData.rating || 5.0; // Default fallback
+          
+          // Update the meal entry with the photo score
+          await db.collection('mealEntries').doc(mealId).update({
+            photoScore: photoScore,
+            photoRatedAt: new Date()
+          });
+          
+          console.log(`✅ Rated meal ${mealId}: ${photoScore}/10`);
+          
+          processedCount++;
+          return {
+            mealId,
+            photoScore,
+            success: true
+          };
+          
+        } catch (error) {
+          console.error(`❌ Error rating meal ${doc.id}:`, error);
+          errorCount++;
+          return {
+            mealId: doc.id,
+            error: error.message,
+            success: false
+          };
+        }
+      };
+      
+      // Process the single photo
+      try {
+        const result = await processPhoto();
+        results.push(result);
+      } catch (error) {
+        console.error(`Failed to process photo ${i + 1}:`, error);
+      }
+      
+      // Add delay before next photo (except for the last one)
+      if (i < unratedMeals.length - 1) {
+        console.log(`Waiting 12 seconds before next photo to avoid rate limits...`);
+        await new Promise(resolve => setTimeout(resolve, delayBetweenPhotos));
+      }
+    }
+    
+    const summary = {
+      totalFound: unratedMeals.length,
+      processed: processedCount,
+      errors: errorCount,
+      successRate: processedCount > 0 ? ((processedCount / (processedCount + errorCount)) * 100).toFixed(1) + '%' : '0%'
+    };
+    
+    console.log('Photo rating completed:', summary);
+    
+    const result = {
+      success: true,
+      summary,
+      message: `Successfully rated ${processedCount} photos out of ${unratedMeals.length} total meals`,
+      results: results.slice(0, 10) // First 10 results as sample
+    };
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('Error in photo rating:', error);
+    res.status(500).json({error: `Failed to rate photos: ${error.message}`});
   }
 });
 

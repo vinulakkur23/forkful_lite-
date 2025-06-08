@@ -977,30 +977,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                 ) : enhancement.type === 'photo_rating' ? (
                   <View style={styles.photoRatingContainer}>
                     <Text style={styles.enhancementText}>{enhancement.content}</Text>
-                    {enhancement.rating && (
-                      <View style={styles.ratingStarsContainer}>
-                        {[...Array(10)].map((_, index) => {
-                          const starValue = index + 1;
-                          const rating = enhancement.rating!;
-                          let starStyle = styles.ratingStarEmpty;
-                          
-                          if (rating >= starValue) {
-                            starStyle = styles.ratingStarFilled;
-                          } else if (rating >= starValue - 0.5) {
-                            starStyle = styles.ratingStarHalf;
-                          }
-                          
-                          return (
-                            <Text 
-                              key={index} 
-                              style={[styles.ratingStar, starStyle]}
-                            >
-                              ★
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    )}
                   </View>
                 ) : (
                   <Text style={styles.enhancementText}>{enhancement.content}</Text>
@@ -1407,25 +1383,6 @@ const styles = StyleSheet.create({
   // Photo rating specific styles
   photoRatingContainer: {
     alignItems: 'center',
-  },
-  ratingStarsContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ratingStar: {
-    fontSize: 18,
-    marginHorizontal: 1,
-  },
-  ratingStarFilled: {
-    color: '#ffc008',
-  },
-  ratingStarHalf: {
-    color: '#ffdb4d', // Lighter shade for half stars
-  },
-  ratingStarEmpty: {
-    color: '#ddd',
   },
 });
 

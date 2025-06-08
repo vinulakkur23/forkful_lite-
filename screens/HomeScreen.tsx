@@ -56,6 +56,7 @@ interface MealEntry {
   userName?: string;
   userPhoto?: string;
   city?: string; // Add city field for filtering
+  mealType?: string; // "Restaurant" or "Homemade"
   location: {
     latitude: number;
     longitude: number;
@@ -324,6 +325,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           userName,
           userPhoto,
           city: data.city || '', // Include city for filtering
+          mealType: data.mealType || 'Restaurant', // Include meal type (defaults to Restaurant for older entries)
           location: data.location,
           distance: distance,
           createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -405,17 +407,28 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       });
     }
     
-    // If no filters are active, show all meals
+    // Start by filtering out homemade food (regardless of active filters)
+    let result = allNearbyMeals.filter(meal => {
+      // Check if meal is marked as homemade using the mealType field
+      const isHomemade = meal.mealType === "Homemade";
+      
+      if (isHomemade) {
+        console.log(`HomeScreen: Filtering out homemade meal: "${meal.meal}" (mealType: ${meal.mealType})`);
+      }
+      
+      return !isHomemade; // Exclude homemade meals
+    });
+    
+    console.log(`HomeScreen: After filtering out homemade: ${allNearbyMeals.length} meals -> ${result.length} meals remain`);
+    
+    // If no other filters are active, show the non-homemade meals
     if (!activeFilters || activeFilters.length === 0) {
-      console.log('HomeScreen: No active filters, showing all meals');
-      setNearbyMeals(allNearbyMeals);
+      console.log('HomeScreen: No active filters, showing all non-homemade meals');
+      setNearbyMeals(result);
       return;
     }
     
-    console.log(`HomeScreen: Applying ${activeFilters.length} filters:`, JSON.stringify(activeFilters));
-    
-    // Start with all meals
-    let result = [...allNearbyMeals];
+    console.log(`HomeScreen: Applying ${activeFilters.length} additional filters:`, JSON.stringify(activeFilters));
     
     // Apply each filter sequentially
     activeFilters.forEach(filter => {
