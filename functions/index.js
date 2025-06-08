@@ -162,6 +162,11 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
         // Recalculate takeout meals
         const takeoutMealCount = meals.filter((meal) => isTakeoutMeal(meal)).length;
         
+        // Recalculate high-rated photos (photoScore >= 5.2)
+        const highRatedPhotoCount = meals.filter((meal) => {
+          return meal.photoScore && meal.photoScore >= 5.2;
+        }).length;
+        
         // Update user document
         await db.collection('users').doc(userId).update({
           uniqueCityCount: uniqueCities.size,
@@ -170,6 +175,7 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
           uniqueCuisines: Array.from(uniqueCuisines),
           sushiMealCount: sushiMealCount,
           takeoutMealCount: takeoutMealCount,
+          highRatedPhotoCount: highRatedPhotoCount,
           lastCountRefresh: new Date(),
         });
         
@@ -178,6 +184,7 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
           cuisines: uniqueCuisines.size,
           sushi: sushiMealCount,
           takeout: takeoutMealCount,
+          highRatedPhotos: highRatedPhotoCount,
         });
         
         processedUsers++;
@@ -222,6 +229,7 @@ exports.manualCountRefresh = onCall(async (request) => {
     const uniqueCuisines = new Set();
     let sushiMealCount = 0;
     let takeoutMealCount = 0;
+    let highRatedPhotoCount = 0;
     
     meals.forEach((meal) => {
       const city = extractCityFromMeal(meal);
@@ -232,6 +240,7 @@ exports.manualCountRefresh = onCall(async (request) => {
       
       if (isSushiMeal(meal)) sushiMealCount++;
       if (isTakeoutMeal(meal)) takeoutMealCount++;
+      if (meal.photoScore && meal.photoScore >= 5.2) highRatedPhotoCount++;
     });
     
     // Update user document
@@ -242,6 +251,7 @@ exports.manualCountRefresh = onCall(async (request) => {
       uniqueCuisines: Array.from(uniqueCuisines),
       sushiMealCount: sushiMealCount,
       takeoutMealCount: takeoutMealCount,
+      highRatedPhotoCount: highRatedPhotoCount,
       lastCountRefresh: new Date(),
     });
     
@@ -252,6 +262,7 @@ exports.manualCountRefresh = onCall(async (request) => {
         cuisines: uniqueCuisines.size,
         sushi: sushiMealCount,
         takeout: takeoutMealCount,
+        highRatedPhotos: highRatedPhotoCount,
       },
     };
   } catch (error) {

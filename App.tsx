@@ -11,7 +11,9 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getPhotoWithMetadata } from './services/photoLibraryService';
 import RNFS from 'react-native-fs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import GlobalAchievementListener from './components/GlobalAchievementListener';
+import OnboardingOverlay from './components/OnboardingOverlay';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -503,6 +505,7 @@ function TabNavigator() {
 const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null); // null = checking, true/false = determined
 
   // Create a navigation reference to access navigation state
   const navigationRef = useRef(null);
@@ -510,6 +513,34 @@ const App: React.FC = () => {
   // Track previous and current state to identify screen changes
   const routeNameRef = useRef<string | undefined>();
   const prevStateRef = useRef<NavigationState | null>(null);
+
+  // Check if this is the first launch
+  useEffect(() => {
+    const checkFirstLaunch = async () => {
+      try {
+        const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
+        console.log('[App] Checking first launch:', hasSeenOnboarding);
+        setShowOnboarding(hasSeenOnboarding === null);
+      } catch (error) {
+        console.error('[App] Error checking first launch:', error);
+        setShowOnboarding(false); // Default to not showing onboarding if there's an error
+      }
+    };
+    
+    checkFirstLaunch();
+  }, []);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+      setShowOnboarding(false);
+      console.log('[App] Onboarding completed and saved');
+    } catch (error) {
+      console.error('[App] Error saving onboarding completion:', error);
+      setShowOnboarding(false); // Still hide onboarding even if saving fails
+    }
+  };
 
   // Configure Google Sign-In
   useEffect(() => {
@@ -669,7 +700,8 @@ const App: React.FC = () => {
     return route.name;
   };
 
-  if (initializing) {
+  // Show loading while initializing or checking onboarding status
+  if (initializing || showOnboarding === null) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff6b6b" />
@@ -699,6 +731,12 @@ const App: React.FC = () => {
       </View>
       {/* GlobalAchievementListener is rendered outside the main View to prevent layout interference */}
       <GlobalAchievementListener />
+      
+      {/* Onboarding overlay - shows on first app launch */}
+      <OnboardingOverlay
+        visible={showOnboarding === true}
+        onComplete={handleOnboardingComplete}
+      />
     </>
   );
 };
