@@ -11,7 +11,8 @@ import {
   Dimensions,
   Alert,
   Platform,
-  SafeAreaView
+  SafeAreaView,
+  ScrollView
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -35,6 +36,7 @@ import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
+import { getCityImageUrl, preloadCityImages } from '../services/cityImageService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -107,6 +109,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
         totalCheers: 0,
         badgeCount: 0
     });
+    
+    // State for cities and their images
+    const [uniqueCities, setUniqueCities] = useState<string[]>([]);
+    const [cityImages, setCityImages] = useState<{ [city: string]: string }>({});
 
     // Tab view state
     const [tabIndex, setTabIndex] = useState(0);
@@ -268,8 +274,44 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 });
             }
 
-            // Load user profile
+            // Load user profile and cities
             const isOwnProfile = !userId || userId === auth().currentUser?.uid;
+            
+            // Load user document to get cities
+            try {
+                const userDoc = await firestore()
+                    .collection('users')
+                    .doc(targetUserId)
+                    .get();
+                
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    const cities = userData?.uniqueCities || [];
+                    
+                    if (!isMountedRef.current) return;
+                    setUniqueCities(cities);
+                    
+                    // Preload city images
+                    if (cities.length > 0) {
+                        preloadCityImages(cities).then(() => {
+                            // Load city images
+                            const loadCityImages = async () => {
+                                const images: { [city: string]: string } = {};
+                                for (const city of cities) {
+                                    images[city] = await getCityImageUrl(city);
+                                }
+                                if (isMountedRef.current) {
+                                    setCityImages(images);
+                                }
+                            };
+                            loadCityImages();
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading user cities:', error);
+            }
+            
             if (!isOwnProfile && userId) {
                 // Load other user's profile
                 const profile: any = {
@@ -734,6 +776,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
                         ListHeaderComponent={() => (
+                            <>
                             <View style={styles.profileCard}>
                                 {/* Follow button in top right corner */}
                                 {userId && userId !== auth().currentUser?.uid && (
@@ -808,6 +851,52 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                     </View>
                                 </View>
                             </View>
+                            
+                            {/* Cities Section */}
+                            {uniqueCities.length > 0 && (
+                                <View style={styles.citiesSection}>
+                                    <Text style={styles.citiesSectionTitle}>Cities</Text>
+                                    <FlatList
+                                        horizontal
+                                        data={uniqueCities}
+                                        keyExtractor={(city) => city}
+                                        showsHorizontalScrollIndicator={false}
+                                        renderItem={({ item: city }) => (
+                                            <TouchableOpacity
+                                                style={styles.cityItem}
+                                                onPress={() => {
+                                                    // Navigate to FoodPassport with map tab and city filter
+                                                    // Since MapScreen is a tab within FoodPassport, we need a different approach
+                                                    Alert.alert(
+                                                        'City Filter',
+                                                        `View all meals in ${city}?`,
+                                                        [
+                                                            { text: 'Cancel', style: 'cancel' },
+                                                            {
+                                                                text: 'View on Map',
+                                                                onPress: () => {
+                                                                    // Switch to map tab with city filter
+                                                                    // This would require updating the filter state in the wrapper
+                                                                    setTabIndex(1); // Switch to map tab
+                                                                    // TODO: Implement city filter
+                                                                }
+                                                            }
+                                                        ]
+                                                    );
+                                                }}
+                                            >
+                                                <Image
+                                                    source={{ uri: cityImages[city] || 'https://via.placeholder.com/80' }}
+                                                    style={styles.cityImage}
+                                                />
+                                                <Text style={styles.cityName} numberOfLines={1}>{city}</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        contentContainerStyle={styles.citiesList}
+                                    />
+                                </View>
+                            )}
+                            </>
                         )}
                         refreshControl={
                             <RefreshControl
@@ -1173,6 +1262,40 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#E63946',
         fontWeight: '500',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    // Cities section styles
+    citiesSection: {
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    citiesSectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1a2b49',
+        marginBottom: 12,
+        paddingHorizontal: 16,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    citiesList: {
+        paddingHorizontal: 16,
+    },
+    cityItem: {
+        marginRight: 12,
+        alignItems: 'center',
+    },
+    cityImage: {
+        width: 120,
+        height: 120,
+        borderRadius: 12,
+        backgroundColor: '#f0f0f0',
+        marginBottom: 8,
+    },
+    cityName: {
+        fontSize: 13,
+        color: '#666',
+        maxWidth: 120,
+        textAlign: 'center',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
 });

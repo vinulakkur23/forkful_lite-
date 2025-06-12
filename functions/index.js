@@ -1,5 +1,6 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onCall, onRequest} = require('firebase-functions/v2/https');
+const {onDocumentUpdated} = require('firebase-functions/v2/firestore');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 const {getStorage} = require('firebase-admin/storage');
@@ -24,7 +25,7 @@ const extractCityFromMeal = (meal) => {
     const parts = meal.restaurant.split(',');
     if (parts.length > 1) {
       const cityPart = parts[1].trim();
-      city = cityPart.split(' ')[0];
+      city = cityPart;
     }
   }
   
@@ -395,6 +396,272 @@ exports.compressExistingImages = onRequest(async (req, res) => {
   } catch (error) {
     console.error('Error in image compression:', error);
     res.status(500).json({error: `Failed to compress images: ${error.message}`});
+  }
+});
+
+// City Image Management Functions
+
+// Helper function to normalize city names for consistency
+const normalizeCityName = (city) => {
+  if (!city) return null;
+  // Remove extra spaces and convert to lowercase for storage key
+  return city.trim().toLowerCase().replace(/\s+/g, '-');
+};
+
+// Monitor user updates to detect new cities
+exports.detectNewCities = onDocumentUpdated('users/{userId}', async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  
+  // Check if uniqueCities was updated
+  const beforeCities = before.uniqueCities || [];
+  const afterCities = after.uniqueCities || [];
+  
+  // Find new cities
+  const newCities = afterCities.filter(city => !beforeCities.includes(city));
+  
+  if (newCities.length > 0) {
+    console.log(`Found ${newCities.length} new cities for user ${event.params.userId}:`, newCities);
+    
+    // Check each new city and generate image if needed
+    for (const city of newCities) {
+      const normalizedCity = normalizeCityName(city);
+      if (!normalizedCity) continue;
+      
+      try {
+        // Check if city already has a completed image
+        const cityDoc = await db.collection('cityImages').doc(normalizedCity).get();
+        
+        if (cityDoc.exists) {
+          const cityData = cityDoc.data();
+          if (cityData.status === 'completed' && cityData.imageUrl) {
+            console.log(`City ${city} already has an image, skipping generation`);
+            continue;
+          }
+          // If it exists but isn't completed, we'll regenerate it
+          console.log(`City ${city} exists but needs image generation (status: ${cityData.status})`);
+        }
+        
+        // Generate image immediately
+        console.log(`Generating image for new city: ${city}`);
+        
+        // First, create or update the document to mark it as in progress
+        await db.collection('cityImages').doc(normalizedCity).set({
+          originalName: city,
+          normalizedName: normalizedCity,
+          status: 'generating',
+          requestedAt: new Date(),
+          requestedBy: event.params.userId
+        });
+        
+        // Call our backend to generate the actual image
+        const imageResponse = await fetch('https://dishitout-imageinhancer.onrender.com/city-image/generate-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `city_name=${encodeURIComponent(city)}`
+        });
+        
+        if (!imageResponse.ok) {
+          throw new Error(`Image generation failed: ${imageResponse.status}`);
+        }
+        
+        const imageData = await imageResponse.json();
+        
+        // Update city document with image data
+        await db.collection('cityImages').doc(normalizedCity).set({
+          originalName: city,
+          normalizedName: normalizedCity,
+          status: 'completed',
+          imageUrl: imageData.image_url || imageData.image_data,
+          prompt: imageData.prompt,
+          revisedPrompt: imageData.revised_prompt,
+          generator: imageData.generator || 'dall-e-3',
+          imageFormat: imageData.image_format || 'png',
+          width: imageData.width || 1024,
+          height: imageData.height || 1024,
+          generatedAt: new Date(),
+          requestedBy: event.params.userId
+        });
+        
+        console.log(`✅ Successfully generated image for ${city}`);
+        
+      } catch (error) {
+        console.error(`❌ Error generating image for city ${city}:`, error);
+        
+        // Mark as failed in the database
+        await db.collection('cityImages').doc(normalizedCity).set({
+          originalName: city,
+          normalizedName: normalizedCity,
+          status: 'failed',
+          error: error.message,
+          failedAt: new Date(),
+          requestedBy: event.params.userId
+        });
+      }
+    }
+  }
+  
+  return null;
+});
+
+// Manual function to generate city images
+exports.generateCityImages = onRequest(async (req, res) => {
+  console.log('City image generation function called');
+  
+  try {
+    // Get all pending city images
+    const pendingCities = await db.collection('cityImages')
+      .where('status', '==', 'pending')
+      .limit(10) // Process 10 at a time to avoid timeouts
+      .get();
+    
+    if (pendingCities.empty) {
+      return res.json({
+        success: true,
+        message: 'No pending cities to process'
+      });
+    }
+    
+    console.log(`Found ${pendingCities.size} pending cities to process`);
+    
+    const results = [];
+    
+    for (const doc of pendingCities.docs) {
+      const cityData = doc.data();
+      const cityId = doc.id;
+      
+      try {
+        console.log(`Generating image for city: ${cityData.originalName}`);
+        
+        // Call our backend to generate the actual image
+        const imageResponse = await fetch('https://dishitout-imageinhancer.onrender.com/city-image/generate-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `city_name=${encodeURIComponent(cityData.originalName)}`
+        });
+        
+        if (!imageResponse.ok) {
+          throw new Error(`Image generation failed: ${imageResponse.status}`);
+        }
+        
+        const imageData = await imageResponse.json();
+        
+        // Update city document with image data
+        await db.collection('cityImages').doc(cityId).update({
+          status: 'completed',
+          imageUrl: imageData.image_url || imageData.image_data,
+          prompt: imageData.prompt,
+          revisedPrompt: imageData.revised_prompt,
+          generator: imageData.generator || 'dall-e-3',
+          imageFormat: imageData.image_format || 'png',
+          width: imageData.width || 1024,
+          height: imageData.height || 1024,
+          generatedAt: new Date()
+        });
+        
+        console.log(`✅ Generated image for ${cityData.originalName}`);
+        
+        results.push({
+          city: cityData.originalName,
+          status: 'success',
+          imageUrl: imageData.image_url || imageData.image_data,
+          prompt: imageData.prompt
+        });
+        
+        // Image has been generated and stored in the database
+        
+      } catch (error) {
+        console.error(`❌ Error processing city ${cityData.originalName}:`, error);
+        
+        // Mark as failed
+        await db.collection('cityImages').doc(cityId).update({
+          status: 'failed',
+          error: error.message,
+          failedAt: new Date()
+        });
+        
+        results.push({
+          city: cityData.originalName,
+          status: 'failed',
+          error: error.message
+        });
+      }
+      
+      // Add a small delay between API calls
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const summary = {
+      totalProcessed: results.length,
+      successful: results.filter(r => r.status === 'success').length,
+      failed: results.filter(r => r.status === 'failed').length
+    };
+    
+    console.log('City image generation completed:', summary);
+    
+    res.json({
+      success: true,
+      summary,
+      results
+    });
+    
+  } catch (error) {
+    console.error('Error in city image generation:', error);
+    res.status(500).json({error: `Failed to generate city images: ${error.message}`});
+  }
+});
+
+// Function to get all unique cities across all users
+exports.getAllUniqueCities = onRequest(async (req, res) => {
+  console.log('Getting all unique cities');
+  
+  try {
+    const usersSnapshot = await db.collection('users').get();
+    const allCities = new Set();
+    
+    usersSnapshot.forEach(doc => {
+      const userData = doc.data();
+      if (userData.uniqueCities && Array.isArray(userData.uniqueCities)) {
+        userData.uniqueCities.forEach(city => {
+          if (city) {
+            allCities.add(city);
+          }
+        });
+      }
+    });
+    
+    const citiesArray = Array.from(allCities).sort();
+    
+    console.log(`Found ${citiesArray.length} unique cities across all users`);
+    
+    // Check which cities already have images
+    const cityStatuses = [];
+    
+    for (const city of citiesArray) {
+      const normalizedCity = normalizeCityName(city);
+      const cityDoc = await db.collection('cityImages').doc(normalizedCity).get();
+      
+      cityStatuses.push({
+        city,
+        normalized: normalizedCity,
+        hasImage: cityDoc.exists,
+        status: cityDoc.exists ? cityDoc.data().status : 'not_started'
+      });
+    }
+    
+    res.json({
+      success: true,
+      totalCities: citiesArray.length,
+      cities: cityStatuses
+    });
+    
+  } catch (error) {
+    console.error('Error getting unique cities:', error);
+    res.status(500).json({error: error.message});
   }
 });
 

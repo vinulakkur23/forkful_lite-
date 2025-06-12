@@ -766,8 +766,8 @@ export const extractCityFromMeal = (meal: any): string | null => {
     const parts = meal.restaurant.split(',');
     if (parts.length > 1) {
       const cityPart = parts[1].trim();
-      // Extract just the city name (handle "Portland OR" format)
-      city = cityPart.split(' ')[0];
+      // Keep the full city name
+      city = cityPart;
     }
   }
   

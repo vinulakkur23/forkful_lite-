@@ -28,6 +28,11 @@ export interface Restaurant {
       lng: number;
     }
   };
+  address_components?: Array<{
+    long_name: string;
+    short_name: string;
+    types: string[];
+  }>;
 }
 
 /**
@@ -193,7 +198,7 @@ export const getPlaceDetails = async (placeId: string): Promise<Restaurant | nul
   try {
     console.log(`Fetching place details for: ${placeId}`);
     
-    const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=place_id,name,vicinity,formatted_address,rating,user_ratings_total,geometry&key=${GOOGLE_MAPS_API_KEY}`;
+    const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=place_id,name,vicinity,formatted_address,rating,user_ratings_total,geometry,address_components&key=${GOOGLE_MAPS_API_KEY}`;
     
     const response = await fetch(detailsUrl);
     
@@ -232,7 +237,8 @@ export const getPlaceDetails = async (placeId: string): Promise<Restaurant | nul
 };
 
 /**
- * Extract city from a restaurant's address
+ * Extract city from a restaurant's address using Google Places address_components
+ * Falls back to address parsing if address_components is not available
  * 
  * @param restaurant - The restaurant object
  * @returns The extracted city name
@@ -240,22 +246,69 @@ export const getPlaceDetails = async (placeId: string): Promise<Restaurant | nul
 export const extractCityFromRestaurant = (restaurant: Restaurant): string => {
   if (!restaurant) return '';
   
+  console.log(`🏙️ Extracting city from: ${restaurant.name}`);
+  
+  // First try to use address_components (most accurate)
+  if (restaurant.address_components && restaurant.address_components.length > 0) {
+    console.log('✓ Using address_components for city extraction');
+    console.log('Available components:', restaurant.address_components.map(c => `${c.long_name} (${c.types.join(', ')})`));
+    
+    // Look for city-level components in order of preference
+    const cityTypes = [
+      'locality',                    // City
+      'sublocality_level_1',        // District/neighborhood
+      'administrative_area_level_3', // City-level administrative area
+      'administrative_area_level_2'  // County-level (fallback)
+    ];
+    
+    for (const cityType of cityTypes) {
+      const cityComponent = restaurant.address_components.find(component =>
+        component.types.includes(cityType)
+      );
+      
+      if (cityComponent) {
+        const result = cityComponent.long_name;
+        console.log(`Found city using ${cityType}:`, result);
+        console.log('=== FINAL CITY RESULT ===');
+        console.log('Extracted city:', result);
+        return result;
+      }
+    }
+    
+    // If no standard city types found, log the available types for debugging
+    console.log('No standard city types found. Available address components:', 
+      restaurant.address_components.map(c => ({ name: c.long_name, types: c.types }))
+    );
+  }
+  
+  // Fallback to the original string parsing method
+  console.log('Falling back to address parsing for city extraction');
   const address = restaurant.vicinity || restaurant.formatted_address;
   if (!address) return '';
   
-  // Try to extract city from address
   const addressParts = address.split(',').map(part => part.trim());
   
   // City is typically the second component in a comma-separated address
   if (addressParts.length > 1) {
     const secondPart = addressParts[1];
     
-    // If second part has spaces (like "Portland OR"), take just the city name
-    if (secondPart.includes(' ')) {
-      return secondPart.split(' ')[0];
+    // Keep the full city name (including multi-word cities like "New York")
+    // Only remove state codes if they're clearly at the end
+    const words = secondPart.split(' ');
+    let result;
+    if (words.length > 1 && words[words.length - 1].length === 2 && words[words.length - 1].toUpperCase() === words[words.length - 1]) {
+      // Last word is likely a state code (2 uppercase letters), remove it
+      result = words.slice(0, -1).join(' ');
+    } else {
+      result = secondPart;
     }
-    return secondPart;
+    console.log('=== FINAL CITY RESULT (from address parsing) ===');
+    console.log('Extracted city:', result);
+    return result;
   }
   
-  return '';
+  const finalResult = '';
+  console.log('=== FINAL CITY RESULT ===');
+  console.log('Extracted city:', finalResult);
+  return finalResult;
 };

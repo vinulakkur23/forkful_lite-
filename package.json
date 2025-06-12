@@ -21,6 +21,7 @@
     "@react-navigation/bottom-tabs": "^7.3.9",
     "@react-navigation/native": "^7.0.15",
     "@react-navigation/stack": "^7.1.2",
+    "firebase": "^11.9.0",
     "react": "19.0.0",
     "react-native": "0.78.0",
     "react-native-exif": "^0.5.0",

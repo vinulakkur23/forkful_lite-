@@ -278,6 +278,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
     
+    // Prevent concurrent fetches
+    if (isLoadingSuggestions) {
+      logWithSession(`Already loading suggestions, skipping duplicate fetch`);
+      return;
+    }
+    
     if (!locationData) {
       logWithSession("Cannot fetch restaurant suggestions: No location data");
       return;
@@ -384,30 +390,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
-  // Extract city from restaurant data
-  const extractCityFromRestaurant = (restaurantData: Restaurant): string => {
-    if (!restaurantData) return '';
-    
-    const address = restaurantData.vicinity || restaurantData.formatted_address;
-    if (!address) return '';
-    
-    // Try to extract city from address
-    const addressParts = address.split(',').map(part => part.trim());
-    logWithSession(`Address parts for restaurant: ${JSON.stringify(addressParts)}`);
-    
-    // City is typically the second component in a comma-separated address
-    if (addressParts.length > 1) {
-      const secondPart = addressParts[1];
-      
-      // If second part has spaces (like "Portland OR"), take just the city name
-      if (secondPart.includes(' ')) {
-        return secondPart.split(' ')[0];
-      }
-      return secondPart;
-    }
-    
-    return '';
-  };
+  // Note: We're using the imported extractCityFromRestaurant from placesService
+  // which properly handles multi-word city names like "New Brunswick"
   
   // Function for when restaurant changes - fetches menu items and meal suggestions
   const updateMealSuggestionsForRestaurant = async (restaurantName: string) => {
@@ -707,7 +691,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // Use the best available location
     const bestLocation = getBestAvailableLocation();
     
-    if (bestLocation) {
+    if (bestLocation && suggestedRestaurants.length === 0 && !isLoadingSuggestions) {
       logWithSession(`Using location for restaurant suggestions: ${bestLocation.source} (priority: ${bestLocation.priority})`);
       logWithSession(`Photo URI: ${photo.uri}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
       
@@ -719,10 +703,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // but we'll proceed since we've already validated in initializeLocationFromParams
       }
       
-      // Always fetch new restaurant suggestions for every photo
-      // This ensures we're getting fresh data based on the current photo's location
+      // Only fetch if we don't already have suggestions and aren't loading
       fetchRestaurantSuggestions(bestLocation);
       // Note: fetchRestaurantSuggestions now has its own check to prevent duplicate fetches within the same session
+    } else if (suggestedRestaurants.length > 0) {
+      logWithSession(`Already have ${suggestedRestaurants.length} restaurant suggestions, skipping fetch`);
+    } else if (isLoadingSuggestions) {
+      logWithSession(`Already loading suggestions, skipping duplicate fetch`);
     }
     
     // Cleanup function to cancel any pending operations if the session changes
@@ -732,7 +719,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Session changed from ${currentSession} to ${photoSessionRef.current}, discarding pending operations`);
       }
     };
-  }, [location, deviceLocation, suggestedRestaurants.length]); // Re-run when location changes or restaurant count changes
+  }, [location, suggestedRestaurants.length]); // Re-run when location changes or restaurant count changes - removed deviceLocation to prevent re-fetch
   
   // Handle autocomplete search for restaurants using DIRECT Places API
   const handleRestaurantSearch = async (text: string) => {

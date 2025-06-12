@@ -28,6 +28,11 @@ export interface Restaurant {
       lng: number;
     }
   };
+  address_components?: Array<{
+    long_name: string;
+    short_name: string;
+    types: string[];
+  }>;
 }
 
 /**

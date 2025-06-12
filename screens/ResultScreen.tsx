@@ -615,10 +615,16 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             
             // Further clean up city by removing state/zip if present
             // E.g., "Portland, OR 97201" -> "Portland"
+            // But preserve multi-word city names like "New Brunswick"
             const cityParts = city.split(' ');
             if (cityParts.length > 1) {
-              // If city contains spaces, take only the first part (likely the actual city name)
-              city = cityParts[0];
+              // Check if last part is a 2-letter state code
+              const lastPart = cityParts[cityParts.length - 1];
+              if (lastPart.length === 2 && lastPart.toUpperCase() === lastPart) {
+                // Remove state code but keep the rest of the city name
+                city = cityParts.slice(0, -1).join(' ');
+              }
+              // Otherwise keep the full city name
             }
           }
         }
@@ -637,11 +643,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           if (restaurantParts.length > 1) {
             const secondPart = restaurantParts[1].trim();
             
-            // If second part has spaces (like "Portland OR"), take just the city name
-            if (secondPart.includes(' ')) {
-              cityInfo = secondPart.split(' ')[0];
+            // Keep the full city name (including multi-word cities like "New York")
+            // Only remove state codes if they're clearly at the end
+            const words = secondPart.split(' ');
+            if (words.length > 1 && words[words.length - 1].length === 2 && words[words.length - 1].toUpperCase() === words[words.length - 1]) {
+              // Last word is likely a state code (2 uppercase letters), remove it
+              cityInfo = words.slice(0, -1).join(' ');
             } else {
-              cityInfo = secondPart; // Use the whole part if no spaces
+              cityInfo = secondPart; // Use the whole part
             }
             
             console.log("Extracted city from restaurant name:", cityInfo);
