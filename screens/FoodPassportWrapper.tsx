@@ -214,6 +214,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               userName={userName}
               userPhoto={userPhoto}
               onStatsUpdate={(stats) => setProfileStats(stats)}
+              onFilterChange={handleFilterChange}
+              onTabChange={setTabIndex}
             />
           </ErrorBoundary>
         );

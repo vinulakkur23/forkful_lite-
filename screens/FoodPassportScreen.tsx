@@ -47,6 +47,8 @@ type Props = {
   userName?: string;
   userPhoto?: string;
   onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number }) => void;
+  onFilterChange?: (filters: FilterItem[] | null) => void;
+  onTabChange?: (tabIndex: number) => void;
 };
 
 interface MealEntry {
@@ -93,7 +95,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId, userName, userPhoto, onStatsUpdate }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -288,25 +290,46 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                     const userData = userDoc.data();
                     const cities = userData?.uniqueCities || [];
                     
+                    console.log(`🏙️ [FoodPassport] User has ${cities.length} unique cities:`, cities);
+                    
+                    // Capitalize and sort cities alphabetically
+                    const processedCities = cities
+                        .map((city: string) => {
+                            // Capitalize each word in the city name
+                            return city.split(' ').map(word => 
+                                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                            ).join(' ');
+                        })
+                        .sort(); // Sort alphabetically
+                    
                     if (!isMountedRef.current) return;
-                    setUniqueCities(cities);
+                    setUniqueCities(processedCities);
                     
                     // Preload city images
-                    if (cities.length > 0) {
-                        preloadCityImages(cities).then(() => {
+                    if (processedCities.length > 0) {
+                        console.log(`🏙️ [FoodPassport] Starting to preload city images for:`, processedCities);
+                        preloadCityImages(processedCities).then(() => {
                             // Load city images
                             const loadCityImages = async () => {
+                                console.log(`🏙️ [FoodPassport] Loading city images...`);
                                 const images: { [city: string]: string } = {};
-                                for (const city of cities) {
+                                for (const city of processedCities) {
+                                    console.log(`🏙️ [FoodPassport] Loading image for: ${city}`);
                                     images[city] = await getCityImageUrl(city);
+                                    console.log(`🏙️ [FoodPassport] Loaded image for ${city}:`, images[city]);
                                 }
                                 if (isMountedRef.current) {
+                                    console.log(`🏙️ [FoodPassport] Setting city images:`, images);
                                     setCityImages(images);
                                 }
                             };
                             loadCityImages();
                         });
+                    } else {
+                        console.log(`🏙️ [FoodPassport] No cities to load images for`);
                     }
+                } else {
+                    console.log(`🏙️ [FoodPassport] User document does not exist`);
                 }
             } catch (error) {
                 console.error('Error loading user cities:', error);
@@ -776,7 +799,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
                         ListHeaderComponent={() => (
-                            <>
                             <View style={styles.profileCard}>
                                 {/* Follow button in top right corner */}
                                 {userId && userId !== auth().currentUser?.uid && (
@@ -851,7 +873,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                     </View>
                                 </View>
                             </View>
-                            
+                        )}
+                        ListFooterComponent={() => (
+                            <>
                             {/* Cities Section */}
                             {uniqueCities.length > 0 && (
                                 <View style={styles.citiesSection}>
@@ -865,24 +889,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                             <TouchableOpacity
                                                 style={styles.cityItem}
                                                 onPress={() => {
-                                                    // Navigate to FoodPassport with map tab and city filter
-                                                    // Since MapScreen is a tab within FoodPassport, we need a different approach
-                                                    Alert.alert(
-                                                        'City Filter',
-                                                        `View all meals in ${city}?`,
-                                                        [
-                                                            { text: 'Cancel', style: 'cancel' },
-                                                            {
-                                                                text: 'View on Map',
-                                                                onPress: () => {
-                                                                    // Switch to map tab with city filter
-                                                                    // This would require updating the filter state in the wrapper
-                                                                    setTabIndex(1); // Switch to map tab
-                                                                    // TODO: Implement city filter
-                                                                }
-                                                            }
-                                                        ]
-                                                    );
+                                                    if (onFilterChange && onTabChange) {
+                                                        // Create city filter
+                                                        const cityFilter: FilterItem = {
+                                                            type: 'city',
+                                                            value: city.toLowerCase(), // Use lowercase for filtering (database stores lowercase)
+                                                            label: city
+                                                        };
+                                                        
+                                                        // Set the filter
+                                                        onFilterChange([cityFilter]);
+                                                        
+                                                        // Switch to map tab (index 2)
+                                                        onTabChange(2);
+                                                    } else {
+                                                        // Fallback if functions not available
+                                                        Alert.alert('View City', `Showing meals for ${city} on map`);
+                                                    }
                                                 }}
                                             >
                                                 <Image

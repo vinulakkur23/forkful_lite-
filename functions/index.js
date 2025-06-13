@@ -163,9 +163,9 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
         // Recalculate takeout meals
         const takeoutMealCount = meals.filter((meal) => isTakeoutMeal(meal)).length;
         
-        // Recalculate high-rated photos (photoScore >= 5.2)
+        // Recalculate high-rated photos (photoScore >= 5.5)
         const highRatedPhotoCount = meals.filter((meal) => {
-          return meal.photoScore && meal.photoScore >= 5.2;
+          return meal.photoScore && meal.photoScore >= 5.5;
         }).length;
         
         // Update user document
@@ -241,7 +241,7 @@ exports.manualCountRefresh = onCall(async (request) => {
       
       if (isSushiMeal(meal)) sushiMealCount++;
       if (isTakeoutMeal(meal)) takeoutMealCount++;
-      if (meal.photoScore && meal.photoScore >= 5.2) highRatedPhotoCount++;
+      if (meal.photoScore && meal.photoScore >= 5.5) highRatedPhotoCount++;
     });
     
     // Update user document
@@ -469,18 +469,74 @@ exports.detectNewCities = onDocumentUpdated('users/{userId}', async (event) => {
         
         const imageData = await imageResponse.json();
         
+        // Download and store the image permanently in Firebase Storage
+        let permanentImageUrl = null;
+        
+        if (imageData.image_url) {
+          try {
+            console.log(`Downloading image for ${city} from DALL-E...`);
+            
+            // Download the image from DALL-E's temporary URL
+            const imageDownloadResponse = await fetch(imageData.image_url);
+            if (!imageDownloadResponse.ok) {
+              throw new Error(`Failed to download image: ${imageDownloadResponse.status}`);
+            }
+            
+            const imageBuffer = await imageDownloadResponse.arrayBuffer();
+            
+            // Resize image to 350x350 using Sharp for faster loading
+            const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
+              .resize(350, 350, {
+                fit: 'cover',
+                position: 'center'
+              })
+              .png()
+              .toBuffer();
+            
+            // Create a file reference in Firebase Storage
+            const fileName = `city-images/${normalizedCity}-${Date.now()}.png`;
+            const file = bucket.file(fileName);
+            
+            // Upload the resized image to Firebase Storage
+            await file.save(resizedImageBuffer, {
+              metadata: {
+                contentType: 'image/png',
+                metadata: {
+                  city: city,
+                  normalizedCity: normalizedCity,
+                  generator: 'dall-e-3',
+                  generatedAt: new Date().toISOString()
+                }
+              }
+            });
+            
+            // Make the file publicly accessible
+            await file.makePublic();
+            
+            // Get the permanent public URL
+            permanentImageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+            console.log(`✅ Uploaded image to Firebase Storage: ${permanentImageUrl}`);
+            
+          } catch (uploadError) {
+            console.error(`❌ Error uploading image to Firebase Storage: ${uploadError}`);
+            // Fallback to temporary URL if upload fails
+            permanentImageUrl = imageData.image_url;
+          }
+        }
+        
         // Update city document with image data
         await db.collection('cityImages').doc(normalizedCity).set({
           originalName: city,
           normalizedName: normalizedCity,
           status: 'completed',
-          imageUrl: imageData.image_url || imageData.image_data,
+          imageUrl: permanentImageUrl || imageData.image_data,
+          temporaryUrl: imageData.image_url, // Keep the original URL for reference
           prompt: imageData.prompt,
           revisedPrompt: imageData.revised_prompt,
           generator: imageData.generator || 'dall-e-3',
-          imageFormat: imageData.image_format || 'png',
-          width: imageData.width || 1024,
-          height: imageData.height || 1024,
+          imageFormat: 'png',
+          width: 350,
+          height: 350,
           generatedAt: new Date(),
           requestedBy: event.params.userId
         });
@@ -511,25 +567,40 @@ exports.generateCityImages = onRequest(async (req, res) => {
   console.log('City image generation function called');
   
   try {
-    // Get all pending city images
-    const pendingCities = await db.collection('cityImages')
-      .where('status', '==', 'pending')
-      .limit(10) // Process 10 at a time to avoid timeouts
+    // Get all cities that need regeneration
+    const cityQuery = await db.collection('cityImages')
       .get();
     
-    if (pendingCities.empty) {
+    if (cityQuery.empty) {
       return res.json({
         success: true,
-        message: 'No pending cities to process'
+        message: 'No cities found in database'
       });
     }
     
-    console.log(`Found ${pendingCities.size} pending cities to process`);
+    // Filter cities that need regeneration
+    const citiesToProcess = [];
+    
+    for (const doc of cityQuery.docs) {
+      const cityData = doc.data();
+      
+      // Regenerate ALL cities for new stamp style
+      citiesToProcess.push({ doc, cityData });
+      console.log(`${cityData.originalName} will be regenerated with new stamp style`);
+    }
+    
+    if (citiesToProcess.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No cities need regeneration - all have permanent URLs'
+      });
+    }
+    
+    console.log(`Found ${citiesToProcess.length} cities that need regeneration`);
     
     const results = [];
     
-    for (const doc of pendingCities.docs) {
-      const cityData = doc.data();
+    for (const { doc, cityData } of citiesToProcess) {
       const cityId = doc.id;
       
       try {
@@ -550,16 +621,75 @@ exports.generateCityImages = onRequest(async (req, res) => {
         
         const imageData = await imageResponse.json();
         
+        // Download and store the image permanently in Firebase Storage
+        let permanentImageUrl = null;
+        
+        if (imageData.image_url) {
+          try {
+            console.log(`Downloading image for ${cityData.originalName} from DALL-E...`);
+            
+            // Download the image from DALL-E's temporary URL
+            const imageDownloadResponse = await fetch(imageData.image_url);
+            if (!imageDownloadResponse.ok) {
+              throw new Error(`Failed to download image: ${imageDownloadResponse.status}`);
+            }
+            
+            const imageBuffer = await imageDownloadResponse.arrayBuffer();
+            
+            // Resize image to 800x800 using Sharp
+            const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
+              .resize(800, 800, {
+                fit: 'cover',
+                position: 'center'
+              })
+              .png()
+              .toBuffer();
+            
+            // Create a file reference in Firebase Storage
+            const normalizedCity = normalizeCityName(cityData.originalName);
+            const fileName = `city-images/${normalizedCity}-${Date.now()}.png`;
+            const file = bucket.file(fileName);
+            
+            // Upload the resized image to Firebase Storage
+            await file.save(resizedImageBuffer, {
+              metadata: {
+                contentType: 'image/png',
+                metadata: {
+                  city: cityData.originalName,
+                  normalizedCity: normalizedCity,
+                  generator: 'dall-e-3',
+                  generatedAt: new Date().toISOString()
+                }
+              }
+            });
+            
+            // Make the file publicly accessible
+            await file.makePublic();
+            
+            // Get the permanent public URL
+            permanentImageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+            console.log(`✅ Uploaded image to Firebase Storage: ${permanentImageUrl}`);
+            
+          } catch (uploadError) {
+            console.error(`❌ Error uploading image to Firebase Storage: ${uploadError}`);
+            // Fallback to temporary URL if upload fails
+            permanentImageUrl = imageData.image_url;
+          }
+        }
+        
         // Update city document with image data
-        await db.collection('cityImages').doc(cityId).update({
+        await doc.ref.set({
+          originalName: cityData.originalName,
+          normalizedName: cityData.normalizedName,
           status: 'completed',
-          imageUrl: imageData.image_url || imageData.image_data,
+          imageUrl: permanentImageUrl || imageData.image_data,
+          temporaryUrl: imageData.image_url, // Keep the original URL for reference
           prompt: imageData.prompt,
           revisedPrompt: imageData.revised_prompt,
           generator: imageData.generator || 'dall-e-3',
           imageFormat: imageData.image_format || 'png',
-          width: imageData.width || 1024,
-          height: imageData.height || 1024,
+          width: 350,
+          height: 350,
           generatedAt: new Date()
         });
         
@@ -568,7 +698,7 @@ exports.generateCityImages = onRequest(async (req, res) => {
         results.push({
           city: cityData.originalName,
           status: 'success',
-          imageUrl: imageData.image_url || imageData.image_data,
+          imageUrl: permanentImageUrl || imageData.image_data,
           prompt: imageData.prompt
         });
         
@@ -578,7 +708,7 @@ exports.generateCityImages = onRequest(async (req, res) => {
         console.error(`❌ Error processing city ${cityData.originalName}:`, error);
         
         // Mark as failed
-        await db.collection('cityImages').doc(cityId).update({
+        await doc.ref.update({
           status: 'failed',
           error: error.message,
           failedAt: new Date()

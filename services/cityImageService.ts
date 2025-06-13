@@ -26,14 +26,19 @@ const cityImageCache = new Map<string, string>();
  */
 export const getCityImageUrl = async (cityName: string): Promise<string> => {
   try {
+    console.log(`🏙️ [CityImage] Getting image for city: "${cityName}"`);
     const normalizedName = normalizeCityName(cityName);
+    console.log(`🏙️ [CityImage] Normalized name: "${normalizedName}"`);
     
     // Check cache first
     if (cityImageCache.has(normalizedName)) {
-      return cityImageCache.get(normalizedName)!;
+      const cachedUrl = cityImageCache.get(normalizedName)!;
+      console.log(`🏙️ [CityImage] Found in cache: ${cachedUrl}`);
+      return cachedUrl;
     }
     
     // Check Firestore for city image
+    console.log(`🏙️ [CityImage] Checking Firestore for city: ${normalizedName}`);
     const cityDoc = await firestore()
       .collection('cityImages')
       .doc(normalizedName)
@@ -41,12 +46,18 @@ export const getCityImageUrl = async (cityName: string): Promise<string> => {
     
     if (cityDoc.exists) {
       const data = cityDoc.data() as CityImageData;
+      console.log(`🏙️ [CityImage] Found city document:`, data);
       
       // If we have a generated image URL, use it
       if (data.imageUrl) {
+        console.log(`🏙️ [CityImage] Using real image: ${data.imageUrl}`);
         cityImageCache.set(normalizedName, data.imageUrl);
         return data.imageUrl;
+      } else {
+        console.log(`🏙️ [CityImage] City document exists but no imageUrl. Status: ${data.status}`);
       }
+    } else {
+      console.log(`🏙️ [CityImage] No city document found for: ${normalizedName}`);
     }
     
     // Return placeholder for now
