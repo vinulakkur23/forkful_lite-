@@ -36,7 +36,7 @@ import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
-import { getCityImageUrl, preloadCityImages } from '../services/cityImageService';
+import { getCityImageUrl, preloadCityImages, syncUserCitiesWithDatabase, loadMultipleCities, loadIndividualCity } from '../services/cityImageService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -838,37 +838,128 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                                 </>
                                             )}
                                         </View>
-                                        {/* Debug button - only show for own profile */}
+                                        {/* Debug buttons - only show for own profile */}
                                         {(!userId || userId === auth().currentUser?.uid) && (
-                                            <TouchableOpacity 
-                                                style={styles.debugButton}
-                                                onPress={async () => {
-                                                    Alert.alert(
-                                                        "Refresh Counts",
-                                                        "This will recalculate your achievement counts (cities, cuisines, sushi, takeout) based on your actual meals. Continue?",
-                                                        [
-                                                            { text: "Cancel", style: "cancel" },
-                                                            { 
-                                                                text: "Refresh", 
-                                                                onPress: async () => {
-                                                                    const result = await refreshUserCounts();
-                                                                    if (result.success && result.counts) {
-                                                                        Alert.alert(
-                                                                            "Counts Refreshed",
-                                                                            `Updated counts:\n• Cities: ${result.counts.cities}\n• Cuisines: ${result.counts.cuisines}\n• Sushi meals: ${result.counts.sushi}\n• Takeout meals: ${result.counts.takeout}`,
-                                                                            [{ text: "OK", onPress: () => fetchMealEntries() }]
-                                                                        );
-                                                                    } else {
-                                                                        Alert.alert("Error", result.error || "Failed to refresh counts");
+                                            <View style={styles.debugButtonsContainer}>
+                                                <TouchableOpacity 
+                                                    style={styles.debugButton}
+                                                    onPress={async () => {
+                                                        Alert.alert(
+                                                            "Refresh Counts",
+                                                            "This will recalculate your achievement counts (cities, cuisines, sushi, takeout) based on your actual meals. Continue?",
+                                                            [
+                                                                { text: "Cancel", style: "cancel" },
+                                                                { 
+                                                                    text: "Refresh", 
+                                                                    onPress: async () => {
+                                                                        const result = await refreshUserCounts();
+                                                                        if (result.success && result.counts) {
+                                                                            Alert.alert(
+                                                                                "Counts Refreshed",
+                                                                                `Updated counts:\n• Cities: ${result.counts.cities}\n• Cuisines: ${result.counts.cuisines}\n• Sushi meals: ${result.counts.sushi}\n• Takeout meals: ${result.counts.takeout}`,
+                                                                                [{ text: "OK", onPress: () => fetchMealEntries() }]
+                                                                            );
+                                                                        } else {
+                                                                            Alert.alert("Error", result.error || "Failed to refresh counts");
+                                                                        }
                                                                     }
                                                                 }
-                                                            }
-                                                        ]
-                                                    );
-                                                }}
-                                            >
-                                                <Text style={styles.debugButtonText}>🔄 Refresh Counts</Text>
-                                            </TouchableOpacity>
+                                                            ]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Text style={styles.debugButtonText}>🔄 Refresh Counts</Text>
+                                                </TouchableOpacity>
+                                                
+                                                <TouchableOpacity 
+                                                    style={styles.debugButton}
+                                                    onPress={async () => {
+                                                        Alert.alert(
+                                                            "Sync Cities",
+                                                            "This will check all your cities and:\n• Remove cities that no longer exist in the database\n• Request generation for cities without images\n\nContinue?",
+                                                            [
+                                                                { text: "Cancel", style: "cancel" },
+                                                                { 
+                                                                    text: "Sync", 
+                                                                    onPress: async () => {
+                                                                        const currentUserId = auth().currentUser?.uid;
+                                                                        if (!currentUserId) return;
+                                                                        
+                                                                        // First sync cities with database
+                                                                        const syncResult = await syncUserCitiesWithDatabase(currentUserId);
+                                                                        
+                                                                        if (syncResult.success) {
+                                                                            // Then load all cities to ensure generation requests
+                                                                            const loadResult = await loadMultipleCities(uniqueCities);
+                                                                            
+                                                                            let message = '';
+                                                                            if (syncResult.removedCities && syncResult.removedCities.length > 0) {
+                                                                                message += `Removed ${syncResult.removedCities.length} deleted cities: ${syncResult.removedCities.join(', ')}\n\n`;
+                                                                            }
+                                                                            
+                                                                            const needsGeneration = loadResult.loaded.filter(l => !l.result.exists || l.result.status === 'pending');
+                                                                            if (needsGeneration.length > 0) {
+                                                                                message += `Requested generation for ${needsGeneration.length} cities: ${needsGeneration.map(n => n.city).join(', ')}`;
+                                                                            }
+                                                                            
+                                                                            if (!message) {
+                                                                                message = 'All cities are already synced and have images!';
+                                                                            }
+                                                                            
+                                                                            Alert.alert(
+                                                                                "Cities Synced",
+                                                                                message,
+                                                                                [{ text: "OK", onPress: () => fetchMealEntries() }]
+                                                                            );
+                                                                        } else {
+                                                                            Alert.alert("Error", syncResult.error || "Failed to sync cities");
+                                                                        }
+                                                                    }
+                                                                }
+                                                            ]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Text style={styles.debugButtonText}>🏙️ Sync Cities</Text>
+                                                </TouchableOpacity>
+                                                
+                                                <TouchableOpacity 
+                                                    style={styles.debugButton}
+                                                    onPress={async () => {
+                                                        Alert.alert(
+                                                            "Add Paris",
+                                                            "This will add Paris with a completed image.",
+                                                            [
+                                                                { text: "Cancel", style: "cancel" },
+                                                                { 
+                                                                    text: "Add", 
+                                                                    onPress: async () => {
+                                                                        try {
+                                                                            // Directly add Paris as completed with an image URL
+                                                                            await firestore()
+                                                                                .collection('cityImages')
+                                                                                .doc('paris')
+                                                                                .set({
+                                                                                    originalName: 'Paris',
+                                                                                    normalizedName: 'paris',
+                                                                                    status: 'image_generated',
+                                                                                    imageUrl: 'https://ui-avatars.com/api/?name=Paris&size=200&background=ff6b6b&color=fff&rounded=true&bold=true&length=2',
+                                                                                    generatedAt: firestore.FieldValue.serverTimestamp(),
+                                                                                });
+                                                                            
+                                                                            Alert.alert("Success", "Paris added successfully!");
+                                                                        } catch (error) {
+                                                                            Alert.alert("Error", `Failed to add Paris: ${error.message}`);
+                                                                        }
+                                                                    }
+                                                                }
+                                                            ]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Text style={styles.debugButtonText}>🗼 Add Paris</Text>
+                                                </TouchableOpacity>
+                                            </View>
                                         )}
                                     </View>
                                 </View>
@@ -1271,15 +1362,18 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 20,
     },
-    debugButton: {
+    debugButtonsContainer: {
+        flexDirection: 'row',
         marginTop: 8,
+        gap: 8,
+    },
+    debugButton: {
         paddingVertical: 6,
         paddingHorizontal: 12,
         backgroundColor: 'rgba(230, 57, 70, 0.1)',
         borderRadius: 6,
         borderWidth: 1,
         borderColor: 'rgba(230, 57, 70, 0.3)',
-        alignSelf: 'flex-start',
     },
     debugButtonText: {
         fontSize: 12,

@@ -165,3 +165,157 @@ export const subscribeToCityImageUpdates = (
   
   return unsubscribe;
 };
+
+/**
+ * Load and ensure a single city has an image
+ * This function checks if a city exists in the database and requests generation if needed
+ */
+export const loadIndividualCity = async (cityName: string): Promise<{
+  exists: boolean;
+  hasImage: boolean;
+  imageUrl?: string;
+  status?: 'pending' | 'prompt_generated' | 'image_generated' | 'failed';
+  error?: string;
+}> => {
+  try {
+    console.log(`🏙️ [LoadCity] Loading individual city: "${cityName}"`);
+    const normalizedName = normalizeCityName(cityName);
+    
+    // Check if city exists in Firestore
+    const cityDoc = await firestore()
+      .collection('cityImages')
+      .doc(normalizedName)
+      .get();
+    
+    if (cityDoc.exists) {
+      const data = cityDoc.data() as CityImageData;
+      console.log(`🏙️ [LoadCity] City exists with status: ${data.status}`);
+      
+      return {
+        exists: true,
+        hasImage: !!data.imageUrl,
+        imageUrl: data.imageUrl,
+        status: data.status,
+        error: data.error
+      };
+    } else {
+      console.log(`🏙️ [LoadCity] City does not exist, requesting generation`);
+      
+      // City doesn't exist, request generation
+      await requestCityImageGeneration(cityName);
+      
+      return {
+        exists: false,
+        hasImage: false,
+        status: 'pending'
+      };
+    }
+  } catch (error) {
+    console.error('Error loading individual city:', error);
+    return {
+      exists: false,
+      hasImage: false,
+      error: error.message || 'Unknown error'
+    };
+  }
+};
+
+/**
+ * Sync user's unique cities with actual city images
+ * Removes cities from user's uniqueCities array that don't exist in cityImages collection
+ */
+export const syncUserCitiesWithDatabase = async (userId: string): Promise<{
+  success: boolean;
+  removedCities?: string[];
+  error?: string;
+}> => {
+  try {
+    console.log(`🏙️ [SyncCities] Syncing cities for user: ${userId}`);
+    
+    // Get user document
+    const userDoc = await firestore()
+      .collection('users')
+      .doc(userId)
+      .get();
+    
+    if (!userDoc.exists) {
+      return { success: false, error: 'User document not found' };
+    }
+    
+    const userData = userDoc.data();
+    const uniqueCities = userData?.uniqueCities || [];
+    
+    if (uniqueCities.length === 0) {
+      return { success: true, removedCities: [] };
+    }
+    
+    console.log(`🏙️ [SyncCities] Checking ${uniqueCities.length} cities`);
+    
+    // Check which cities exist in the cityImages collection
+    const validCities: string[] = [];
+    const removedCities: string[] = [];
+    
+    for (const city of uniqueCities) {
+      const normalizedName = normalizeCityName(city);
+      const cityDoc = await firestore()
+        .collection('cityImages')
+        .doc(normalizedName)
+        .get();
+      
+      if (cityDoc.exists) {
+        validCities.push(city);
+      } else {
+        removedCities.push(city);
+        console.log(`🏙️ [SyncCities] City "${city}" not found in database`);
+      }
+    }
+    
+    // Update user document if any cities were removed
+    if (removedCities.length > 0) {
+      await firestore()
+        .collection('users')
+        .doc(userId)
+        .update({
+          uniqueCities: validCities
+        });
+      
+      console.log(`🏙️ [SyncCities] Removed ${removedCities.length} cities from user's list`);
+    }
+    
+    return {
+      success: true,
+      removedCities
+    };
+  } catch (error) {
+    console.error('Error syncing user cities:', error);
+    return {
+      success: false,
+      error: error.message || 'Unknown error'
+    };
+  }
+};
+
+/**
+ * Load multiple cities and ensure they all have generation requests
+ */
+export const loadMultipleCities = async (cities: string[]): Promise<{
+  loaded: { city: string; result: any }[];
+  errors: { city: string; error: string }[];
+}> => {
+  const loaded: { city: string; result: any }[] = [];
+  const errors: { city: string; error: string }[] = [];
+  
+  // Process cities in parallel
+  await Promise.all(
+    cities.map(async (city) => {
+      try {
+        const result = await loadIndividualCity(city);
+        loaded.push({ city, result });
+      } catch (error) {
+        errors.push({ city, error: error.message || 'Unknown error' });
+      }
+    })
+  );
+  
+  return { loaded, errors };
+};

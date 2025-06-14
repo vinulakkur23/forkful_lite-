@@ -567,9 +567,24 @@ exports.generateCityImages = onRequest(async (req, res) => {
   console.log('City image generation function called');
   
   try {
-    // Get all cities that need regeneration
-    const cityQuery = await db.collection('cityImages')
-      .get();
+    // Check if a specific city was requested
+    const specificCity = req.query.city || req.body.city;
+    // Check if we should regenerate all cities
+    const regenerateAll = req.query.regenerateAll === 'true' || req.body.regenerateAll === true;
+    
+    let cityQuery;
+    
+    if (specificCity) {
+      // Process only the specific city
+      const normalizedCity = normalizeCityName(specificCity);
+      cityQuery = await db.collection('cityImages')
+        .where('normalizedName', '==', normalizedCity)
+        .get();
+    } else {
+      // Get all cities
+      cityQuery = await db.collection('cityImages')
+        .get();
+    }
     
     if (cityQuery.empty) {
       return res.json({
@@ -584,9 +599,17 @@ exports.generateCityImages = onRequest(async (req, res) => {
     for (const doc of cityQuery.docs) {
       const cityData = doc.data();
       
-      // Regenerate ALL cities for new stamp style
-      citiesToProcess.push({ doc, cityData });
-      console.log(`${cityData.originalName} will be regenerated with new stamp style`);
+      if (regenerateAll || specificCity) {
+        // Force regeneration when explicitly requested
+        citiesToProcess.push({ doc, cityData });
+        console.log(`${cityData.originalName} will be regenerated`);
+      } else {
+        // Only regenerate cities that need it
+        if (!cityData.imageUrl || cityData.status === 'pending' || cityData.status === 'failed') {
+          citiesToProcess.push({ doc, cityData });
+          console.log(`${cityData.originalName} needs regeneration (status: ${cityData.status})`);
+        }
+      }
     }
     
     if (citiesToProcess.length === 0) {
@@ -636,9 +659,9 @@ exports.generateCityImages = onRequest(async (req, res) => {
             
             const imageBuffer = await imageDownloadResponse.arrayBuffer();
             
-            // Resize image to 800x800 using Sharp
+            // Resize image to 350x350 using Sharp
             const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
-              .resize(800, 800, {
+              .resize(350, 350, {
                 fit: 'cover',
                 position: 'center'
               })

@@ -269,7 +269,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     <SafeAreaView style={styles.container}>
       {/* Header with title and back button (if viewing other user) or sign out (if own) */}
       <View style={styles.headerSection}>
-        {!isOwnProfile ? (
+        {(!isOwnProfile && tabIndex !== 2) ? (
           <TouchableOpacity 
             style={styles.headerButton}
             onPress={() => navigation.goBack()}
