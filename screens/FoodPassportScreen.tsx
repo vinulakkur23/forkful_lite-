@@ -750,6 +750,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                     </TouchableOpacity>
                                 )}
                                 
+                                {/* Sign Out button for own profile */}
+                                {(!userId || userId === auth().currentUser?.uid) && (
+                                    <TouchableOpacity 
+                                        style={styles.signOutButton}
+                                        onPress={signOut}
+                                    >
+                                        <Text style={styles.signOutText}>Sign Out</Text>
+                                    </TouchableOpacity>
+                                )}
+                                
                                 <View style={styles.profileHeader}>
                                     <View style={styles.userAvatarContainer}>
                                         {userProfile?.photoURL ? (
@@ -1260,6 +1270,24 @@ const styles = StyleSheet.create({
         fontSize: 20,
         textAlign: 'center',
         lineHeight: 20,
+    },
+    signOutButton: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        backgroundColor: '#FAF3E0',
+        borderWidth: 1,
+        borderColor: '#1a2b49',
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        zIndex: 1,
+    },
+    signOutText: {
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: '#1a2b49',
+        fontWeight: '500',
+        fontSize: 12,
     },
     debugButtonsContainer: {
         flexDirection: 'row',

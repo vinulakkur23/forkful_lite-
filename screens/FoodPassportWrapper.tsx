@@ -270,8 +270,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with title and back button (if viewing other user) or sign out (if own) */}
-      <View style={styles.headerSection}>
+      {/* Header hidden - sign out moved to profile card */}
+      {false && <View style={styles.headerSection}>
         {(!isOwnProfile && tabIndex !== 2) ? (
           <TouchableOpacity 
             style={styles.headerButton}
@@ -327,7 +327,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         ) : (
           <View style={styles.signOutButton} /> // Empty view for spacing
         )}
-      </View>
+      </View>}
       
       
       {/* Tab navigation */}
