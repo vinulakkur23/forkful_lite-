@@ -31,8 +31,8 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
   const [selectedRatings, setSelectedRatings] = useState<number[]>(initialRatings || []);
   const [showModal, setShowModal] = useState(false);
 
-  // Available ratings 1-5
-  const availableRatings = [1, 2, 3, 4, 5];
+  // Available ratings 1-6 (only rated meals)
+  const availableRatings = [1, 2, 3, 4, 5, 6];
 
   // Update parent when selections change
   useEffect(() => {
@@ -67,19 +67,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
     setSelectedRatings([]);
   };
 
-  const selectAll = () => {
-    setSelectedRatings([...availableRatings]);
-  };
 
-  const getButtonText = () => {
-    if (selectedRatings.length === 0) {
-      return 'Ratings';
-    } else if (selectedRatings.length === availableRatings.length) {
-      return 'All Ratings';
-    } else {
-      return `${selectedRatings.length} Ratings`;
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -90,23 +78,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
         ]}
         onPress={() => setShowModal(true)}
       >
-        <Icon 
-          name="star" 
-          size={16} 
-          color={selectedRatings.length > 0 ? '#fff' : '#666'} 
-          style={styles.buttonIcon}
-        />
-        <Text style={[
-          styles.filterButtonText,
-          selectedRatings.length > 0 && styles.filterButtonTextActive
-        ]}>
-          {getButtonText()}
-        </Text>
-        <Icon 
-          name="keyboard-arrow-down" 
-          size={16} 
-          color={selectedRatings.length > 0 ? '#fff' : '#666'} 
-        />
+        <EmojiDisplay rating={3} size={20} />
       </TouchableOpacity>
 
       <Modal
@@ -124,7 +96,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter by Rating</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Icon name="close" size={24} color="#1a2b49" />
+                <Text style={styles.closeX}>×</Text>
               </TouchableOpacity>
             </View>
 
@@ -142,9 +114,6 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
                     <EmojiDisplay rating={rating} size={24} />
                     <Text style={styles.ratingText}>{rating} Star{rating !== 1 ? 's' : ''}</Text>
                   </View>
-                  {selectedRatings.includes(rating) && (
-                    <Icon name="check" size={20} color="#ffc008" />
-                  )}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -154,14 +123,14 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
                 style={styles.actionButton}
                 onPress={clearAll}
               >
-                <Text style={styles.actionButtonText}>Clear All</Text>
+                <Text style={styles.actionButtonText}>Clear</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={selectAll}
+                onPress={() => setShowModal(false)}
               >
-                <Text style={styles.actionButtonText}>Select All</Text>
+                <Text style={styles.actionButtonText}>Select</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -176,32 +145,18 @@ const styles = StyleSheet.create({
     // No margin here since it will be controlled by parent
   },
   filterButton: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    width: 40,
     height: 40,
     borderWidth: 1,
     borderColor: '#ddd',
-    minWidth: 80,
   },
   filterButtonActive: {
     backgroundColor: '#ffc008',
     borderColor: '#ffc008',
-  },
-  buttonIcon: {
-    marginRight: 4,
-  },
-  filterButtonText: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    marginRight: 4,
-  },
-  filterButtonTextActive: {
-    color: '#fff',
-    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -212,9 +167,9 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    width: width * 0.8,
-    maxHeight: '60%',
-    maxWidth: 300,
+    width: width * 0.55,
+    maxHeight: '80%',
+    maxWidth: 220,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -230,8 +185,14 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
+  closeX: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    lineHeight: 24,
+  },
   ratingsContainer: {
-    maxHeight: 250,
+    maxHeight: 350,
   },
   ratingItem: {
     flexDirection: 'row',
@@ -257,20 +218,22 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#eee',
+    gap: 12,
   },
   actionButton: {
-    paddingHorizontal: 20,
+    flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ffc008',
+    borderColor: '#1a2b49',
+    alignItems: 'center',
   },
   actionButtonText: {
-    color: '#ffc008',
+    color: '#1a2b49',
     fontWeight: '600',
     fontSize: 14,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
