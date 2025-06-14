@@ -820,7 +820,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
             />
           )}
           <Text style={styles.wishlistToggleText}>
-            {showWishlist ? `Wishlist (${filteredMeals.length})` : `My Meals (${filteredMeals.length})`}
+            {showWishlist ? `Showing: Wishlist (${filteredMeals.length})` : `Showing: Meals (${filteredMeals.length})`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1177,7 +1177,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     marginLeft: 5,
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   calloutSavedBadge: {

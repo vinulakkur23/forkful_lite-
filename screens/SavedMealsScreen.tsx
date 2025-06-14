@@ -38,7 +38,7 @@ interface SavedMeal {
 }
 
 const { width } = Dimensions.get('window');
-const itemWidth = (width - 40) / 2; // 2 items per row with 10px spacing
+const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing
 
 const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, isOwnProfile = true }) => {
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
@@ -308,19 +308,21 @@ const styles = StyleSheet.create({
   },
   mealCard: {
     width: itemWidth,
-    marginBottom: 20,
+    marginBottom: 15,
     backgroundColor: '#FAF3E0',
     borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 2,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
   },
   mealImage: {
     width: '100%',

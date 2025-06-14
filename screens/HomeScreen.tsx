@@ -946,16 +946,18 @@ const styles = StyleSheet.create({
   mealCard: {
     backgroundColor: '#FAF3E0',
     borderRadius: 12,
-    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 2,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
   },
   mealImage: {
     width: '100%',
