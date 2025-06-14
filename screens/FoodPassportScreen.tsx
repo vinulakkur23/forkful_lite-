@@ -36,6 +36,7 @@ import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
+import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -108,8 +109,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     const [profileStats, setProfileStats] = useState({
         totalMeals: 0,
         totalCheers: 0,
-        badgeCount: 0
+        badgeCount: 0,
+        followersCount: 0
     });
+    
+    // Follow state
+    const [isUserFollowing, setIsUserFollowing] = useState(false);
+    const [followLoading, setFollowLoading] = useState(false);
     
 
     // Tab view state
@@ -256,11 +262,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
             const userAchievements = await getUserAchievements(targetUserId);
             const badgeCount = userAchievements.length;
 
+            // Get follower count
+            const followCounts = await getFollowCounts(targetUserId);
+            const followersCount = followCounts.followersCount;
+
             if (!isMountedRef.current) return;
             setProfileStats({
                 totalMeals,
                 totalCheers,
-                badgeCount
+                badgeCount,
+                followersCount
             });
             
             // Call the stats update callback if provided
@@ -310,6 +321,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
 
             // Reset image errors when fetching new data
             setImageErrors({});
+            
+            // Check follow status if viewing another user's profile
+            if (!isOwnProfile && userId) {
+                const followStatus = await isFollowing(userId);
+                setIsUserFollowing(followStatus);
+            }
             
             // Check if migration is needed for user profile data (only for own profile)
             const currentUser = auth().currentUser;
@@ -496,6 +513,36 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
         if (!imageErrors[mealId]) {
             console.log(`Image load error for meal: ${mealId}`);
             setImageErrors(prev => ({...prev, [mealId]: true}));
+        }
+    };
+
+    const handleFollowToggle = async () => {
+        if (!userId || !userProfile) return;
+        
+        setFollowLoading(true);
+        try {
+            if (isUserFollowing) {
+                const result = await unfollowUser(userId);
+                if (result.success) {
+                    setIsUserFollowing(false);
+                    Alert.alert('Success', result.message);
+                } else {
+                    Alert.alert('Error', result.message);
+                }
+            } else {
+                const result = await followUser(userId, userProfile.displayName, userProfile.photoURL);
+                if (result.success) {
+                    setIsUserFollowing(true);
+                    Alert.alert('Success', result.message);
+                } else {
+                    Alert.alert('Error', result.message);
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling follow:', error);
+            Alert.alert('Error', 'Failed to update follow status');
+        } finally {
+            setFollowLoading(false);
         }
     };
 
@@ -743,10 +790,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                 {/* Follow button in top right corner */}
                                 {userId && userId !== auth().currentUser?.uid && (
                                     <TouchableOpacity 
-                                        style={styles.followButton}
-                                        onPress={() => Alert.alert("Coming Soon", "Following users will be available in a future update!")}
+                                        style={[styles.followButton, isUserFollowing && styles.followButtonActive]}
+                                        onPress={handleFollowToggle}
+                                        disabled={followLoading}
                                     >
-                                        <Text style={styles.followButtonIcon}>+</Text>
+                                        <Text style={[styles.followButtonIcon, isUserFollowing && styles.followButtonIconActive]}>
+                                            {followLoading ? '...' : isUserFollowing ? '✓' : '+'}
+                                        </Text>
                                     </TouchableOpacity>
                                 )}
                                 
@@ -776,7 +826,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                                     <View style={styles.userDetails}>
                                         <Text style={styles.userName}>{userProfile?.displayName || 'User'}</Text>
                                         <View style={styles.statsRow}>
-                                            <Text style={styles.statText}>{profileStats.totalMeals} meals</Text>
+                                            <Text style={styles.statText}>{profileStats.followersCount} followers</Text>
                                             <Text style={styles.statSeparator}>•</Text>
                                             <Text style={styles.statText}>
                                                 {profileStats.totalCheers} cheers
@@ -987,7 +1037,9 @@ const styles = StyleSheet.create({
         marginTop: 10,
         marginBottom: 8,
         borderRadius: 12,
-        padding: 15,
+        paddingTop: 15,
+        paddingHorizontal: 15,
+        paddingBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -1229,11 +1281,13 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1a2b49',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        marginBottom: 2,
+        marginTop: 3,
+        marginBottom: 6,
     },
     statsRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginTop: 4,
     },
     statText: {
         fontSize: 13,
@@ -1270,6 +1324,12 @@ const styles = StyleSheet.create({
         fontSize: 20,
         textAlign: 'center',
         lineHeight: 20,
+    },
+    followButtonActive: {
+        backgroundColor: '#1a2b49',
+    },
+    followButtonIconActive: {
+        color: '#FAF3E0',
     },
     signOutButton: {
         position: 'absolute',
