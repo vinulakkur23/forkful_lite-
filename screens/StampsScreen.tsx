@@ -9,13 +9,17 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  ScrollView
+  ScrollView,
+  Modal
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import { Achievement, UserAchievement } from '../types/achievements';
 import { getUserAchievements, getAchievementById, getAllAchievements } from '../services/achievementService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { clearUserStamps } from '../services/clearUserStamps';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../App';
+import { FilterItem } from '../components/SimpleFilterComponent';
 
 const { width } = Dimensions.get('window');
 const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
@@ -31,7 +35,15 @@ interface AchievementDisplayItem {
 
 type Props = {
   userId?: string;
+  navigation?: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
+  onFilterChange?: (filters: FilterItem[] | null) => void;
+  onTabChange?: (index: number) => void;
 };
+
+interface City {
+  name: string;
+  imageUrl: string;
+}
 
 interface TopRatedPhoto {
   id: string;
@@ -41,7 +53,7 @@ interface TopRatedPhoto {
   restaurant?: string;
 }
 
-const StampsScreen: React.FC<Props> = ({ userId }) => {
+const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onTabChange }) => {
   const [loading, setLoading] = useState(true);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementItems, setAchievementItems] = useState<AchievementDisplayItem[]>([]);
@@ -49,12 +61,15 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
   const [topRatedPhotos, setTopRatedPhotos] = useState<TopRatedPhoto[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<TopRatedPhoto | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(true);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
   useEffect(() => {
     loadAchievements();
     loadTopRatedPhotos();
+    loadCities();
   }, [userId]);
 
   const loadAchievements = async () => {
@@ -130,6 +145,58 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
       console.error('Error loading top rated photos:', error);
     } finally {
       setPhotosLoading(false);
+    }
+  };
+
+  const loadCities = async () => {
+    try {
+      setCitiesLoading(true);
+      
+      const targetUserId = userId || auth().currentUser?.uid;
+      if (!targetUserId) return;
+
+      console.log(`🌎 Loading cities for user: ${targetUserId}`);
+
+      // Get user document to get unique cities
+      const userDoc = await firestore().collection('users').doc(targetUserId).get();
+      const userData = userDoc.data();
+      const uniqueCities = userData?.uniqueCities || [];
+
+      // Load city images from cityImages collection
+      const citiesWithImages: City[] = [];
+      
+      for (const cityName of uniqueCities) {
+        const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
+        const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
+        
+        // Capitalize each word in the city name
+        const capitalizedCityName = cityName.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+        
+        if (cityDoc.exists) {
+          const cityData = cityDoc.data();
+          if (cityData.imageUrl) {
+            citiesWithImages.push({
+              name: capitalizedCityName,
+              imageUrl: cityData.imageUrl
+            });
+          }
+        } else {
+          // Use placeholder if no image exists
+          citiesWithImages.push({
+            name: capitalizedCityName,
+            imageUrl: 'https://via.placeholder.com/350'
+          });
+        }
+      }
+
+      console.log(`🌎 Found ${citiesWithImages.length} cities for user`);
+      setCities(citiesWithImages);
+    } catch (error) {
+      console.error('Error loading cities:', error);
+    } finally {
+      setCitiesLoading(false);
     }
   };
 
@@ -270,11 +337,48 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
     </TouchableOpacity>
   );
 
-  return (
-    <ScrollView 
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
+  const renderCityItem = ({ item }: { item: City }) => (
+    <TouchableOpacity
+      style={styles.cityItem}
+      onPress={() => {
+        if (navigation && onFilterChange && onTabChange) {
+          // Create city filter
+          const cityFilter: FilterItem = {
+            type: 'city',
+            value: item.name.toLowerCase(), // Use lowercase for filtering
+            label: item.name
+          };
+          
+          // Set the filter
+          onFilterChange([cityFilter]);
+          
+          // Switch to map tab (index 2)
+          onTabChange(2);
+        } else {
+          // Fallback if functions not available
+          Alert.alert('View City', `Showing meals for ${item.name} on map`);
+        }
+      }}
     >
+      <View style={styles.cityImageContainer}>
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.cityImage}
+          resizeMode="cover"
+        />
+      </View>
+      <Text style={styles.cityName} numberOfLines={2}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+      >
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
@@ -305,19 +409,35 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
             </View>
           )}
 
+          {/* Cities Section */}
+          {!citiesLoading && cities.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Cities</Text>
+              
+              <FlatList
+                data={cities}
+                renderItem={renderCityItem}
+                keyExtractor={item => item.name}
+                numColumns={3}
+                contentContainerStyle={styles.citiesList}
+                scrollEnabled={false}
+              />
+            </>
+          )}
+
           {/* Top Rated Photos Section */}
           {!photosLoading && topRatedPhotos.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>These could Hang up on a Wall</Text>
-              <Text style={styles.subtitle}>(Your best, ai-rated food photography)</Text>
+              <Text style={styles.sectionTitle}>Wall Hangers</Text>
+              <Text style={styles.subtitle}>(Your highly rated food photography)</Text>
               
               <FlatList
                 data={topRatedPhotos}
                 renderItem={renderTopPhotoItem}
                 keyExtractor={item => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
+                numColumns={3}
                 contentContainerStyle={styles.topPhotosList}
+                scrollEnabled={false}
               />
             </>
           )}
@@ -330,74 +450,100 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
             <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
           </TouchableOpacity>
           
-          {/* Photo detail modal */}
-          {selectedPhoto && (
-            <View style={styles.photoDetailOverlay}>
-              <TouchableOpacity 
-                style={styles.photoDetailOverlay}
-                onPress={() => setSelectedPhoto(null)}
-                activeOpacity={1}
-              >
-                <View style={styles.photoDetailContainer}>
-                  <TouchableOpacity 
-                    style={styles.photoCloseButton}
-                    onPress={() => setSelectedPhoto(null)}
-                  >
-                    <Text style={styles.closeButtonX}>×</Text>
-                  </TouchableOpacity>
-                  
-                  <View style={styles.enlargedPhotoContainer}>
-                    <Image
-                      source={{ uri: selectedPhoto.photoUrl }}
-                      style={styles.enlargedPhoto}
-                      resizeMode="cover"
-                    />
-                    <Image
-                      source={require('../assets/icons/frames/photo-frame-large.png')}
-                      style={styles.enlargedPhotoFrame}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  
-                  <View style={styles.photoDetailInfo}>
-                    {selectedPhoto.meal && (
-                      <Text style={styles.photoDetailMeal}>{selectedPhoto.meal}</Text>
-                    )}
-                    {selectedPhoto.restaurant && (
-                      <Text style={styles.photoDetailRestaurant}>{selectedPhoto.restaurant}</Text>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {/* Achievement detail modal - zoomed stamp */}
-          {selectedAchievement && (
-            <View style={styles.detailOverlay}>
-              <View style={styles.detailCard}>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={closeAchievementDetail}
-                >
-                  <Text style={styles.closeButtonX}>×</Text>
-                </TouchableOpacity>
-                
-                {/* Zoomed stamp image - same proportions as original stamp */}
-                <View style={styles.zoomedStampContainer}>
-                  {selectedAchievement.earned ? (
-                    <Image 
-                      source={getStampImage(selectedAchievement.id)}
-                      style={styles.zoomedStampImage}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <Icon name="lock" size={120} color="#ccc" />
-                  )}
-                </View>
-                
-                {/* Title and description at bottom */}
-                <View style={styles.stampInfo}>
+        </>
+      )}
+    </ScrollView>
+    
+    {/* Photo detail modal - now using Modal component for proper positioning */}
+    <Modal
+      visible={selectedPhoto !== null}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setSelectedPhoto(null)}
+    >
+      <View style={styles.photoDetailOverlay}>
+        <TouchableOpacity 
+          style={styles.photoDetailOverlay}
+          onPress={() => setSelectedPhoto(null)}
+          activeOpacity={1}
+        >
+          <View style={styles.photoDetailContainer}>
+            <TouchableOpacity 
+              style={styles.photoCloseButton}
+              onPress={() => setSelectedPhoto(null)}
+            >
+              <Text style={styles.closeButtonX}>×</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.enlargedPhotoContainer}>
+              {selectedPhoto && (
+                <>
+                  <Image
+                    source={{ uri: selectedPhoto.photoUrl }}
+                    style={styles.enlargedPhoto}
+                    resizeMode="cover"
+                  />
+                  <Image
+                    source={require('../assets/icons/frames/photo-frame-large.png')}
+                    style={styles.enlargedPhotoFrame}
+                    resizeMode="contain"
+                  />
+                </>
+              )}
+            </View>
+            
+            <View style={styles.photoDetailInfo}>
+              {selectedPhoto?.meal && (
+                <Text style={styles.photoDetailMeal}>{selectedPhoto.meal}</Text>
+              )}
+              {selectedPhoto?.restaurant && (
+                <Text style={styles.photoDetailRestaurant}>{selectedPhoto.restaurant}</Text>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+    
+    {/* Achievement detail modal - now using Modal component for proper positioning */}
+    <Modal
+      visible={selectedAchievement !== null}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={closeAchievementDetail}
+    >
+      <View style={styles.detailOverlay}>
+        <TouchableOpacity 
+          style={styles.detailOverlay}
+          onPress={closeAchievementDetail}
+          activeOpacity={1}
+        >
+          <View style={styles.detailCard}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={closeAchievementDetail}
+            >
+              <Text style={styles.closeButtonX}>×</Text>
+            </TouchableOpacity>
+            
+            {/* Zoomed stamp image - same proportions as original stamp */}
+            <View style={styles.zoomedStampContainer}>
+              {selectedAchievement?.earned ? (
+                <Image 
+                  source={getStampImage(selectedAchievement.id)}
+                  style={styles.zoomedStampImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                selectedAchievement && <Icon name="lock" size={120} color="#ccc" />
+              )}
+            </View>
+            
+            {/* Title and description at bottom */}
+            <View style={styles.stampInfo}>
+              {selectedAchievement && (
+                <>
                   <Text style={styles.detailName}>
                     {selectedAchievement.name}
                   </Text>
@@ -418,13 +564,14 @@ const StampsScreen: React.FC<Props> = ({ userId }) => {
                       </Text>
                     </View>
                   )}
-                </View>
-              </View>
+                </>
+              )}
             </View>
-          )}
-        </>
-      )}
-    </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+    </>
   );
 };
 
@@ -552,15 +699,17 @@ const styles = StyleSheet.create({
   },
   // Detail modal styles
   detailOverlay: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
   },
   detailCard: {
     width: STAMP_SIZE * 2.5, // 2.5x the original stamp width
@@ -666,23 +815,23 @@ const styles = StyleSheet.create({
   },
   // Top Photos Section Styles
   topPhotosList: {
-    paddingHorizontal: 15,
+    padding: 15,
     paddingBottom: 20,
   },
   topPhotoItem: {
     alignItems: 'center',
-    marginRight: 30, // Even more space between photos
+    margin: 5, // Equal spacing all around for grid layout
   },
   photoContainer: {
     position: 'relative',
-    width: 120, // Even bigger container for frame
-    height: 120,
+    width: (width - 90) / 3, // Responsive width for 3 columns with spacing
+    height: (width - 90) / 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   topPhotoImage: {
-    width: 80, // Slightly bigger photo
-    height: 80,
+    width: '70%', // Proportional to container size
+    height: '70%',
     borderRadius: 8,
     position: 'absolute',
   },
@@ -690,21 +839,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 120, // Full frame size
-    height: 120,
+    width: '100%', // Fill container
+    height: '100%',
     zIndex: 1,
   },
   // Photo Modal Styles
   photoDetailOverlay: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 200,
   },
   photoDetailContainer: {
     width: '90%',
@@ -765,6 +916,51 @@ const styles = StyleSheet.create({
     color: '#666',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
+  },
+  // Cities section styles
+  citiesList: {
+    padding: 15,
+    paddingBottom: 30,
+  },
+  cityItem: {
+    width: STAMP_SIZE,
+    height: STAMP_SIZE + 10, // Reduced extra space for text
+    margin: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+    backgroundColor: '#FAF3E0',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cityImageContainer: {
+    width: STAMP_SIZE - 16, // Use even more of the stamp width
+    height: STAMP_SIZE - 25, // Leave less room for text at bottom
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  cityImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  cityName: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 2,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
+    minHeight: 24, // Reduced height for tighter spacing
   },
 });
 

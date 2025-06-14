@@ -36,7 +36,6 @@ import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
-import { getCityImageUrl, preloadCityImages, syncUserCitiesWithDatabase, loadMultipleCities, loadIndividualCity } from '../services/cityImageService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -112,9 +111,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
         badgeCount: 0
     });
     
-    // State for cities and their images
-    const [uniqueCities, setUniqueCities] = useState<string[]>([]);
-    const [cityImages, setCityImages] = useState<{ [city: string]: string }>({});
 
     // Tab view state
     const [tabIndex, setTabIndex] = useState(0);
@@ -276,64 +272,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 });
             }
 
-            // Load user profile and cities
+            // Load user profile
             const isOwnProfile = !userId || userId === auth().currentUser?.uid;
-            
-            // Load user document to get cities
-            try {
-                const userDoc = await firestore()
-                    .collection('users')
-                    .doc(targetUserId)
-                    .get();
-                
-                if (userDoc.exists) {
-                    const userData = userDoc.data();
-                    const cities = userData?.uniqueCities || [];
-                    
-                    console.log(`🏙️ [FoodPassport] User has ${cities.length} unique cities:`, cities);
-                    
-                    // Capitalize and sort cities alphabetically
-                    const processedCities = cities
-                        .map((city: string) => {
-                            // Capitalize each word in the city name
-                            return city.split(' ').map(word => 
-                                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                            ).join(' ');
-                        })
-                        .sort(); // Sort alphabetically
-                    
-                    if (!isMountedRef.current) return;
-                    setUniqueCities(processedCities);
-                    
-                    // Preload city images
-                    if (processedCities.length > 0) {
-                        console.log(`🏙️ [FoodPassport] Starting to preload city images for:`, processedCities);
-                        preloadCityImages(processedCities).then(() => {
-                            // Load city images
-                            const loadCityImages = async () => {
-                                console.log(`🏙️ [FoodPassport] Loading city images...`);
-                                const images: { [city: string]: string } = {};
-                                for (const city of processedCities) {
-                                    console.log(`🏙️ [FoodPassport] Loading image for: ${city}`);
-                                    images[city] = await getCityImageUrl(city);
-                                    console.log(`🏙️ [FoodPassport] Loaded image for ${city}:`, images[city]);
-                                }
-                                if (isMountedRef.current) {
-                                    console.log(`🏙️ [FoodPassport] Setting city images:`, images);
-                                    setCityImages(images);
-                                }
-                            };
-                            loadCityImages();
-                        });
-                    } else {
-                        console.log(`🏙️ [FoodPassport] No cities to load images for`);
-                    }
-                } else {
-                    console.log(`🏙️ [FoodPassport] User document does not exist`);
-                }
-            } catch (error) {
-                console.error('Error loading user cities:', error);
-            }
             
             if (!isOwnProfile && userId) {
                 // Load other user's profile
@@ -967,49 +907,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                         )}
                         ListFooterComponent={() => (
                             <>
-                            {/* Cities Section */}
-                            {uniqueCities.length > 0 && (
-                                <View style={styles.citiesSection}>
-                                    <Text style={styles.citiesSectionTitle}>Cities</Text>
-                                    <FlatList
-                                        horizontal
-                                        data={uniqueCities}
-                                        keyExtractor={(city) => city}
-                                        showsHorizontalScrollIndicator={false}
-                                        renderItem={({ item: city }) => (
-                                            <TouchableOpacity
-                                                style={styles.cityItem}
-                                                onPress={() => {
-                                                    if (onFilterChange && onTabChange) {
-                                                        // Create city filter
-                                                        const cityFilter: FilterItem = {
-                                                            type: 'city',
-                                                            value: city.toLowerCase(), // Use lowercase for filtering (database stores lowercase)
-                                                            label: city
-                                                        };
-                                                        
-                                                        // Set the filter
-                                                        onFilterChange([cityFilter]);
-                                                        
-                                                        // Switch to map tab (index 2)
-                                                        onTabChange(2);
-                                                    } else {
-                                                        // Fallback if functions not available
-                                                        Alert.alert('View City', `Showing meals for ${city} on map`);
-                                                    }
-                                                }}
-                                            >
-                                                <Image
-                                                    source={{ uri: cityImages[city] || 'https://via.placeholder.com/80' }}
-                                                    style={styles.cityImage}
-                                                />
-                                                <Text style={styles.cityName} numberOfLines={1}>{city}</Text>
-                                            </TouchableOpacity>
-                                        )}
-                                        contentContainerStyle={styles.citiesList}
-                                    />
-                                </View>
-                            )}
                             </>
                         )}
                         refreshControl={
@@ -1379,40 +1276,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#E63946',
         fontWeight: '500',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    },
-    // Cities section styles
-    citiesSection: {
-        marginTop: 20,
-        marginBottom: 10,
-    },
-    citiesSectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1a2b49',
-        marginBottom: 12,
-        paddingHorizontal: 16,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    },
-    citiesList: {
-        paddingHorizontal: 16,
-    },
-    cityItem: {
-        marginRight: 12,
-        alignItems: 'center',
-    },
-    cityImage: {
-        width: 120,
-        height: 120,
-        borderRadius: 12,
-        backgroundColor: '#f0f0f0',
-        marginBottom: 8,
-    },
-    cityName: {
-        fontSize: 13,
-        color: '#666',
-        maxWidth: 120,
-        textAlign: 'center',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
 });

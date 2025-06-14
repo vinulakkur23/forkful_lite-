@@ -246,6 +246,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           <ErrorBoundary navigation={navigation}>
             <StampsScreen 
               userId={targetUserId}
+              navigation={navigation}
+              onFilterChange={handleFilterChange}
+              onTabChange={setTabIndex}
             />
           </ErrorBoundary>
         );
