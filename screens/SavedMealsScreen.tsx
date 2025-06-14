@@ -23,6 +23,7 @@ type SavedMealsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'F
 type Props = {
   navigation: SavedMealsScreenNavigationProp;
   activeFilters: FilterItem[] | null;
+  activeRatingFilters?: number[] | null;
   userId?: string;
   isOwnProfile?: boolean;
 };
@@ -40,7 +41,7 @@ interface SavedMeal {
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing
 
-const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, isOwnProfile = true }) => {
+const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, userId, isOwnProfile = true }) => {
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<SavedMeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,9 +60,9 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, 
 
   // Apply filter whenever saved meals or active filters change
   useEffect(() => {
-    console.log('SavedMealsScreen: activeFilters changed:', activeFilters);
+    console.log('SavedMealsScreen: activeFilters or activeRatingFilters changed:', activeFilters, activeRatingFilters);
     applyFilter();
-  }, [savedMeals, activeFilters]);
+  }, [savedMeals, activeFilters, activeRatingFilters]);
 
   const fetchSavedMeals = async () => {
     try {
@@ -130,14 +131,14 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, 
       return;
     }
     
-    // If no filters are active, show all meals
-    if (!activeFilters || activeFilters.length === 0) {
+    // If no filters are active, show all meals (but still need to check for rating filters)
+    if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
       console.log('No active filters, showing all saved meals');
       setFilteredMeals(savedMeals);
       return;
     }
     
-    console.log(`Applying ${activeFilters.length} filters to saved meals`);
+    console.log(`Applying ${activeFilters?.length || 0} filters and ${activeRatingFilters?.length || 0} rating filters to saved meals`);
     
     // For now, we can't filter saved meals by metadata since we only store basic info
     // This could be enhanced later by fetching full meal details for each saved meal
@@ -145,12 +146,22 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, userId, 
     // For now, we'll just filter by restaurant name if that filter is present
     let result = [...savedMeals];
     
-    activeFilters.forEach(filter => {
-      if (filter.type === 'city') {
-        // We don't store city in saved meals currently
-        console.log('City filtering not available for saved meals');
-      }
-    });
+    if (activeFilters && activeFilters.length > 0) {
+      activeFilters.forEach(filter => {
+        if (filter.type === 'city') {
+          // We don't store city in saved meals currently
+          console.log('City filtering not available for saved meals');
+        }
+      });
+    }
+    
+    // Apply rating filters if any are active
+    if (activeRatingFilters && activeRatingFilters.length > 0) {
+      console.log(`SavedMealsScreen: Applying rating filters:`, activeRatingFilters);
+      const beforeRatingFilter = result.length;
+      result = result.filter(meal => activeRatingFilters.includes(meal.rating));
+      console.log(`SavedMealsScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
+    }
     
     setFilteredMeals(result);
   };

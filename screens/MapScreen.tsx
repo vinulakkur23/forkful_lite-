@@ -36,6 +36,7 @@ const MAP_ICONS = {
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
   activeFilters: FilterItem[] | null;
+  activeRatingFilters?: number[] | null;
   isActive?: boolean; // Flag to indicate if this tab is currently active
   userId?: string; // Optional userId to view other users' maps
 };
@@ -70,7 +71,7 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActive, userId }) => {
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, activeRatingFilters, isActive, userId }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,7 +227,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       }
       
       setAllMeals(fetchedMeals);
-      applyFilter(fetchedMeals, activeFilters);
+      applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
       setLoading(false);
       
       // Trigger map fitting after data is loaded
@@ -291,7 +292,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       });
 
       setAllMeals(fetchedMeals);
-      applyFilter(fetchedMeals, activeFilters);
+      applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
       setLoading(false);
       
       // Trigger map fitting after data is loaded
@@ -340,16 +341,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
   };
 
   // Add function to apply multiple filters
-  const applyFilter = (mealsToFilter: MealEntry[], filters: FilterItem[] | null) => {
+  const applyFilter = (mealsToFilter: MealEntry[], filters: FilterItem[] | null, ratingFilters?: number[] | null) => {
     console.log(`MapScreen: Applying filters to ${mealsToFilter.length} meals`);
     
-    if (!filters || filters.length === 0) {
+    if ((!filters || filters.length === 0) && (!ratingFilters || ratingFilters.length === 0)) {
       console.log('MapScreen: No filters active, showing all meals');
       setFilteredMeals(mealsToFilter);
       return;
     }
     
-    console.log(`MapScreen: ${filters.length} filters active`);
+    console.log(`MapScreen: ${filters?.length || 0} filters active, ${ratingFilters?.length || 0} rating filters active`);
     
     // Check if we have meals with metadata
     const mealsWithMetadata = mealsToFilter.filter(meal => meal.aiMetadata);
@@ -359,7 +360,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
     let result = [...mealsToFilter];
     
     // Apply each filter sequentially
-    filters.forEach(filter => {
+    if (filters && filters.length > 0) {
+      filters.forEach(filter => {
       console.log(`MapScreen: Applying filter: ${filter.type} = ${filter.value}`);
       
       if (filter.type === 'cuisineType') {
@@ -400,22 +402,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, isActi
       }
       
       console.log(`MapScreen: After filter ${filter.type}=${filter.value}, ${result.length} meals remain`);
-    });
+      });
+    }
     
     console.log(`MapScreen: Final filter results: ${result.length} meals match all filter criteria`);
+    
+    // Apply rating filters if any are active
+    if (ratingFilters && ratingFilters.length > 0) {
+      console.log(`MapScreen: Applying rating filters:`, ratingFilters);
+      const beforeRatingFilter = result.length;
+      result = result.filter(meal => ratingFilters.includes(meal.rating));
+      console.log(`MapScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
+    }
+    
     setFilteredMeals(result);
   };
   
   // Update the filter whenever activeFilters changes or when switching between modes
   useEffect(() => {
-    console.log('MapScreen: activeFilters changed or showWishlist toggled');
-    applyFilter(allMeals, activeFilters);
+    console.log('MapScreen: activeFilters or activeRatingFilters changed or showWishlist toggled');
+    applyFilter(allMeals, activeFilters, activeRatingFilters);
     
     // When filter changes and we have meals, fit the map to show them
     if (filteredMeals.length > 0 && mapRef.current && !loading) {
       setTimeout(() => fitMapToMarkers(), 500); // Small delay to ensure filteredMeals is updated
     }
-  }, [activeFilters, allMeals, showWishlist]);
+  }, [activeFilters, activeRatingFilters, allMeals, showWishlist]);
   
   // Request location permission and get current position
   const requestLocationPermission = async () => {

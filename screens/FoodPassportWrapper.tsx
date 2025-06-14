@@ -11,6 +11,7 @@ import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
+import CompositeFilterComponent from '../components/CompositeFilterComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -125,6 +126,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   
   // Shared filter state for both tabs - now an array of filters
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
+  const [activeRatingFilters, setActiveRatingFilters] = useState<number[] | null>(null);
   
   // Handle filter changes from SimpleFilterComponent
   const handleFilterChange = (filters: FilterItem[] | null) => {
@@ -135,6 +137,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     setTimeout(() => {
       console.log('FoodPassportWrapper: Active filters after state update:', JSON.stringify(activeFilters));
     }, 0);
+  };
+
+  // Handle rating filter changes
+  const handleRatingFilterChange = (ratings: number[] | null) => {
+    console.log('FoodPassportWrapper: Rating filters changed to:', ratings);
+    setActiveRatingFilters(ratings);
   };
 
   React.useEffect(() => {
@@ -210,6 +218,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             <FoodPassportScreen 
               navigation={navigation}
               activeFilters={activeFilters}
+              activeRatingFilters={activeRatingFilters}
               userId={targetUserId}
               userName={userName}
               userPhoto={userPhoto}
@@ -225,6 +234,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             <SavedMealsScreen 
               navigation={navigation}
               activeFilters={activeFilters}
+              activeRatingFilters={activeRatingFilters}
               userId={targetUserId}
               isOwnProfile={isOwnProfile}
             />
@@ -236,6 +246,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             <MapScreen 
               navigation={navigation}
               activeFilters={activeFilters}
+              activeRatingFilters={activeRatingFilters}
               isActive={tabIndex === 2} // Map is always at index 2 now
               userId={targetUserId}
             />
@@ -352,10 +363,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       
       {/* Shared filter component */}
       <View style={styles.filterArea}>
-        <SimpleFilterComponent 
+        <CompositeFilterComponent 
           key="shared-passport-filter"
           onFilterChange={handleFilterChange}
+          onRatingFilterChange={handleRatingFilterChange}
           initialFilters={activeFilters}
+          initialRatings={activeRatingFilters}
           onUserSelect={(searchUserId, searchUserName, searchUserPhoto) => {
             console.log('FoodPassport: Switching to user profile:', searchUserName, searchUserId, 'Photo:', searchUserPhoto);
             

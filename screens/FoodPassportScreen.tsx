@@ -43,6 +43,7 @@ type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 
 type Props = {
   navigation: FoodPassportScreenNavigationProp;
   activeFilters: FilterItem[] | null;
+  activeRatingFilters?: number[] | null;
   userId?: string;
   userName?: string;
   userPhoto?: string;
@@ -95,7 +96,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -167,9 +168,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
     
     // Apply filter whenever meals or active filters change
     useEffect(() => {
-        console.log('FoodPassportScreen: activeFilters changed:', activeFilters);
+        console.log('FoodPassportScreen: activeFilters or activeRatingFilters changed:', activeFilters, activeRatingFilters);
         applyFilter();
-    }, [meals, activeFilters]);
+    }, [meals, activeFilters, activeRatingFilters]);
     
     // Refresh data when screen comes into focus (handles returning from deletion)
     const lastFocusTime = useRef<number>(0);
@@ -404,20 +405,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
             });
         }
         
-        // If no filters are active, show all meals
-        if (!activeFilters || activeFilters.length === 0) {
+        // If no filters are active, show all meals (but still need to check for rating filters)
+        if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
             console.log('No active filters, showing all meals');
             setFilteredMeals(meals);
             return;
         }
         
-        console.log(`Applying ${activeFilters.length} filters:`, JSON.stringify(activeFilters));
+        console.log(`Applying ${activeFilters?.length || 0} filters and ${activeRatingFilters?.length || 0} rating filters:`, JSON.stringify(activeFilters), activeRatingFilters);
         
         // Start with all meals
         let result = [...meals];
         
         // Apply each filter sequentially
-        activeFilters.forEach(filter => {
+        if (activeFilters && activeFilters.length > 0) {
+            activeFilters.forEach(filter => {
             const countBefore = result.length;
             console.log(`Applying filter: ${filter.type} = ${filter.value}`);
             
@@ -488,9 +490,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, userId
                 });
             }
             console.log(`After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
-        });
+            });
+        }
         
         console.log(`Final filter results: ${result.length} meals match all filter criteria`);
+        
+        // Apply rating filters if any are active
+        if (activeRatingFilters && activeRatingFilters.length > 0) {
+            console.log(`FoodPassportScreen: Applying rating filters:`, activeRatingFilters);
+            const beforeRatingFilter = result.length;
+            result = result.filter(meal => activeRatingFilters.includes(meal.rating));
+            console.log(`FoodPassportScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
+        }
+        
         setFilteredMeals(result);
     };
     

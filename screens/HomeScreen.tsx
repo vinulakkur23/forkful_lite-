@@ -25,6 +25,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom EmojiDisplay component
 import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
+import CompositeFilterComponent from '../components/CompositeFilterComponent';
 import HomeMapComponent from '../components/HomeMapComponent';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -95,6 +96,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   
   // Multi-filter state
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
+  const [activeRatingFilters, setActiveRatingFilters] = useState<number[] | null>(null);
   
   // Track if we're showing limited results
   const [showingLimitedResults, setShowingLimitedResults] = useState(false);
@@ -212,7 +214,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   
   // Apply filter whenever meals or active filters change
   useEffect(() => {
-    console.log('HomeScreen: activeFilters changed:', activeFilters);
+    console.log('HomeScreen: activeFilters or activeRatingFilters changed:', activeFilters, activeRatingFilters);
     // Add a small delay to prevent rapid successive calls
     const timeoutId = setTimeout(() => {
       if (isMountedRef.current) {
@@ -221,7 +223,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     }, 50);
     
     return () => clearTimeout(timeoutId);
-  }, [allNearbyMeals, activeFilters]);
+  }, [allNearbyMeals, activeFilters, activeRatingFilters]);
 
   // Restore scroll position when returning to this screen
   useFocusEffect(
@@ -421,17 +423,18 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     
     console.log(`HomeScreen: After filtering out homemade: ${allNearbyMeals.length} meals -> ${result.length} meals remain`);
     
-    // If no other filters are active, show the non-homemade meals
-    if (!activeFilters || activeFilters.length === 0) {
+    // If no other filters are active, show the non-homemade meals (but still need to check for rating filters)
+    if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
       console.log('HomeScreen: No active filters, showing all non-homemade meals');
       setNearbyMeals(result);
       return;
     }
     
-    console.log(`HomeScreen: Applying ${activeFilters.length} additional filters:`, JSON.stringify(activeFilters));
+    console.log(`HomeScreen: Applying ${activeFilters?.length || 0} additional filters and ${activeRatingFilters?.length || 0} rating filters:`, JSON.stringify(activeFilters), activeRatingFilters);
     
     // Apply each filter sequentially
-    activeFilters.forEach(filter => {
+    if (activeFilters && activeFilters.length > 0) {
+      activeFilters.forEach(filter => {
       const countBefore = result.length;
       console.log(`HomeScreen: Applying filter: ${filter.type} = ${filter.value}`);
       
@@ -502,9 +505,18 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         });
       }
       console.log(`HomeScreen: After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
-    });
+      });
+    }
     
     console.log(`HomeScreen: Final filter results: ${result.length} meals match all filter criteria`);
+    
+    // Apply rating filters if any are active
+    if (activeRatingFilters && activeRatingFilters.length > 0) {
+      console.log(`HomeScreen: Applying rating filters:`, activeRatingFilters);
+      const beforeRatingFilter = result.length;
+      result = result.filter(meal => activeRatingFilters.includes(meal.rating));
+      console.log(`HomeScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
+    }
     
     // Set filtered meals
     setNearbyMeals(result);
@@ -515,6 +527,13 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     console.log('HomeScreen: Filters changed:', filters);
     setActiveFilters(filters);
     // applyFilter will be called via useEffect
+  };
+
+  // Handle rating filter changes
+  const handleRatingFilterChange = (ratings: number[] | null) => {
+    console.log('HomeScreen: Rating filters changed:', ratings);
+    setActiveRatingFilters(ratings);
+    // applyFilter will be called via useEffect when activeRatingFilters changes
   };
 
   const handleImageError = (mealId: string) => {
@@ -855,10 +874,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       
       {/* Multi Filter Component */}
       <View style={styles.filterArea}>
-        <SimpleFilterComponent 
+        <CompositeFilterComponent 
           key="home-filter"
           onFilterChange={handleFilterChange}
+          onRatingFilterChange={handleRatingFilterChange}
           initialFilters={activeFilters}
+          initialRatings={activeRatingFilters}
           onUserSelect={(userId, userName, userPhoto) => {
             console.log('Navigating to user profile:', userName, userId, 'Photo:', userPhoto);
             navigation.navigate('FoodPassport', { 
