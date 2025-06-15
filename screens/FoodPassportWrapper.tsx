@@ -280,7 +280,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ff6b6b" />
+        <ActivityIndicator size="large" color="#ffc008" />
         <Text style={styles.loadingText}>Loading Food Passport...</Text>
       </View>
     );
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: '#1a2b49', // Changed to navy blue
     fontSize: 16,
   },
   errorContainer: {

@@ -392,18 +392,21 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <Text style={styles.sectionTitle}>How was your Meal?</Text>
-            <Text style={styles.sectionSubtitle}>Sharing will help us understand your tastes and personalize dish recommendations.</Text>
+            <Text style={styles.sectionTitle}>Dish it out! Let's hear your thoughts.</Text>
             <TextInput
               key={`thoughts-${mealId}`}
               style={styles.commentInput}
               placeholder="What did you enjoy about this meal? What could be better?"
               placeholderTextColor="#999"
               multiline={true}
+              blurOnSubmit={false}
               value={thoughts}
               onChangeText={setThoughts}
               maxLength={600}
             />
+            <Text style={styles.helperText}>
+              Sharing will help others find your review helpful and allow us to give you better recommendations.
+            </Text>
           </View>
         </View>
 
@@ -497,7 +500,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 240,
+    height: 240, // Already matches RatingScreen1 height
     backgroundColor: '#FAF3E0',
   },
   image: {
@@ -556,9 +559,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18, // Increased from 16 to 18 for larger font
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 10, // Increased from 4 to 10 for better spacing
     color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
@@ -597,8 +600,8 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 20,
-    minHeight: 100,
+    marginBottom: 8, // Reduced from 20 to 8 to make room for helper text
+    minHeight: 160, // Increased from 100 to 160 for bigger text box
     backgroundColor: 'white',
     textAlignVertical: 'top',
     fontSize: 15,
@@ -606,6 +609,14 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     borderLeftWidth: 3,
     borderLeftColor: '#FFC008',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    marginBottom: 20,
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   actionsContainer: {
     flexDirection: 'row',

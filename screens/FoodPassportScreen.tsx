@@ -786,7 +786,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
             {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#ff6b6b" />
+                    <ActivityIndicator size="large" color="#ffc008" />
                     <Text style={styles.loadingText}>Loading your food passport...</Text>
                 </View>
             ) : (
@@ -850,7 +850,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                                 </>
                                             )}
                                         </View>
-                                        {/* Debug buttons - only show for own profile */}
+                                        {/* HIDDEN DEBUG BUTTONS - Functionality preserved but UI removed
                                         {(!userId || userId === auth().currentUser?.uid) && (
                                             <View style={styles.debugButtonsContainer}>
                                                 <TouchableOpacity 
@@ -973,6 +973,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                                 </TouchableOpacity>
                                             </View>
                                         )}
+                                        */}
                                     </View>
                                 </View>
                             </View>

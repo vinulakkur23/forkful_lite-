@@ -459,23 +459,23 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
           {/* Comments Section */}
           <View style={styles.commentsContainer}>
             <View style={styles.commentSection}>
-              <Text style={styles.commentTitle}>How was your Meal?</Text>
-              <Text style={styles.commentSubtitle}>Sharing will help us understand your tastes and personalize dish recommendations.</Text>
+              <Text style={styles.commentTitle}>Dish it out! Let's hear your thoughts.</Text>
               <TextInput
                 ref={thoughtsRef}
                 style={styles.thoughtsInput}
                 placeholder="What did you enjoy about this meal? What could be better?"
                 placeholderTextColor="#999"
                 multiline={true}
-                blurOnSubmit={true}
-                returnKeyType="done"
+                blurOnSubmit={false}
                 autoCapitalize="sentences"
-                onSubmitEditing={handleThoughtsSubmit}
                 onChangeText={setThoughts}
                 value={thoughts}
                 maxLength={600}
                 numberOfLines={6}
               />
+              <Text style={styles.helperText}>
+                Sharing will help others find your review helpful and allow us to give you better recommendations.
+              </Text>
             </View>
           </View>
 
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 180,
+    height: 240, // Increased from 180 to 240 for bigger image
     borderRadius: 12, // Matching card radius from HomeScreen
     overflow: 'hidden',
     backgroundColor: '#FAF3E0', // Card background color from HomeScreen
@@ -613,10 +613,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   commentTitle: {
-    fontSize: 16,
+    fontSize: 18, // Increased from 16 to 18 for larger font
     fontWeight: '600',
     color: '#1a2b49', // Updated text color
-    marginBottom: 4,
+    marginBottom: 10, // Increased from 4 to 10 for better spacing
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentSubtitle: {
@@ -669,11 +669,18 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 5,
     padding: 12,
-    minHeight: 120,
+    minHeight: 160, // Increased from 120 to 160 for bigger text box
     fontSize: 14,
     backgroundColor: 'white',
     color: '#1a2b49',
     textAlignVertical: 'top',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    fontStyle: 'italic',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   eatNowButton: {

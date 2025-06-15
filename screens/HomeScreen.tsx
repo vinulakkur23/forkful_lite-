@@ -945,21 +945,23 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Icon name="no-meals" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>
-                {locationError
-                  ? "Couldn't access your location. Please check your settings."
-                  : activeFilters && activeFilters.length > 0
-                    ? "No meals match your current filters"
-                    : "No meals found nearby"}
-              </Text>
-              <Text style={styles.emptySubtext}>
-                {activeFilters && activeFilters.length > 0
-                  ? "Try adjusting your filters or exploring a new area"
-                  : "Start rating meals to populate your feed!"}
-              </Text>
-            </View>
+            !loading && !refreshing && allNearbyMeals.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Icon name="restaurant" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {locationError
+                    ? "Couldn't access your location. Please check your settings."
+                    : activeFilters && activeFilters.length > 0
+                      ? "No meals match your current filters"
+                      : "No meals found nearby"}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {activeFilters && activeFilters.length > 0
+                    ? "Try adjusting your filters or exploring a new area"
+                    : "Start rating meals to populate your feed!"}
+                </Text>
+              </View>
+            ) : null
           }
         />
       )}

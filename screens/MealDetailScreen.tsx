@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -429,6 +429,36 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       }
     });
   };
+
+  // Handle restaurant press to open in Google Maps
+  const handleRestaurantPress = async () => {
+    if (!meal.restaurant) return;
+
+    try {
+      const query = encodeURIComponent(meal.restaurant);
+      
+      // Try Google Maps app first
+      const googleMapsUrl = `comgooglemaps://?q=${query}`;
+      const canOpenGoogleMaps = await Linking.canOpenURL(googleMapsUrl);
+      
+      if (canOpenGoogleMaps) {
+        await Linking.openURL(googleMapsUrl);
+      } else {
+        // Fallback to web browser with Google Maps
+        const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
+        const canOpenWeb = await Linking.canOpenURL(webUrl);
+        
+        if (canOpenWeb) {
+          await Linking.openURL(webUrl);
+        } else {
+          Alert.alert('Error', 'Unable to open maps application');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening maps:', error);
+      Alert.alert('Error', 'Failed to open maps application');
+    }
+  };
   
   // Navigate back to the correct screen
   const goBack = () => {
@@ -576,13 +606,18 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 <EmojiDisplay rating={meal.rating} size={28} />
               </View>
               {meal.restaurant && (
-                <View style={styles.restaurantRow}>
+                <TouchableOpacity 
+                  style={styles.restaurantRow}
+                  onPress={handleRestaurantPress}
+                  activeOpacity={0.7}
+                >
                   <Image
                     source={require('../assets/icons/restaurant-icon.png')}
                     style={styles.restaurantIcon}
                   />
                   <Text style={styles.restaurantName}>{meal.restaurant}</Text>
-                </View>
+                  <Icon name="open-in-new" size={16} color="#666" style={styles.externalLinkIcon} />
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -1078,6 +1113,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8, // Consistent spacing
+  },
+  externalLinkIcon: {
+    marginLeft: 6,
+    opacity: 0.7,
   },
   usernameText: {
     fontSize: 16,

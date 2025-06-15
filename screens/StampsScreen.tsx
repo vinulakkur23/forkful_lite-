@@ -442,13 +442,14 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             </>
           )}
 
-          {/* DEBUG: Clear stamps button - show for testing */}
+          {/* HIDDEN DEBUG BUTTON - Functionality preserved but UI removed
           <TouchableOpacity 
             style={styles.debugButton}
             onPress={handleClearStamps}
           >
             <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
           </TouchableOpacity>
+          */}
           
 
         </>
@@ -830,8 +831,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topPhotoImage: {
-    width: '70%', // Proportional to container size
-    height: '70%',
+    width: '91%', // Increased to 91% for better frame fit
+    height: '91%',
     borderRadius: 8,
     position: 'absolute',
   },
@@ -886,8 +887,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   enlargedPhoto: {
-    width: 210,
-    height: 210,
+    width: 291, // Increased from 270 to 291 (91% of 320px frame) for better frame fit
+    height: 291,
     borderRadius: 15,
     position: 'absolute',
   },
