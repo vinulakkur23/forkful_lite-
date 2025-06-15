@@ -991,7 +991,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
-                                <Icon name="book" size={64} color="#ddd" />
                                 {activeFilters && activeFilters.length > 0 ? (
                                     <>
                                         <Text style={styles.emptyText}>No meals match your filters</Text>
@@ -1001,10 +1000,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     </>
                                 ) : (
                                     <>
-                                        <Text style={styles.emptyText}>No meals in your passport yet</Text>
-                                        <Text style={styles.emptySubtext}>
-                                            Tap "New Entry" to add your first meal!
-                                        </Text>
+                                        <Text style={styles.emptyText}>Upload or take a photo to add your first meal!</Text>
                                     </>
                                 )}
                             </View>

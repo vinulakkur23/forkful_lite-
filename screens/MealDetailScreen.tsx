@@ -435,7 +435,17 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     if (!meal.restaurant) return;
 
     try {
-      const query = encodeURIComponent(meal.restaurant);
+      // Build search query with restaurant name and city if available
+      let searchQuery = meal.restaurant;
+      
+      // Add city to search query if available
+      if (meal.city) {
+        searchQuery += `, ${meal.city}`;
+      } else if (meal.location?.city) {
+        searchQuery += `, ${meal.location.city}`;
+      }
+      
+      const query = encodeURIComponent(searchQuery);
       
       // Try Google Maps app first
       const googleMapsUrl = `comgooglemaps://?q=${query}`;
@@ -616,7 +626,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     style={styles.restaurantIcon}
                   />
                   <Text style={styles.restaurantName}>{meal.restaurant}</Text>
-                  <Icon name="open-in-new" size={16} color="#666" style={styles.externalLinkIcon} />
                 </TouchableOpacity>
               )}
             </View>
