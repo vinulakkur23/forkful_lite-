@@ -198,10 +198,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   };
     
   const continueAsGuest = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],  // Updated to navigate to MainTabs instead of Home
-    });
+    alert("c'mon, help me out and log in");
   };
 
   if (initializing) {
@@ -215,13 +212,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Image
-          source={require('../assets/app-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
         <Text style={styles.title}>DishItOut</Text>
-        <Text style={styles.subtitle}>Your Food Passport</Text>
+        <Text style={styles.subtitle}>Find meals you love. Release your inner food critic.</Text>
       </View>
 
       <View style={styles.buttonContainer}>
@@ -274,20 +266,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 50,
   },
-  logo: {
-    width: 120,
-    height: 120,
+  title: {
+    fontFamily: 'Lobster-Regular',
+    fontSize: 64,
+    color: '#E63946',
     marginBottom: 20,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ff6b6b',
-    marginBottom: 10,
-  },
   subtitle: {
-    fontSize: 18,
-    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontSize: 14,
+    color: '#1a2b49',
+    textAlign: 'center',
   },
   buttonContainer: {
     width: '100%',

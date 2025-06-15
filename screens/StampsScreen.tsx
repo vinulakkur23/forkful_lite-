@@ -429,7 +429,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {!photosLoading && topRatedPhotos.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Wall Hangers</Text>
-              <Text style={styles.subtitle}>(Your highly rated food photography)</Text>
+              <Text style={styles.subtitle}>(Highly rated - by AI - food photography)</Text>
               
               <FlatList
                 data={topRatedPhotos}
