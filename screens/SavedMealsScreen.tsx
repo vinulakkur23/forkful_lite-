@@ -75,12 +75,7 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
         return;
       }
 
-      // Only show saved meals for own profile (saved meals are private)
-      if (userId && userId !== auth().currentUser?.uid) {
-        setSavedMeals([]);
-        setLoading(false);
-        return;
-      }
+      // Allow viewing saved meals for all users (made public)
       
       const savedMealsRef = firestore()
         .collection('users')
@@ -238,19 +233,10 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
   // Render the main screen
   return (
     <SafeAreaView style={styles.container}>
-      {!actualIsOwnProfile ? (
-        // Show private message for other users
-        <View style={styles.emptyContainer}>
-          <Icon name="lock" size={64} color="#ddd" />
-          <Text style={styles.emptyText}>Saved meals are private</Text>
-          <Text style={styles.emptySubtext}>
-            Only the user can see their saved meals
-          </Text>
-        </View>
-      ) : loading && !refreshing ? (
+      {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your saved meals...</Text>
+          <Text style={styles.loadingText}>Loading saved meals...</Text>
         </View>
       ) : (
         <FlatList
@@ -269,7 +255,6 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Icon name="bookmark-border" size={64} color="#ddd" />
               {activeFilters && activeFilters.length > 0 ? (
                 <>
                   <Text style={styles.emptyText}>No saved meals match your filters</Text>
@@ -280,9 +265,6 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
               ) : (
                 <>
                   <Text style={styles.emptyText}>No saved meals yet</Text>
-                  <Text style={styles.emptySubtext}>
-                    Tap the bookmark icon on meal details to save meals you love!
-                  </Text>
                 </>
               )}
             </View>

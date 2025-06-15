@@ -802,8 +802,8 @@ const styles = StyleSheet.create({
   },
   limitedResultsIndicator: {
     position: 'absolute',
-    top: 16,
-    left: 16,
+    top: 18,
+    right: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 12,
     paddingVertical: 6,

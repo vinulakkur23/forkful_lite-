@@ -680,7 +680,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   if (filteredMeals.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Icon name={showWishlist ? "bookmark" : "place"} size={64} color="#ddd" />
+        {!showWishlist && <Icon name="place" size={64} color="#ddd" />}
         {activeFilters && activeFilters.length > 0 ? (
           <>
             <Text style={styles.emptyText}>No meals match your filters</Text>
@@ -692,10 +692,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
           <>
             {showWishlist ? (
               <>
-                <Text style={styles.emptyText}>No saved meals with location data</Text>
-                <Text style={styles.emptySubtext}>
-                  Save meals by tapping the bookmark icon on the meal details screen
-                </Text>
+                <Text style={styles.emptyText}>No saved meals yet</Text>
               </>
             ) : (
               <>

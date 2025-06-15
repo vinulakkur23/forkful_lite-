@@ -392,8 +392,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               tier = 'Tier 3 (Old + Medium)';
             }
           } else {
-            // Skip meals beyond 10 miles unless from followed users
-            continue;
+            // Tier 4: Meals beyond 10 miles (very low priority but still included)
+            if (isNewPost) {
+              score = 25 + Math.max(0, 50 - distance); // Very low score for distant new posts
+              tier = 'Tier 4 (New + Distant)';
+            } else {
+              score = 10 + Math.max(0, 25 - distance * 0.5); // Extremely low score for distant old posts
+              tier = 'Tier 4 (Old + Distant)';
+            }
           }
         } else {
           // No location data, low priority
@@ -1079,7 +1085,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   mealCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FAF3E0', // Back to original color
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
