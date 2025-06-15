@@ -29,6 +29,7 @@ import CompositeFilterComponent from '../components/CompositeFilterComponent';
 import HomeMapComponent from '../components/HomeMapComponent';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { getFollowing } from '../services/followService';
 import Geolocation from '@react-native-community/geolocation';
 import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
@@ -66,6 +67,8 @@ interface MealEntry {
   } | null;
   createdAt: any;
   distance?: number; // Distance in meters from user's current location
+  score?: number; // Tiered relevance score
+  tier?: string; // Tier description for debugging
   aiMetadata?: {
     cuisineType: string;
     foodType: string[];  // Changed to array
@@ -100,6 +103,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   
   // Track if we're showing limited results
   const [showingLimitedResults, setShowingLimitedResults] = useState(false);
+  
+  // Cache following list for performance
+  const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
+  const [followingLastFetched, setFollowingLastFetched] = useState<number>(0);
   
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -258,6 +265,27 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     return deg * (Math.PI/180);
   };
 
+  // Get cached following list (refresh every 5 minutes)
+  const getCachedFollowingList = async (): Promise<string[]> => {
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    if (followingUserIds.length > 0 && (now - followingLastFetched) < fiveMinutes) {
+      console.log('Using cached following list:', followingUserIds.length, 'users');
+      return followingUserIds;
+    }
+    
+    console.log('Refreshing following list...');
+    const followingList = await getFollowing();
+    const userIds = followingList.map(follow => follow.followingId);
+    
+    setFollowingUserIds(userIds);
+    setFollowingLastFetched(now);
+    
+    console.log('Updated following cache:', userIds.length, 'users');
+    return userIds;
+  };
+
   const fetchNearbyMeals = async () => {
     try {
       if (!isMountedRef.current) return;
@@ -267,24 +295,53 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       const currentUserId = auth().currentUser?.uid;
       console.log('Current user ID:', currentUserId);
       
-      // Get all meals from all users
+      // Get cached following list (performance optimization)
+      const followingUserIds = await getCachedFollowingList();
+      
+      // Get meals from all users (limited to 75 for faster processing)
       const querySnapshot = await firestore()
         .collection('mealEntries')
         .orderBy('createdAt', 'desc')
-        .limit(100) // Limit to prevent excessive data usage
+        .limit(75) // Reduced limit for faster processing
         .get();
+
+      const rawMeals = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      // Get unique user IDs for batch fetching user data
+      const uniqueUserIds = [...new Set(rawMeals.map(meal => meal.userId).filter(Boolean))];
+      console.log(`Batch fetching user data for ${uniqueUserIds.length} unique users`);
+      
+      // Batch fetch user data (performance optimization)
+      const userDataMap = new Map<string, any>();
+      
+      // Firebase 'in' queries are limited to 10 items, so we batch them
+      const batchSize = 10;
+      for (let i = 0; i < uniqueUserIds.length; i += batchSize) {
+        const batch = uniqueUserIds.slice(i, i + batchSize);
+        try {
+          const userSnapshot = await firestore()
+            .collection('users')
+            .where(firestore.FieldPath.documentId(), 'in', batch)
+            .get();
+          
+          userSnapshot.docs.forEach(doc => {
+            userDataMap.set(doc.id, doc.data());
+          });
+        } catch (error) {
+          console.log('Error batch fetching user data:', error);
+        }
+      }
+      
+      console.log(`Successfully fetched user data for ${userDataMap.size} users`);
 
       const meals: MealEntry[] = [];
       
-      // Process meals and calculate distance
-      for (const doc of querySnapshot.docs) {
-        const data = doc.data() as MealEntry;
-        
+      // Process meals and calculate tiered scores
+      for (const rawMeal of rawMeals) {
         // Skip entries without location
-        if (!data.location) continue;
-        
-        // Include all users' meals (no longer skip current user's meals)
-        // This allows users to see their own meals mixed with others
+        if (!rawMeal.location) continue;
         
         // Calculate distance if user location is available
         let distance = null;
@@ -292,45 +349,82 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           distance = calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
-            data.location.latitude,
-            data.location.longitude
+            rawMeal.location.latitude,
+            rawMeal.location.longitude
           );
         }
+
+        // Determine if this is a new post (within 7 days)
+        const mealDate = rawMeal.createdAt?.toDate?.() || new Date(0);
+        const isNewPost = mealDate > sevenDaysAgo;
         
-        // Get user data for each meal
-        let userName = '';
-        let userPhoto = '';
+        // Determine if user is following the meal creator
+        const isFromFollowedUser = followingUserIds.includes(rawMeal.userId);
         
-        if (data.userId) {
-          try {
-            const userDoc = await firestore().collection('users').doc(data.userId).get();
-            if (userDoc.exists) {
-              const userData = userDoc.data();
-              userName = userData?.displayName || '';
-              userPhoto = userData?.photoURL || '';
+        // Calculate tiered score
+        let score = 0;
+        let tier = 'Unknown';
+        
+        if (isFromFollowedUser) {
+          // Tier 1: Posts from followed users (regardless of location)
+          score = 1000;
+          if (isNewPost) score += 200; // Bonus for recent posts from followed users
+          tier = 'Tier 1 (Following)';
+        } else if (distance !== null) {
+          if (distance <= 8) { // 5 miles ≈ 8 km
+            if (isNewPost) {
+              // Tier 1: New posts within 5 miles
+              score = 1000 + (100 - distance * 10); // Distance bonus (closer = higher score)
+              tier = 'Tier 1 (New + Close)';
+            } else {
+              // Tier 2: Older posts within 5 miles
+              score = 500 + (100 - distance * 10);
+              tier = 'Tier 2 (Old + Close)';
             }
-          } catch (error) {
-            console.log('Error fetching user data:', error);
+          } else if (distance <= 16) { // 10 miles ≈ 16 km
+            if (isNewPost) {
+              // Tier 2: New posts within 10 miles
+              score = 500 + (50 - distance * 3);
+              tier = 'Tier 2 (New + Medium)';
+            } else {
+              // Tier 3: Older posts within 10 miles
+              score = 100 + (50 - distance * 3);
+              tier = 'Tier 3 (Old + Medium)';
+            }
+          } else {
+            // Skip meals beyond 10 miles unless from followed users
+            continue;
           }
+        } else {
+          // No location data, low priority
+          score = 50;
+          tier = 'Tier 3 (No Location)';
         }
+
+        // Get user data from batch-fetched map (performance optimization)
+        const userData = userDataMap.get(rawMeal.userId);
+        const userName = userData?.displayName || rawMeal.userName || '';
+        const userPhoto = userData?.photoURL || rawMeal.userPhoto || '';
         
         // Make sure aiMetadata has the expected properties
-        const aiMetadata = data.aiMetadata || {};
+        const aiMetadata = rawMeal.aiMetadata || {};
         
         meals.push({
-          id: doc.id,
-          photoUrl: data.photoUrl,
-          rating: data.rating,
-          restaurant: data.restaurant || '',
-          meal: data.meal || '',
-          userId: data.userId,
+          id: rawMeal.id,
+          photoUrl: rawMeal.photoUrl,
+          rating: rawMeal.rating,
+          restaurant: rawMeal.restaurant || '',
+          meal: rawMeal.meal || '',
+          userId: rawMeal.userId,
           userName,
           userPhoto,
-          city: data.city || '', // Include city for filtering
-          mealType: data.mealType || 'Restaurant', // Include meal type (defaults to Restaurant for older entries)
-          location: data.location,
+          city: rawMeal.city || '', // Include city for filtering
+          mealType: rawMeal.mealType || 'Restaurant', // Include meal type (defaults to Restaurant for older entries)
+          location: rawMeal.location,
           distance: distance,
-          createdAt: data.createdAt?.toDate?.() || new Date(),
+          createdAt: rawMeal.createdAt?.toDate?.() || new Date(),
+          score: score,
+          tier: tier,
           aiMetadata: {
             cuisineType: aiMetadata.cuisineType || 'Unknown',
             foodType: aiMetadata.foodType || ['Unknown'],
@@ -345,22 +439,32 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         });
       }
       
-      // Sort by distance if location is available, otherwise by date
-      let sortedMeals = userLocation
-        ? meals.sort((a, b) => (a.distance || 9999) - (b.distance || 9999))
-        : meals;
+      // Sort by score (highest first) then by creation date for tie-breaking
+      meals.sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
       
-      // Limit to the closest MAX_MEALS_TO_DISPLAY meals to prevent performance issues
-      const limitedMeals = sortedMeals.slice(0, MAX_MEALS_TO_DISPLAY);
+      // Limit the number of meals to prevent performance issues
+      const limitedMeals = meals.slice(0, MAX_MEALS_TO_DISPLAY);
       
-      console.log(`Found ${sortedMeals.length} meals from all users, showing closest ${limitedMeals.length}`);
+      console.log(`Processed ${meals.length} meals in ${uniqueUserIds.length} batched user queries`);
+      console.log('Top 5 meals by score:', limitedMeals.slice(0, 5).map(m => ({ 
+        meal: m.meal, 
+        score: m.score, 
+        tier: m.tier,
+        isFollowing: followingUserIds.includes(m.userId),
+        distance: m.distance 
+      })));
       
       // Show info to user if we're limiting results
-      const isLimited = sortedMeals.length > MAX_MEALS_TO_DISPLAY;
+      const isLimited = meals.length > MAX_MEALS_TO_DISPLAY;
       setShowingLimitedResults(isLimited);
       
       if (isLimited) {
-        console.log(`Limiting display to closest ${MAX_MEALS_TO_DISPLAY} meals for performance`);
+        console.log(`Limiting display to ${MAX_MEALS_TO_DISPLAY} meals for performance`);
       }
       
       if (!isMountedRef.current) return;
@@ -563,11 +667,18 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!distance) return "Unknown distance";
 
     if (distance < 1) {
-      // Convert to meters
-      return `${Math.round(distance * 1000)}m away`;
+      // Convert to meters with proper formatting
+      const meters = Math.round(distance * 1000);
+      return `${meters.toLocaleString()} m`;
     } else {
-      // In kilometers with one decimal
-      return `${distance.toFixed(1)}km away`;
+      // In kilometers with proper formatting
+      if (distance >= 0.1) { // 100+ meters
+        const roundedKm = Math.round(distance);
+        return `${roundedKm.toLocaleString()} km`;
+      } else {
+        // Less than 100m, show one decimal
+        return `${distance.toFixed(1)} km`;
+      }
     }
   };
 
@@ -885,7 +996,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             navigation.navigate('FoodPassport', { 
               userId, 
               userName,
-              userPhoto
+              userPhoto,
+              tabIndex: 0 // Always start on meals tab
             });
           }}
         />
@@ -935,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingTop: 5, // Reduced top padding from 10 to 5
+    paddingTop: 1, // Reduced top padding from 3 to 1
     paddingBottom: 10, // Keep bottom padding
     backgroundColor: '#FAF9F6', // Match the container background
     borderBottomWidth: 1,
@@ -1048,6 +1160,7 @@ const styles = StyleSheet.create({
   // Map toggle button style
   mapToggleButton: {
     padding: 8,
+    marginRight: -4,
   },
   mapToggleIcon: {
     width: 24,

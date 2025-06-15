@@ -149,6 +149,13 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     loadUserProfile();
   }, [userId]);
   
+  // Reset tab index when route params change (e.g., when navigating to different user)
+  React.useEffect(() => {
+    if (route.params?.tabIndex !== undefined) {
+      setTabIndex(route.params.tabIndex);
+    }
+  }, [route.params?.tabIndex, route.params?.userId]);
+  
   const loadUserProfile = async () => {
     setIsLoading(true);
     
@@ -384,14 +391,16 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               navigation.navigate('FoodPassport', { 
                 userId: searchUserId, 
                 userName: searchUserName,
-                userPhoto: searchUserPhoto
+                userPhoto: searchUserPhoto,
+                tabIndex: 0 // Always start on meals tab
               });
             } else {
               // From other user profile, replace with new user
               navigation.setParams({ 
                 userId: searchUserId, 
                 userName: searchUserName,
-                userPhoto: searchUserPhoto
+                userPhoto: searchUserPhoto,
+                tabIndex: 0 // Always start on meals tab
               });
             }
           }}
@@ -446,7 +455,7 @@ const styles = StyleSheet.create({
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingTop: 3, // Reduced from 5 to 3
+    paddingTop: 8, // Increased to match bottom padding for evenness
     paddingBottom: 8, // Reduced from 10 to 8
     backgroundColor: '#FAF9F6',
     borderBottomWidth: 1,

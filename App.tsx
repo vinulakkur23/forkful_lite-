@@ -439,8 +439,8 @@ function TabNavigator() {
           tabPress: (e) => {
             // Prevent default action
             e.preventDefault();
-            // Navigate to FoodPassport with no params (own profile)
-            navigation.navigate('FoodPassport', {});
+            // Navigate to FoodPassport with no params (own profile) and always start on meals tab
+            navigation.navigate('FoodPassport', { tabIndex: 0 });
           },
         })}
       />
