@@ -537,7 +537,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 const result = await unfollowUser(userId);
                 if (result.success) {
                     setIsUserFollowing(false);
-                    Alert.alert('Success', result.message);
+                    // Removed success alert - silent operation
                 } else {
                     Alert.alert('Error', result.message);
                 }
@@ -545,7 +545,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 const result = await followUser(userId, userProfile.displayName, userProfile.photoURL);
                 if (result.success) {
                     setIsUserFollowing(true);
-                    Alert.alert('Success', result.message);
+                    // Removed success alert - silent operation
                 } else {
                     Alert.alert('Error', result.message);
                 }

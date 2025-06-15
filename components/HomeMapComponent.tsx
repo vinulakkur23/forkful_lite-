@@ -15,6 +15,8 @@ import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from './SimpleFilterComponent';
 import EmojiDisplay from './EmojiDisplay';
+import { getFollowing } from '../services/followService';
+import auth from '@react-native-firebase/auth';
 
 // Map button icons - same as MapScreen
 const MAP_ICONS = {
@@ -95,6 +97,11 @@ const HomeMapComponent: React.FC<Props> = ({
   
   // Store centerOnLocation locally to prevent it from being lost when params are cleared
   const storedCenterLocationRef = useRef<typeof centerOnLocation>(null);
+  
+  // Following filter state (map-specific, isolated from parent)
+  const [showFollowingOnly, setShowFollowingOnly] = useState(false);
+  const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
+  const [loadingFollowing, setLoadingFollowing] = useState(false);
 
   const handleLocationPress = (meals: MealEntry[]) => {
     return;
@@ -114,9 +121,57 @@ const HomeMapComponent: React.FC<Props> = ({
     }
   };
 
+  // Load following list when component mounts or when toggle is first enabled
+  useEffect(() => {
+    if (showFollowingOnly && !loadingFollowing) {
+      // Always refresh when toggle is turned on to get latest following list
+      loadFollowingList();
+    }
+  }, [showFollowingOnly]);
+
+  const loadFollowingList = async () => {
+    setLoadingFollowing(true);
+    try {
+      const followingList = await getFollowing();
+      const userIds = followingList.map(follow => follow.followingId);
+      setFollowingUserIds(userIds);
+      console.log('HomeMapComponent: Loaded following list:', userIds.length, 'users');
+    } catch (error) {
+      console.error('HomeMapComponent: Error loading following list:', error);
+      Alert.alert('Error', 'Could not load following list');
+    } finally {
+      setLoadingFollowing(false);
+    }
+  };
+
+  // Filter meals based on following toggle (without affecting parent component)
+  const filteredMealsForMap = React.useMemo(() => {
+    console.log(`HomeMapComponent: Filter memo recalculating - showFollowingOnly: ${showFollowingOnly}, followingUserIds: ${followingUserIds.length}`);
+    
+    if (!showFollowingOnly) {
+      console.log(`HomeMapComponent: Showing all ${nearbyMeals.length} meals`);
+      return nearbyMeals;
+    }
+    
+    const currentUserId = auth().currentUser?.uid;
+    const filtered = nearbyMeals.filter(meal => {
+      // Always include own meals
+      if (meal.userId === currentUserId) {
+        return true;
+      }
+      // Include meals from followed users
+      return followingUserIds.includes(meal.userId);
+    });
+    
+    console.log(`HomeMapComponent: Following filter - ${nearbyMeals.length} meals -> ${filtered.length} meals (following: ${followingUserIds.length} users)`);
+    return filtered;
+  }, [nearbyMeals, showFollowingOnly, followingUserIds]);
+
   // Group meals by location for carousel display
   const locationGroupedMarkers = React.useMemo(() => {
-    const mealsWithLocation = nearbyMeals.filter(meal => meal.location?.latitude && meal.location?.longitude);
+    console.log(`HomeMapComponent: locationGroupedMarkers memo recalculating with ${filteredMealsForMap.length} filtered meals`);
+    
+    const mealsWithLocation = filteredMealsForMap.filter(meal => meal.location?.latitude && meal.location?.longitude);
     
     const locationGroups: { [key: string]: MealEntry[] } = {};
     
@@ -155,12 +210,13 @@ const HomeMapComponent: React.FC<Props> = ({
       });
     });
     
+    console.log(`HomeMapComponent: Created ${groupedMarkers.length} marker groups from ${mealsWithLocation.length} meals with location`);
     return groupedMarkers;
-  }, [nearbyMeals]);
+  }, [filteredMealsForMap]);
 
   // Calculate initial region based on filtered meals
   const initialRegion = React.useMemo<Region>(() => {
-    const mealsToUse = nearbyMeals;
+    const mealsToUse = filteredMealsForMap;
     
     if (mealsToUse.length === 0) {
       if (userLocation) {
@@ -227,11 +283,11 @@ const HomeMapComponent: React.FC<Props> = ({
   // Effect to handle tab activation
   useEffect(() => {
     if (tabIndex === 1 && mapRef.current) {
-      if (nearbyMeals.length > 0) {
+      if (filteredMealsForMap.length > 0) {
         setTimeout(() => fitMapToMarkers(), 500);
       }
     }
-  }, [tabIndex, nearbyMeals.length]);
+  }, [tabIndex, filteredMealsForMap.length]);
   
   // When user location becomes available, center the map
   useEffect(() => {
@@ -281,9 +337,9 @@ const HomeMapComponent: React.FC<Props> = ({
   }, [centerOnLocation, tabIndex]);
 
   const fitMapToMarkers = () => {
-    if (!mapRef.current || nearbyMeals.length === 0) return;
+    if (!mapRef.current || filteredMealsForMap.length === 0) return;
     
-    const points = nearbyMeals
+    const points = filteredMealsForMap
       .filter(meal => meal.location && meal.location.latitude && meal.location.longitude)
       .map(meal => ({
         latitude: meal.location!.latitude,
@@ -351,11 +407,18 @@ const HomeMapComponent: React.FC<Props> = ({
     );
   }
   
-  if (nearbyMeals.length === 0) {
+  if (filteredMealsForMap.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="place" size={64} color="#ddd" />
-        {activeFilters && activeFilters.length > 0 ? (
+        {showFollowingOnly ? (
+          <>
+            <Text style={styles.emptyText}>No meals from followed users</Text>
+            <Text style={styles.emptySubtext}>
+              Toggle off the following filter to see all meals
+            </Text>
+          </>
+        ) : activeFilters && activeFilters.length > 0 ? (
           <>
             <Text style={styles.emptyText}>No meals match your filters</Text>
             <Text style={styles.emptySubtext}>
@@ -481,6 +544,26 @@ const HomeMapComponent: React.FC<Props> = ({
           </Text>
         </View>
       )}
+      
+      {/* Following filter toggle - positioned at top left */}
+      <View style={styles.followingToggleContainer}>
+        <TouchableOpacity
+          style={[styles.followingToggleButton, showFollowingOnly && styles.followingToggleButtonActive]}
+          onPress={() => {
+            console.log(`HomeMapComponent: Toggle pressed - current state: ${showFollowingOnly}, new state: ${!showFollowingOnly}`);
+            setShowFollowingOnly(!showFollowingOnly);
+          }}
+          disabled={loadingFollowing}
+        >
+          {loadingFollowing ? (
+            <ActivityIndicator size="small" color="#1a2b49" />
+          ) : (
+            <Text style={[styles.followingToggleText, showFollowingOnly && styles.followingToggleTextActive]}>
+              {showFollowingOnly ? 'Showing: Following' : 'Showing: All'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
       
       <View style={styles.mapButtonContainer}>
         <TouchableOpacity
@@ -655,6 +738,40 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 3,
     textAlign: 'center',
+  },
+  followingToggleContainer: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+  },
+  followingToggleButton: {
+    backgroundColor: '#E63946', // Lobster red when showing all
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E63946',
+  },
+  followingToggleButtonActive: {
+    backgroundColor: '#ffc008', // Gold when showing following
+    borderColor: '#ffc008',
+  },
+  followingToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FAF3E0', // Cream text on red background
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  followingToggleTextActive: {
+    color: '#1a2b49', // Navy text on gold background
   },
   mapButtonContainer: {
     position: 'absolute',
