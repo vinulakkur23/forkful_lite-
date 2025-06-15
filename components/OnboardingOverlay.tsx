@@ -23,23 +23,24 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ visible, onComple
   const onboardingSteps = [
     {
       title: "Welcome to DishItOut!",
-      description: "Rate your meals, discover great restaurants, and build your food passport.",
-      image: require('../assets/app-logo.png'),
+      description: "• It's Instagram meets Yelp.\n• But focused only on meals.",
+      type: 'welcome',
+      image: require('../assets/onboarding/welcome-logo.png'),
     },
     {
-      title: "Capture & Rate",
-      description: "Take photos of your meals and rate your dining experiences with emoji ratings.",
-      image: require('../assets/icons/camera-active.png'),
+      title: "Log your food journey.",
+      description: "• Share your favorite Parisian dishes with your pals.\n• Become a miniature food critic so the world can eat right.",
+      type: 'triple',
+      image1: require('../assets/onboarding/step2a-screenshot.png'),
+      image2: require('../assets/onboarding/step2b-screenshot.png'),
+      image3: require('../assets/onboarding/step2c-screenshot.png'),
     },
     {
-      title: "Discover Nearby",
-      description: "See what others are eating around you and discover new restaurants to try.",
-      image: require('../assets/icons/place-active.png'),
-    },
-    {
-      title: "Build Your Passport",
-      description: "Track your culinary journey and earn stamps for your food adventures.",
-      image: require('../assets/icons/passport-active.png'),
+      title: "Find meals you'll love.",
+      description: "• Around the world and around you.\n• Wings you're craving now, or pasta to try in Rome this summer.",
+      type: 'dual',
+      image1: require('../assets/onboarding/step3a-screenshot.png'),
+      image2: require('../assets/onboarding/step3b-screenshot.png'),
     },
   ];
 
@@ -74,7 +75,20 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ visible, onComple
           {/* Main content */}
           <View style={styles.mainContent}>
             <View style={styles.imageContainer}>
-              <Image source={currentStepData.image} style={styles.stepImage} resizeMode="contain" />
+              {currentStepData.type === 'welcome' ? (
+                <Text style={styles.welcomeLogo}>DishItOut</Text>
+              ) : currentStepData.type === 'triple' ? (
+                <View style={styles.tripleImageContainer}>
+                  <Image source={currentStepData.image1} style={[styles.stepImageSmall, styles.tripleImage1]} resizeMode="cover" />
+                  <Image source={currentStepData.image2} style={[styles.stepImageSmall, styles.tripleImage2]} resizeMode="cover" />
+                  <Image source={currentStepData.image3} style={[styles.stepImageSmall, styles.tripleImage3]} resizeMode="cover" />
+                </View>
+              ) : (
+                <View style={styles.dualImageContainer}>
+                  <Image source={currentStepData.image1} style={[styles.stepImage, styles.image1]} resizeMode="cover" />
+                  <Image source={currentStepData.image2} style={[styles.stepImage, styles.image2]} resizeMode="cover" />
+                </View>
+              )}
             </View>
             
             <Text style={styles.title}>{currentStepData.title}</Text>
@@ -133,31 +147,96 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
   imageContainer: {
-    marginBottom: 50,
+    marginBottom: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeLogo: {
+    fontFamily: 'Lobster-Regular',
+    fontSize: 64,
+    color: '#E63946',
+    marginBottom: 20,
+  },
+  dualImageContainer: {
+    width: 360,
+    height: 420,
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepImage: {
-    width: 120,
-    height: 120,
+    width: 200,
+    height: 400,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+  },
+  image1: {
+    position: 'absolute',
+    top: 0,
+    left: 15,
+    zIndex: 2,
+    transform: [{ rotate: '-5deg' }],
+  },
+  image2: {
+    position: 'absolute',
+    top: 20,
+    right: 15,
+    zIndex: 1,
+    transform: [{ rotate: '5deg' }],
+  },
+  tripleImageContainer: {
+    width: 360,
+    height: 380,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepImageSmall: {
+    width: 150,
+    height: 300,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+  },
+  tripleImage1: {
+    position: 'absolute',
+    top: 0,
+    left: 10,
+    zIndex: 3,
+    transform: [{ rotate: '-8deg' }],
+  },
+  tripleImage2: {
+    position: 'absolute',
+    top: 40,
+    left: 105,
+    zIndex: 2,
+    transform: [{ rotate: '0deg' }],
+  },
+  tripleImage3: {
+    position: 'absolute',
+    top: 20,
+    right: 10,
+    zIndex: 1,
+    transform: [{ rotate: '8deg' }],
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#1a2b49',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   description: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666666',
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
+    textAlign: 'left',
+    lineHeight: 22,
+    paddingHorizontal: 40,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   bottomSection: {
@@ -166,7 +245,8 @@ const styles = StyleSheet.create({
   },
   stepIndicators: {
     flexDirection: 'row',
-    marginBottom: 40,
+    marginBottom: 25,
+    marginTop: 15,
   },
   stepIndicator: {
     width: 8,
