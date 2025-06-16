@@ -23,13 +23,13 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ visible, onComple
   const onboardingSteps = [
     {
       title: "Welcome to DishItOut!",
-      description: "• It's Instagram meets Yelp.\n• But focused only on meals.",
+      description: "It's Instagram meets Yelp. Kind of.\nThis one is focused on MEALS.",
       type: 'welcome',
       image: require('../assets/onboarding/welcome-logo.png'),
     },
     {
-      title: "Log your food journey.",
-      description: "• Share your favorite Parisian dishes with your pals.\n• Become a miniature food critic so the world can eat right.",
+      title: "Share your food journey.",
+      description: "Send your favorite dishes in Paris to your pals.\n\nUnleash your inner food critic - your hot take on the best burger in town.",
       type: 'triple',
       image1: require('../assets/onboarding/step2a-screenshot.png'),
       image2: require('../assets/onboarding/step2b-screenshot.png'),
@@ -37,7 +37,7 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ visible, onComple
     },
     {
       title: "Find meals you'll love.",
-      description: "• Around the world and around you.\n• Wings you're craving now, or pasta to try in Rome this summer.",
+      description: "Follow friends or well-known foodies.\n\nFind wings you're craving now, or wishlist pastas in Rome for this summer.",
       type: 'dual',
       image1: require('../assets/onboarding/step3a-screenshot.png'),
       image2: require('../assets/onboarding/step3b-screenshot.png'),
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   dualImageContainer: {
     width: 360,
-    height: 420,
+    height: 400,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepImageSmall: {
-    width: 150,
-    height: 300,
+    width: 165,
+    height: 330,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: '#e0e0e0',
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   },
   tripleImage3: {
     position: 'absolute',
-    top: 20,
+    top: 5,
     right: 10,
     zIndex: 1,
     transform: [{ rotate: '8deg' }],
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    color: '#666666',
+    color: '#1a2b49',
     textAlign: 'left',
     lineHeight: 22,
     paddingHorizontal: 40,
