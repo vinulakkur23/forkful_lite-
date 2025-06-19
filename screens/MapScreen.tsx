@@ -33,6 +33,144 @@ const MAP_ICONS = {
   checkmark: { uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAA8klEQVR4nO2VMU7DQBBF3xaUBpooJQ2hpPYFkhtwAtLQpM0dcgFEGuqUdDkFdLkDcAJS0FBkCyOtbCsKGstJSvKkkUYz+1/P7swG/o0JKlzwSI4FNV44IseZZB94HMbPVaRQ0OJU0PziMiixJ1h9sxkdwRRHWLMtXIJdwfKH7l2CE8F8DdeRGQyxF1M4L8d0xZUbQbvDZRKCDTWzKAIHM4zjXuMkgaDBbkzhuAZX1DngELeJXZQz6AmqFRCPRNDinncFFS7/4OpLJHbRfYcgBXV8+vQTcT9SbfVcx39uqSBf8Kn5rmDYWNgJsZygCZYf+HfeAe9jVYQkXxGBAAAAAElFTkSuQmCC' }
 };
 
+// Custom map style to match app theme
+const mapStyle = [
+  {
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#FAF9F6" // Cream background
+      }
+    ]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#1a2b49" // Navy text
+      }
+    ]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#FAF3E0" // Cream stroke
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.land_parcel",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#1a2b49"
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#F5E6D3" // Lighter cream for POIs
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#666666"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#E8F5E8" // Soft green for parks
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#FFFFFF" // White roads
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry.stroke",
+    "stylers": [
+      {
+        "color": "#E0DDD8" // Light gray stroke
+      }
+    ]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#FFE4E4" // Very light red for highways
+      }
+    ]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry.stroke",
+    "stylers": [
+      {
+        "color": "#E63946" // Lobster red stroke for highways
+      },
+      {
+        "lightness": 50
+      }
+    ]
+  },
+  {
+    "featureType": "transit.line",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#FFE4B5" // Light gold for transit
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#D4E4F1" // Light blue for water
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#1a2b49" // Navy for water labels
+      }
+    ]
+  }
+];
+
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
   activeFilters: FilterItem[] | null;
@@ -71,6 +209,13 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 
+// Calculate zoom level from region
+const calculateZoomLevel = (region: Region): number => {
+  const longitudeDelta = region.longitudeDelta;
+  // Approximate zoom level calculation
+  return Math.round(Math.log(360 / longitudeDelta) / Math.LN2);
+};
+
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, activeRatingFilters, isActive, userId }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
@@ -82,6 +227,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   const [selectedLocationMeals, setSelectedLocationMeals] = useState<MealEntry[] | null>(null);
   const [showMealsModal, setShowMealsModal] = useState(false);
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<{ [key: string]: number }>({});
+  const [currentZoom, setCurrentZoom] = useState<number>(10); // Track current zoom level
   
   // Map view reference
   const mapRef = useRef<MapView | null>(null);
@@ -715,7 +861,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
         style={styles.map}
         initialRegion={initialRegion}
         showsUserLocation={true}
+        customMapStyle={mapStyle}
         onMapReady={fitMapToMarkers}
+        onRegionChangeComplete={(region) => {
+          const zoomLevel = calculateZoomLevel(region);
+          setCurrentZoom(zoomLevel);
+        }}
       >
         {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant }) => {
           const currentIndex = selectedMarkerIndex[locationKey] || 0;
@@ -723,12 +874,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
           
           return (
             <Marker
-              key={locationKey}
+              key={`${locationKey}-${currentZoom < 14 ? 'pin' : 'photo'}`}
               coordinate={coordinate}
               onPress={() => handleMarkerPress(locationKey, meals)}
             >
-              {/* Custom marker view - show photo preview for all pins */}
-              <View style={styles.customPhotoMarker}>
+              {/* Show simple pins when zoomed out, photos when zoomed in */}
+              {currentZoom < 14 ? (
+                // Simple pin marker for zoomed out view
+                <View style={styles.simplePinMarker}>
+                  <View style={styles.pinDot} />
+                  {meals.length > 1 && (
+                    <View style={styles.pinBadge}>
+                      <Text style={styles.pinBadgeText}>{meals.length}</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                // Photo marker for zoomed in view (existing behavior)
+                <View style={styles.customPhotoMarker}>
                 {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
                   <Image
                     source={{ uri: currentMeal.photoUrl }}
@@ -756,7 +919,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
                   </View>
                 )}
               </View>
-              <Callout
+              )}
+              {/* Only show callout when zoomed in for photo markers */}
+              {currentZoom >= 14 && (
+                <Callout
                 tooltip
                 onPress={() => {
                   // Always navigate to details in the current view
@@ -810,6 +976,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
                   </>
                 </View>
               </Callout>
+              )}
             </Marker>
           );
         })}
@@ -1381,6 +1548,46 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  // Simple pin marker styles for zoomed out view
+  simplePinMarker: {
+    width: 22, // Width to accommodate pin (12) + badge extension (5+5)
+    height: 22, // Height to accommodate pin (12) + badge extension (5+5)
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#E63946', // Lobster red
+    borderWidth: 1.5,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  pinBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ffc008', // Gold
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'white',
+  },
+  pinBadgeText: {
+    color: '#1a2b49', // Navy
+    fontSize: 9,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 
