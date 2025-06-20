@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -640,11 +640,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   // Handle rating filter changes
-  const handleRatingFilterChange = (ratings: number[] | null) => {
+  const handleRatingFilterChange = useCallback((ratings: number[] | null) => {
     console.log('HomeScreen: Rating filters changed:', ratings);
     setActiveRatingFilters(ratings);
     // applyFilter will be called via useEffect when activeRatingFilters changes
-  };
+  }, []);
 
   const handleImageError = (mealId: string) => {
     // Prevent excessive logging of the same image error

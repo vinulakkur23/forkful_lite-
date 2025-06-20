@@ -43,7 +43,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
       console.log('RatingFilterComponent: Calling onRatingFilterChange with:', selectedRatings);
       onRatingFilterChange(selectedRatings);
     }
-  }, [selectedRatings, onRatingFilterChange]);
+  }, [selectedRatings]); // Removed onRatingFilterChange from dependencies to prevent loops
 
   // Set initial ratings if provided
   useEffect(() => {

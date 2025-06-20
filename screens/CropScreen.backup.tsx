@@ -9,13 +9,8 @@ import {
   Alert,
   Platform,
   StatusBar,
-  SafeAreaView,
-  TouchableOpacity,
-  ScrollView
+  SafeAreaView
 } from 'react-native';
-import Slider from '@react-native-community/slider';
-import { ColorMatrix, concatColorMatrices, brightness, contrast, saturate } from 'react-native-color-matrix-image-filters';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import ImageResizer from 'react-native-image-resizer';
 import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -70,11 +65,6 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const { photo, location, _navigationKey } = route.params;
   const [processing, setProcessing] = useState(false);
   const [prefetchingSuggestions, setPrefetchingSuggestions] = useState(false);
-  const [brightnessValue, setBrightnessValue] = useState(1.0);
-  const [contrastValue, setContrastValue] = useState(1.0);
-  const [saturationValue, setSaturationValue] = useState(1.0);
-  const [croppedImage, setCroppedImage] = useState<{uri: string, width: number, height: number} | null>(null);
-  const [hasEdits, setHasEdits] = useState(false);
   
   // Use refs to track component mounted state
   const isMounted = useRef(true);
@@ -83,73 +73,6 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   
   // Store the previous photo URI to detect changes
   const prevPhotoUri = useRef('');
-  
-  // Track if edits have been made
-  useEffect(() => {
-    setHasEdits(
-      brightnessValue !== 1.0 || 
-      contrastValue !== 1.0 || 
-      saturationValue !== 1.0
-    );
-  }, [brightnessValue, contrastValue, saturationValue]);
-  
-  const handleContinue = async () => {
-    if (!croppedImage) return;
-    
-    try {
-      setProcessing(true);
-      
-      const timestamp = new Date().getTime();
-      const cachedSuggestions = (global as any).prefetchedSuggestions;
-      const isFromCamera = !route.params.photo?.fromGallery;
-      const locationToUse = (global as any).prefetchedLocation || location;
-      
-      // Pass editing values along with the image
-      const photoData = {
-        uri: croppedImage.uri,
-        width: croppedImage.width,
-        height: croppedImage.height,
-        brightness: brightnessValue,
-        contrast: contrastValue,
-        saturation: saturationValue,
-        hasEdits: hasEdits
-      };
-      
-      if (isFromCamera) {
-        // Camera photos: Skip RatingScreen1, go directly to RatingScreen2
-        console.log('Camera photo detected - navigating to RatingScreen2 with edits');
-        navigation.navigate('RatingScreen2', {
-          photo: photoData,
-          location: locationToUse,
-          rating: 0,
-          likedComment: '',
-          dislikedComment: '',
-          suggestionData: cachedSuggestions || undefined,
-          _uniqueKey: `rating_screen2_${timestamp}`,
-        });
-      } else {
-        // Gallery photos: Go to RatingScreen1
-        console.log('Gallery photo detected - navigating to RatingScreen1 with edits');
-        navigation.navigate('RatingScreen1', {
-          photo: photoData,
-          location: locationToUse,
-          exifData: route.params.exifData,
-          suggestionData: cachedSuggestions || undefined,
-          photoSource: route.params.photoSource,
-          _uniqueKey: `rating_screen1_${timestamp}`,
-        });
-      }
-      
-      console.log('Passing location data to RatingScreen:', 
-        locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');
-        
-    } catch (error) {
-      console.error('Error processing image:', error);
-      Alert.alert('Error', 'Failed to process image');
-    } finally {
-      setProcessing(false);
-    }
-  };
   
   // Focus effect to reset state when screen gains focus
   useFocusEffect(
@@ -616,28 +539,66 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         mediaType: 'photo',
       });
       
-      // If component is still mounted, compress image and show editing interface
+      // If component is still mounted, compress image and navigate to next screen
       if (isMounted.current) {
         // Compress the cropped image to reduce file size and AI processing costs
         const compressedImageUri = await compressImage(result.path);
         
-        console.log('Crop successful, showing editing interface:', compressedImageUri);
+        // Generate a unique navigation key
+        const timestamp = new Date().getTime();
         
-        // Store the cropped image for editing
-        setCroppedImage({
-          uri: compressedImageUri,
-          width: result.width,
-          height: result.height
-        });
+        // Prepare any cached suggestion data
+        const cachedSuggestions = (global as any).prefetchedSuggestions;
         
-        // Reset slider values to default when new photo is cropped
-        setBrightnessValue(1.0);
-        setContrastValue(1.0);
-        setSaturationValue(1.0);
-        setHasEdits(false);
+        // Check if photo is from camera (fresh photo) or gallery (already taken)
+        const isFromCamera = !route.params.photo?.fromGallery;
         
-        // Reset processing state to show the editing interface
-        setProcessing(false);
+        // Use the saved location in prefetchedLocation if available (has the right source)
+        const locationToUse = (global as any).prefetchedLocation || location;
+        
+        if (isFromCamera) {
+          // Camera photos: Skip RatingScreen1, go directly to RatingScreen2 (meal hasn't been eaten yet)
+          console.log('Camera photo detected - navigating directly to RatingScreen2 (meal not eaten yet)');
+          navigation.navigate('RatingScreen2', {
+            photo: {
+              uri: compressedImageUri, // Use compressed image
+              width: result.width,
+              height: result.height,
+            },
+            location: locationToUse,
+            rating: 0, // No rating yet
+            likedComment: '',
+            dislikedComment: '',
+            suggestionData: cachedSuggestions || undefined,
+            _uniqueKey: `rating_screen2_${timestamp}`,
+          });
+        } else {
+          // Gallery photos: Go to RatingScreen1 (meal already eaten, rate the experience)
+          console.log('Gallery photo detected - navigating to RatingScreen1 with cropped image:', compressedImageUri);
+          console.log('Passing prefetched suggestions:', 
+            cachedSuggestions ? 'Yes - cached data available' : 'No - no cached data');
+          
+          navigation.navigate('RatingScreen1', {
+            photo: {
+              uri: compressedImageUri, // Use compressed image
+              width: result.width,
+              height: result.height,
+            },
+            location: locationToUse,
+            // Include EXIF data if available from route params
+            exifData: route.params.exifData,
+            // Include suggestionData if available
+            suggestionData: cachedSuggestions || undefined,
+            // Pass through photo source
+            photoSource: route.params.photoSource,
+            _uniqueKey: `rating_screen1_${timestamp}`,
+          });
+        }
+        
+        console.log('Passing location data to RatingScreen:', 
+          locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');
+        
+        // Don't clear the global cache here since EditPhoto will pass it along to Rating
       }
     } catch (error) {
       console.log('Crop error:', error);
@@ -673,120 +634,15 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Render content based on state
-  if (!croppedImage) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar translucent backgroundColor="transparent" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>
-            {cropperOpened.current ? 'Processing photo...' : 'Opening editor...'}
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
+  // Simple loading screen with better feedback
   return (
-    <SafeAreaView style={styles.editContainer}>
+    <SafeAreaView style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" />
-      
-      {/* Image Preview */}
-      <View style={styles.editImageContainer}>
-        <ColorMatrix
-          matrix={concatColorMatrices(
-            brightness(brightnessValue),
-            contrast(contrastValue),
-            saturate(saturationValue)
-          )}
-        >
-          <Image
-            source={{ uri: croppedImage.uri }}
-            style={styles.editPreviewImage}
-            resizeMode="contain"
-          />
-        </ColorMatrix>
-      </View>
-      
-      {/* Edit Controls */}
-      <View style={styles.editControlsContainer}>
-        <ScrollView style={styles.editControlsList} showsVerticalScrollIndicator={false}>
-          {/* Brightness Slider */}
-          <View style={styles.editAdjustmentItem}>
-            <View style={styles.editAdjustmentHeader}>
-              <Text style={styles.editAdjustmentLabel}>Brightness</Text>
-              <Text style={styles.editAdjustmentValue}>
-                {Math.round((brightnessValue - 1) * 100)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.editSlider}
-              minimumValue={0.5}
-              maximumValue={1.5}
-              value={brightnessValue}
-              onValueChange={setBrightnessValue}
-              minimumTrackTintColor="#1a2b49"
-              maximumTrackTintColor="#ddd"
-              thumbTintColor="#1a2b49"
-            />
-          </View>
-          
-          {/* Contrast Slider */}
-          <View style={styles.editAdjustmentItem}>
-            <View style={styles.editAdjustmentHeader}>
-              <Text style={styles.editAdjustmentLabel}>Contrast</Text>
-              <Text style={styles.editAdjustmentValue}>
-                {Math.round((contrastValue - 1) * 100)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.editSlider}
-              minimumValue={0.5}
-              maximumValue={1.5}
-              value={contrastValue}
-              onValueChange={setContrastValue}
-              minimumTrackTintColor="#1a2b49"
-              maximumTrackTintColor="#ddd"
-              thumbTintColor="#1a2b49"
-            />
-          </View>
-          
-          {/* Saturation Slider */}
-          <View style={styles.editAdjustmentItem}>
-            <View style={styles.editAdjustmentHeader}>
-              <Text style={styles.editAdjustmentLabel}>Saturation</Text>
-              <Text style={styles.editAdjustmentValue}>
-                {Math.round((saturationValue - 1) * 100)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.editSlider}
-              minimumValue={0.5}
-              maximumValue={1.3}
-              value={saturationValue}
-              onValueChange={setSaturationValue}
-              minimumTrackTintColor="#1a2b49"
-              maximumTrackTintColor="#ddd"
-              thumbTintColor="#1a2b49"
-            />
-          </View>
-        </ScrollView>
-        
-        {/* Continue Button */}
-        <View style={styles.editContinueContainer}>
-          <TouchableOpacity
-            style={[styles.editContinueButton, processing && styles.continueButtonDisabled]}
-            onPress={handleContinue}
-            disabled={processing}
-          >
-            {processing ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.continueButtonText}>Continue</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ff6b6b" />
+        <Text style={styles.loadingText}>
+          {cropperOpened.current ? 'Loading photo...' : 'Opening cropper...'}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -809,82 +665,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  // New edit screen styles
-  editContainer: {
-    flex: 1,
-    backgroundColor: '#FAF9F6',
-  },
-  editImageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FAF9F6',
-    paddingVertical: 10,
-  },
-  editPreviewImage: {
-    width: screenWidth - 40,
-    height: screenWidth - 40,
-    borderRadius: 12,
-  },
-  editControlsContainer: {
-    backgroundColor: '#FAF3E0',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
-    paddingHorizontal: 20,
-    minHeight: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  editControlsList: {
-    flex: 1,
-  },
-  editAdjustmentItem: {
-    paddingVertical: 8,
-  },
-  editAdjustmentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  editAdjustmentLabel: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  editAdjustmentValue: {
-    fontSize: 11,
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    minWidth: 35,
-    textAlign: 'right',
-  },
-  editSlider: {
-    height: 25,
-    marginHorizontal: -4,
-  },
-  editContinueContainer: {
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  editContinueButton: {
-    backgroundColor: '#ffc008',
-    paddingVertical: 14,
-    borderRadius: 25,
-    alignItems: 'center',
-  },
-  continueButtonDisabled: {
-    opacity: 0.6,
-  },
-  continueButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  smallText: {
+    fontSize: 14,
+    marginTop: 8,
+    opacity: 0.8,
+    fontWeight: '400',
   },
 });
 
