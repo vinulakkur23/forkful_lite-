@@ -27,6 +27,8 @@ import { searchNearbyRestaurants } from '../services/placesService';
 import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
 import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
+import RNFS from 'react-native-fs';
+import ViewShot from 'react-native-view-shot';
 
 // Extend the TabParamList to include exifData in the Crop screen params
 declare module '../App' {
@@ -81,6 +83,9 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const cropperOpened = useRef(false);
   const suggestionsFetched = useRef(false);
   
+  // Ref for capturing the filtered image
+  const filteredImageRef = useRef<ViewShot>(null);
+  
   // Store the previous photo URI to detect changes
   const prevPhotoUri = useRef('');
   
@@ -93,26 +98,55 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }, [brightnessValue, contrastValue, saturationValue]);
   
+  const applyFiltersAndSave = async (imageUri: string): Promise<string> => {
+    if (!hasEdits) {
+      // No edits, return original
+      return imageUri;
+    }
+    
+    try {
+      console.log('Capturing filtered image...');
+      console.log('Filter values:', { brightnessValue, contrastValue, saturationValue });
+      
+      if (!filteredImageRef.current) {
+        console.error('ViewShot ref not available');
+        return imageUri;
+      }
+      
+      // Simple capture of the filtered image
+      const capturedImageUri = await filteredImageRef.current.capture({
+        format: 'jpg',
+        quality: 0.9,
+      });
+      
+      console.log('Filter applied and saved:', capturedImageUri);
+      return capturedImageUri;
+      
+    } catch (error) {
+      console.error('Error capturing filtered image:', error);
+      return imageUri;
+    }
+  };
+  
   const handleContinue = async () => {
     if (!croppedImage) return;
     
     try {
       setProcessing(true);
       
+      // Apply filters and get final image URI
+      const finalImageUri = await applyFiltersAndSave(croppedImage.uri);
+      
       const timestamp = new Date().getTime();
       const cachedSuggestions = (global as any).prefetchedSuggestions;
       const isFromCamera = !route.params.photo?.fromGallery;
       const locationToUse = (global as any).prefetchedLocation || location;
       
-      // Pass editing values along with the image
+      // Create clean photo data with final processed image
       const photoData = {
-        uri: croppedImage.uri,
+        uri: finalImageUri,  // Use the processed image
         width: croppedImage.width,
         height: croppedImage.height,
-        brightness: brightnessValue,
-        contrast: contrastValue,
-        saturation: saturationValue,
-        hasEdits: hasEdits
       };
       
       if (isFromCamera) {
@@ -512,6 +546,26 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log('CropScreen unmounting');
       isMounted.current = false;
       
+      // Clean up temporary images to free memory
+      const cleanupTempImages = async () => {
+        try {
+          const tempDir = Platform.OS === 'ios' 
+            ? RNFS.TemporaryDirectoryPath 
+            : RNFS.CachesDirectoryPath;
+          const files = await RNFS.readDir(tempDir);
+          const editedImages = files.filter(file => 
+            file.name.includes('viewshot-') || 
+            file.name.includes('ReactNative')
+          );
+          for (const file of editedImages.slice(0, 10)) { // Only clean oldest 10
+            await RNFS.unlink(file.path).catch(() => {});
+          }
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      };
+      cleanupTempImages();
+      
       // Restore status bar (platform-specific)
       if (Platform.OS === 'android') {
         StatusBar.setTranslucent(false);
@@ -694,19 +748,21 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       
       {/* Image Preview */}
       <View style={styles.editImageContainer}>
-        <ColorMatrix
-          matrix={concatColorMatrices(
-            brightness(brightnessValue),
-            contrast(contrastValue),
-            saturate(saturationValue)
-          )}
-        >
-          <Image
-            source={{ uri: croppedImage.uri }}
-            style={styles.editPreviewImage}
-            resizeMode="contain"
-          />
-        </ColorMatrix>
+        <ViewShot ref={filteredImageRef} options={{ format: 'jpg', quality: 0.9 }}>
+          <ColorMatrix
+            matrix={concatColorMatrices(
+              brightness(brightnessValue),
+              contrast(contrastValue),
+              saturate(saturationValue)
+            )}
+          >
+            <Image
+              source={{ uri: croppedImage.uri }}
+              style={styles.editPreviewImage}
+              resizeMode="contain"
+            />
+          </ColorMatrix>
+        </ViewShot>
       </View>
       
       {/* Edit Controls */}
@@ -822,8 +878,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   editPreviewImage: {
-    width: screenWidth - 40,
-    height: screenWidth - 40,
+    width: screenWidth - 80, // Smaller preview for better performance
+    height: screenWidth - 80,
     borderRadius: 12,
   },
   editControlsContainer: {
