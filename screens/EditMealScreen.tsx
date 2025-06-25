@@ -9,9 +9,12 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiRating from '../components/EmojiRating';
+import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import { RootStackParamList, TabParamList } from '../App';
-import { firebase, auth, firestore } from '../firebaseConfig';
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import * as ImagePicker from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
 
 // Navigation types
 type EditMealScreenNavigationProp = CompositeNavigationProp<
@@ -28,7 +31,10 @@ type Props = {
 
 const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Get meal ID and data from route params
-  const { mealId, meal } = route.params;
+  const { mealId, meal: initialMeal } = route.params;
+  
+  // State for the current meal data (will be refreshed from Firestore)
+  const [meal, setMeal] = useState(initialMeal);
 
   // Emoji rating descriptions
   const EMOJI_DESCRIPTIONS = {
@@ -65,6 +71,42 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
+  // Photo management state - will be populated when fresh data is loaded
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  
+  // Function to fetch fresh meal data from Firestore
+  const fetchFreshMealData = async () => {
+    try {
+      console.log('EditMealScreen - Fetching fresh meal data for ID:', mealId);
+      const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+      
+      if (!mealDoc.exists) {
+        Alert.alert('Error', 'Meal not found');
+        navigation.goBack();
+        return;
+      }
+      
+      const freshMealData = { id: mealDoc.id, ...mealDoc.data() };
+      console.log('EditMealScreen - Fresh meal data fetched:', {
+        id: freshMealData.id,
+        hasPhotos: !!freshMealData.photos,
+        photosCount: freshMealData.photos?.length || 0,
+        hasPhotoUrl: !!freshMealData.photoUrl
+      });
+      
+      setMeal(freshMealData);
+    } catch (error) {
+      console.error('EditMealScreen - Error fetching fresh meal data:', error);
+      Alert.alert('Error', 'Failed to load meal data');
+    }
+  };
+  
+  // Fetch fresh data on mount
+  useEffect(() => {
+    fetchFreshMealData();
+  }, [mealId]);
+  
   // Debug: Log the initial values
   useEffect(() => {
     console.log('EditMealScreen - Initial meal data:', {
@@ -81,6 +123,25 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     console.log('EditMealScreen - Meal data changed, updating state');
     setRating(meal.rating || 0);
+    
+    // Update photos from meal data
+    if (meal.photos && Array.isArray(meal.photos)) {
+      // New format - meal has photos array
+      console.log('EditMealScreen - Loading photos from meal.photos:', meal.photos);
+      setPhotos(meal.photos);
+    } else if (meal.photoUrl) {
+      // Legacy format - convert single photo to array
+      console.log('EditMealScreen - Converting single photoUrl to photos array:', meal.photoUrl);
+      setPhotos([{
+        url: meal.photoUrl,
+        isFlagship: true,
+        order: 0,
+        uploadedAt: meal.createdAt
+      }]);
+    } else {
+      console.log('EditMealScreen - No photos found in meal data');
+      setPhotos([]);
+    }
     
     // Handle both new thoughts format and legacy liked/disliked format
     if (meal.comments?.thoughts) {
@@ -101,7 +162,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         setThoughts('');
       }
     }
-  }, [meal.rating, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
+  }, [meal.id, meal.rating, meal.photoUrl, meal.photos, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
   
   // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
@@ -205,6 +266,134 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Photo upload and management functions
+  const uploadPhotoToStorage = async (imageUri: string): Promise<string> => {
+    try {
+      // Compress image before upload
+      const compressedImage = await ImageResizer.createResizedImage(
+        imageUri,
+        800,
+        800,
+        'JPEG',
+        85,
+        0,
+        undefined,
+        false,
+        {
+          mode: 'contain',
+          onlyScaleDown: true,
+        }
+      );
+
+      // Create unique filename
+      const timestamp = Date.now();
+      const filename = `meals/${meal.userId}/${mealId}/photo_${timestamp}.jpg`;
+      
+      // Upload to Firebase Storage
+      const reference = storage().ref(filename);
+      await reference.putFile(compressedImage.uri);
+      
+      // Get download URL
+      const downloadURL = await reference.getDownloadURL();
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      throw error;
+    }
+  };
+
+  const handleAddPhoto = () => {
+    if (photos.length >= 5) {
+      Alert.alert('Limit Reached', 'You can add up to 5 photos per meal.');
+      return;
+    }
+
+    const options = {
+      mediaType: 'photo' as const,
+      includeBase64: false,
+      maxHeight: 2000,
+      maxWidth: 2000,
+      quality: 0.8,
+    };
+
+    Alert.alert(
+      'Add Photo',
+      'Choose photo source',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Camera', 
+          onPress: () => {
+            ImagePicker.launchCamera(options, handleImagePickerResponse);
+          }
+        },
+        { 
+          text: 'Gallery', 
+          onPress: () => {
+            ImagePicker.launchImageLibrary(options, handleImagePickerResponse);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleImagePickerResponse = async (response: any) => {
+    if (response.didCancel || response.errorCode || !response.assets?.[0]) {
+      return;
+    }
+
+    const asset = response.assets[0];
+    if (!asset.uri) {
+      Alert.alert('Error', 'Failed to get image data');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      
+      // Upload photo to storage
+      const downloadURL = await uploadPhotoToStorage(asset.uri);
+      
+      // Add to photos array
+      const newPhoto: PhotoItem = {
+        url: downloadURL,
+        isFlagship: photos.length === 0, // First photo becomes flagship
+        order: photos.length,
+        uploadedAt: new Date()
+      };
+      
+      setPhotos(prev => [...prev, newPhoto]);
+      
+    } catch (error) {
+      console.error('Error adding photo:', error);
+      Alert.alert('Error', 'Failed to add photo. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    const photoToRemove = photos[index];
+    
+    if (photoToRemove.isFlagship && photos.length > 1) {
+      Alert.alert('Error', 'Cannot remove flagship photo. Set another photo as flagship first.');
+      return;
+    }
+
+    setPhotos(prev => {
+      const newPhotos = prev.filter((_, i) => i !== index);
+      // Reorder remaining photos
+      return newPhotos.map((photo, i) => ({ ...photo, order: i }));
+    });
+  };
+
+  const handleSetFlagship = (index: number) => {
+    setPhotos(prev => prev.map((photo, i) => ({
+      ...photo,
+      isFlagship: i === index
+    })));
+  };
+
   // Save edited meal data
   const saveMeal = async () => {
     // Validate rating
@@ -235,7 +424,32 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       return '';
     })();
     
-    if (rating === meal.rating && thoughts === originalThoughts) {
+    // Check if photos have changed
+    const originalPhotos = (() => {
+      if (meal.photos && Array.isArray(meal.photos)) {
+        return meal.photos;
+      } else if (meal.photoUrl) {
+        return [{
+          url: meal.photoUrl,
+          isFlagship: true,
+          order: 0,
+          uploadedAt: meal.createdAt
+        }];
+      }
+      return [];
+    })();
+    
+    const photosChanged = JSON.stringify(photos) !== JSON.stringify(originalPhotos);
+    
+    console.log('EditMealScreen - Change detection:', {
+      ratingChanged: rating !== meal.rating,
+      thoughtsChanged: thoughts !== originalThoughts,
+      photosChanged,
+      originalPhotosCount: originalPhotos.length,
+      currentPhotosCount: photos.length
+    });
+    
+    if (rating === meal.rating && thoughts === originalThoughts && !photosChanged) {
       Alert.alert(
         "No Changes",
         "You haven't made any changes to this meal.",
@@ -255,13 +469,24 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       }
 
       // Prepare update data
+      const flagshipPhoto = photos.find(p => p.isFlagship);
       const updateData: any = {
         rating,
         comments: {
           thoughts: thoughts
         },
+        photos: photos, // Store full photos array
+        photoUrl: flagshipPhoto?.url || photos[0]?.url || meal.photoUrl, // Maintain backward compatibility
         updatedAt: firestore.FieldValue.serverTimestamp()
       };
+      
+      // Debug logging
+      console.log('EditMealScreen - Saving meal with data:', {
+        mealId,
+        photosCount: photos.length,
+        photos: photos.map(p => ({ url: p.url, isFlagship: p.isFlagship, order: p.order })),
+        flagshipPhotoUrl: flagshipPhoto?.url
+      });
       
       // If the current user has a displayName and this meal shows "Anonymous User", update it
       if (currentUser.displayName && (meal.userName === 'Anonymous User' || !meal.userName)) {
@@ -337,23 +562,22 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
       >
-        {/* Meal image */}
-        <View style={styles.imageCard}>
-          <View style={styles.imageContainer}>
-            {meal.photoUrl && !imageError ? (
-              <Image
-                source={{ uri: meal.photoUrl }}
-                style={styles.image}
-                resizeMode="cover"
-                onError={handleImageError}
-              />
-            ) : (
-              <View style={styles.noImageContainer}>
-                <Icon name="no-photography" size={64} color="#ccc" />
-                <Text style={styles.noImageText}>No image available</Text>
-              </View>
-            )}
-          </View>
+        {/* Meal photos */}
+        <View style={styles.photosSection}>
+          <MultiPhotoGallery
+            photos={photos}
+            onAddPhoto={handleAddPhoto}
+            onRemovePhoto={handleRemovePhoto}
+            onSetFlagship={handleSetFlagship}
+            editable={true}
+            maxPhotos={5}
+          />
+          {uploadingPhoto && (
+            <View style={styles.uploadingOverlay}>
+              <ActivityIndicator size="small" color="#ffc008" />
+              <Text style={styles.uploadingText}>Uploading photo...</Text>
+            </View>
+          )}
         </View>
 
         {/* Meal details */}
@@ -488,7 +712,7 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   imageCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 15,
@@ -498,31 +722,35 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  imageContainer: {
-    width: '100%',
-    height: 240, // Already matches RatingScreen1 height
-    backgroundColor: '#FAF3E0',
+  photosSection: {
+    marginBottom: 15,
+    position: 'relative',
   },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  noImageContainer: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
+  uploadingOverlay: {
+    position: 'absolute',
+    bottom: 12,
+    left: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
-  noImageText: {
-    marginTop: 10,
-    color: '#999',
-    fontSize: 16,
+  uploadingText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailsCard: {
     padding: 20,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
     marginBottom: 15,
     borderRadius: 12,
     shadowColor: '#000',

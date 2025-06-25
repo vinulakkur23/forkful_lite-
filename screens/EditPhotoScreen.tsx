@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   imageContainer: {
-    height: '50%',
+    height: 320, // Fixed height like MealDetailScreen
     width: '100%',
     position: 'relative',
   },

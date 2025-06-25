@@ -1014,7 +1014,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAF9F6',
+        backgroundColor: '#FAF9F6', // Back to original
     },
     header: {
         flexDirection: 'row',
@@ -1041,7 +1041,7 @@ const styles = StyleSheet.create({
     },
     // Profile Card Styles
     profileCard: {
-        backgroundColor: '#FAF3E0', // Back to original color to match meal cards
+        backgroundColor: '#fff', // White like search bar to match meal cards
         margin: 10,
         marginTop: 10,
         marginBottom: 8,
@@ -1167,7 +1167,7 @@ const styles = StyleSheet.create({
     mealCard: {
         width: itemWidth,
         marginBottom: 15,
-        backgroundColor: '#FAF3E0', // Back to original color
+        backgroundColor: '#fff', // White like search bar
         borderRadius: 12,
         elevation: 1,
         shadowColor: '#000',

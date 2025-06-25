@@ -7,6 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiDisplay from '../components/EmojiDisplay';
+import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
@@ -47,6 +48,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [hasUserCheered, setHasUserCheered] = useState(false);
   const [totalCheers, setTotalCheers] = useState(0);
   const [cheersLoading, setCheersLoading] = useState(false);
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
@@ -54,6 +56,23 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   
   // Use the useIsFocused hook to detect when the screen comes into focus
   const isFocused = useIsFocused();
+  
+  // Function to process meal data and extract photos
+  const processMealPhotos = (mealData: any): PhotoItem[] => {
+    if (mealData.photos && Array.isArray(mealData.photos)) {
+      // New format - meal has photos array
+      return mealData.photos;
+    } else if (mealData.photoUrl) {
+      // Legacy format - convert single photo to array
+      return [{
+        url: mealData.photoUrl,
+        isFlagship: true,
+        order: 0,
+        uploadedAt: mealData.createdAt
+      }];
+    }
+    return [];
+  };
   
   // Create a fetchMealDetails function that can be called when needed
   const fetchMealDetails = useCallback(async () => {
@@ -95,6 +114,11 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       });
       
       setMeal(mealData);
+      
+      // Process and set photos
+      const processedPhotos = processMealPhotos(mealData);
+      setPhotos(processedPhotos);
+      console.log('Processed photos for MealDetail:', processedPhotos);
     } catch (err) {
       console.error('Error fetching meal details:', err);
       setError('Failed to load meal details');
@@ -580,24 +604,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
 
       <ScrollView style={styles.container}>
-        {/* Meal image card */}
-      <View style={styles.imageCard}>
-        <View style={styles.imageContainer}>
-          {meal.photoUrl && !imageError ? (
-            <Image
-              source={{ uri: meal.photoUrl }}
-              style={styles.image}
-              resizeMode="cover"
-              onError={handleImageError}
-            />
-          ) : (
-            <View style={styles.noImageContainer}>
-              <Icon name="no-photography" size={64} color="#ccc" />
-              <Text style={styles.noImageText}>No image available</Text>
-            </View>
-          )}
+        {/* Meal photos gallery */}
+        <View style={styles.photosSection}>
+          <MultiPhotoGallery
+            photos={photos}
+            editable={false}
+            maxPhotos={5}
+          />
         </View>
-      </View>
       
       {/* Meal details */}
       <View style={styles.detailsContainer}>
@@ -1008,7 +1022,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   imageCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
     marginHorizontal: 16,
@@ -1023,7 +1037,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
     height: 320,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
   },
   image: {
     width: '100%',
@@ -1042,11 +1056,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
+  photosSection: {
+    marginHorizontal: 16,
+    marginTop: 0,
+    marginBottom: 10,
+  },
   detailsContainer: {
     paddingTop: 16, // Reduced from 20 to tighten top spacing
     paddingHorizontal: 20,
     paddingBottom: 20,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
     marginHorizontal: 16,
     marginBottom: 10,
     borderRadius: 12,
@@ -1237,7 +1256,7 @@ const styles = StyleSheet.create({
   // Metadata styles
   metadataContainer: {
     padding: 20,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#fff',
     marginHorizontal: 16,
     marginBottom: 10,
     borderRadius: 12,

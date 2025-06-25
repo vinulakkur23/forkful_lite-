@@ -1041,7 +1041,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6', // Light off-white color
+    backgroundColor: '#FAF9F6', // Back to original
   },
   headerContainer: {
     backgroundColor: 'transparent',
@@ -1085,7 +1085,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   mealCard: {
-    backgroundColor: '#FAF3E0', // Back to original color
+    backgroundColor: '#fff', // White like search bar
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
