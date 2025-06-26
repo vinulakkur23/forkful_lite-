@@ -48,9 +48,17 @@ type Props = {
   route: HomeScreenRouteProp;
 };
 
+interface PhotoItem {
+  url: string;
+  isFlagship: boolean;
+  order: number;
+  uploadedAt?: any;
+}
+
 interface MealEntry {
   id: string;
   photoUrl: string;
+  photos?: PhotoItem[]; // Array of photos (new format)
   rating: number;
   restaurant: string;
   meal: string;
@@ -305,7 +313,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         .limit(75) // Reduced limit for faster processing
         .get();
 
-      const rawMeals = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const rawMeals = querySnapshot.docs.map(doc => {
+        const data = { id: doc.id, ...doc.data() };
+        return data;
+      });
+      console.log(`Fetched ${rawMeals.length} raw meals from Firestore`);
+      
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       
@@ -337,6 +350,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       console.log(`Successfully fetched user data for ${userDataMap.size} users`);
 
       const meals: MealEntry[] = [];
+      
+      console.log('Processing meals - total rawMeals:', rawMeals.length);
       
       // Process meals and calculate tiered scores
       for (const rawMeal of rawMeals) {
@@ -418,6 +433,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         meals.push({
           id: rawMeal.id,
           photoUrl: rawMeal.photoUrl,
+          photos: rawMeal.photos || undefined, // Include photos array for multi-photo support
           rating: rawMeal.rating,
           restaurant: rawMeal.restaurant || '',
           meal: rawMeal.meal || '',
@@ -789,10 +805,71 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  // Helper function to process meal photos (similar to MealDetailScreen)
+  const processMealPhotos = (mealData: MealEntry): PhotoItem[] => {
+    if (mealData.photos && Array.isArray(mealData.photos)) {
+      // New format - meal has photos array
+      return mealData.photos.sort((a, b) => a.order - b.order);
+    } else if (mealData.photoUrl) {
+      // Legacy format - convert single photo to array
+      return [{
+        url: mealData.photoUrl,
+        isFlagship: true,
+        order: 0,
+        uploadedAt: mealData.createdAt || new Date()
+      }];
+    }
+    return [];
+  };
+
   // Double tap meal card component - memoized to prevent unnecessary re-renders
   const DoubleTapMealCard = React.memo(({ item }: { item: MealEntry }) => {
     const [showHeart, setShowHeart] = useState(savedMealsRef.current.has(item.id));
     const lastTap = useRef<number>(0);
+    
+    // Photo state for multi-photo support
+    const photos = processMealPhotos(item);
+    const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+    const selectedPhotoIndexRef = useRef(selectedPhotoIndex);
+    selectedPhotoIndexRef.current = selectedPhotoIndex;
+
+    // Pan responder for photo swiping
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (evt, gestureState) => {
+          // Claim horizontal swipes earlier with lower threshold
+          const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+          const hasMovedEnough = Math.abs(gestureState.dx) > 5;
+          return photos.length > 1 && isHorizontal && hasMovedEnough;
+        },
+        onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+          // Capture phase to intercept before TouchableOpacity
+          const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+          const hasMovedEnough = Math.abs(gestureState.dx) > 5;
+          return photos.length > 1 && isHorizontal && hasMovedEnough;
+        },
+        onPanResponderGrant: () => {
+          // Gesture recognized
+          return true;
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          if (photos.length <= 1) return;
+          
+          const swipeThreshold = 30;
+          const currentIndex = selectedPhotoIndexRef.current;
+          
+          if (gestureState.dx > swipeThreshold && currentIndex > 0) {
+            setSelectedPhotoIndex(currentIndex - 1);
+          } else if (gestureState.dx < -swipeThreshold && currentIndex < photos.length - 1) {
+            setSelectedPhotoIndex(currentIndex + 1);
+          }
+        },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      })
+    ).current;
 
     // Register this card's update function
     React.useEffect(() => {
@@ -839,42 +916,83 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
     return (
       <View style={styles.mealCardContainer}>
-        <TouchableOpacity
-          style={styles.mealCard}
-          onPress={handleDoubleTap}
-          activeOpacity={0.9}
-        >
+        <View style={styles.mealCard}>
+          {/* Image container with swipe functionality */}
           <View style={styles.imageContainer}>
-            {/* Saved indicator with heart icon */}
-            {showHeart && (
-              <Image 
-                source={require('../assets/icons/wishlist-active.png')}
-                style={styles.heartIcon}
-                resizeMode="contain"
-              />
-            )}
-            
-            {/* Add safe image handling */}
-            {item.photoUrl && !imageErrors[item.id] ? (
-              <Image
-                source={{ uri: item.photoUrl }}
-                style={styles.mealImage}
-                resizeMode="cover"
-                onError={() => handleImageError(item.id)}
-              />
-            ) : (
-              <View style={[styles.mealImage, styles.placeholderContainer]}>
-                <Icon name="image-not-supported" size={32} color="#D8D6B8" />
-              </View>
-            )}
-            
-            {/* Star rating overlay */}
-            <View style={styles.ratingOverlay}>
-              {renderEmoji(item.rating)}
+            {/* Swipe area for multi-photo meals */}
+            <View style={styles.swipeArea} {...(photos.length > 1 ? panResponder.panHandlers : {})}>
+              <TouchableOpacity
+                style={styles.tapArea}
+                onPress={handleDoubleTap}
+                activeOpacity={0.9}
+              >
+                {/* Saved indicator with heart icon */}
+                {showHeart && (
+                  <Image 
+                    source={require('../assets/icons/wishlist-active.png')}
+                    style={styles.heartIcon}
+                    resizeMode="contain"
+                  />
+                )}
+                
+                {/* Multi-photo support */}
+                <View 
+                  style={[
+                    styles.imageWrapper,
+                    { 
+                      borderTopLeftRadius: 12,
+                      borderTopRightRadius: 12,
+                      borderBottomLeftRadius: 0,
+                      borderBottomRightRadius: 0,
+                    }
+                  ]}
+                  key={`wrapper-${item.id}-${selectedPhotoIndex}`}
+                >
+                  {photos.length > 0 && photos[selectedPhotoIndex] && !imageErrors[item.id] ? (
+                    <Image
+                      key={`img-${item.id}-${selectedPhotoIndex}`}
+                      source={{ uri: photos[selectedPhotoIndex].url }}
+                      style={styles.mealImage}
+                      resizeMode="cover"
+                      onError={() => handleImageError(item.id)}
+                    />
+                  ) : (
+                    <View style={[styles.mealImage, styles.placeholderContainer]}>
+                      <Icon name="image-not-supported" size={32} color="#D8D6B8" />
+                    </View>
+                  )}
+                </View>
+
+                {/* Star rating overlay */}
+                <View style={styles.ratingOverlay}>
+                  {renderEmoji(item.rating)}
+                </View>
+
+                {/* Photo dots indicator */}
+                {photos.length > 1 && (
+                  <View style={styles.photoDotsContainer}>
+                    {photos.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.photoDot,
+                          selectedPhotoIndex === index && styles.photoDotActive
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+
+              </TouchableOpacity>
             </View>
           </View>
           
-          <View style={styles.mealCardContent}>
+          {/* Content area with tap functionality */}
+          <TouchableOpacity
+            style={styles.mealCardContent}
+            onPress={handleDoubleTap}
+            activeOpacity={0.9}
+          >
             <View style={styles.infoRow}>
               <Text style={styles.mealName} numberOfLines={1}>
                 {item.meal || 'Delicious meal'}
@@ -886,15 +1004,16 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
                 </Text>
               )}
             </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }, (prevProps, nextProps) => {
     // Only re-render if the meal item actually changed
     return prevProps.item.id === nextProps.item.id &&
            prevProps.item.photoUrl === nextProps.item.photoUrl &&
-           prevProps.item.rating === nextProps.item.rating;
+           prevProps.item.rating === nextProps.item.rating &&
+           JSON.stringify(prevProps.item.photos) === JSON.stringify(nextProps.item.photos);
   });
 
   // Render a meal item in the feed - memoized to prevent recreation
@@ -929,8 +1048,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           initialNumToRender={10}
           windowSize={10}
           getItemLayout={(data, index) => ({
-            length: 360, // Approximate height of meal card (320px image + 40px content)
-            offset: 360 * index,
+            length: 400, // Approximate height of meal card (square image + content)
+            offset: 400 * index,
             index,
           })}
           onScroll={(event) => {
@@ -1042,11 +1161,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FAF9F6', // Back to original
+    paddingTop: Platform.OS === 'ios' ? -10 : 0, // Move content up on iOS
   },
   headerContainer: {
     backgroundColor: 'transparent',
-    paddingTop: 20, // Keep space at the top
-    paddingBottom: 5, // Reduced from 10 to 5
+    paddingTop: 10, // Reduced from 20 to 10
+    paddingBottom: 2, // Reduced from 5 to 2
     paddingHorizontal: 20,
     zIndex: 10,
     flexDirection: 'row',
@@ -1055,8 +1175,8 @@ const styles = StyleSheet.create({
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingTop: 1, // Reduced top padding from 3 to 1
-    paddingBottom: 10, // Keep bottom padding
+    paddingTop: 0, // Removed top padding
+    paddingBottom: 8, // Reduced from 10 to 8
     backgroundColor: '#FAF9F6', // Match the container background
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
@@ -1096,21 +1216,66 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     width: '100%',
+    aspectRatio: 1, // Square aspect ratio
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
   },
-  mealImage: {
+  swipeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  tapArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+  },
+  imageWrapper: {
     width: '100%',
-    height: 320, // Decreased from 350 to 320
+    height: '100%',
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  mealImage: {
+    width: '100%',
+    height: '100%',
   },
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F9F8E5', // Light cream for placeholder
-    height: 320, // Match the image height
+    width: '100%',
+    height: '100%',
+  },
+  photoDotsContainer: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 2,
+  },
+  photoDotActive: {
+    backgroundColor: 'rgba(255, 255, 255, 1)',
   },
   ratingOverlay: {
     position: 'absolute',

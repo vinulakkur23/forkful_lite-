@@ -28,6 +28,7 @@ interface MultiPhotoGalleryProps {
   onSetFlagship?: (index: number) => void;
   editable?: boolean;
   maxPhotos?: number;
+  aspectRatio?: 'square' | 'wide'; // New prop to control aspect ratio
 }
 
 const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
@@ -168,13 +169,18 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
         
         {/* Flagship badge removed - users don't need to see this */}
 
-        {/* Photo counter */}
+        {/* Photo dots indicator */}
         {photos.length > 1 && (
-          <View style={styles.photoCounter}>
-            <Text style={styles.photoCounterText}>
-              {selectedIndex + 1} of {photos.length}
-            </Text>
-            {console.log('PhotoCounter render:', { selectedIndex, photosLength: photos.length, currentPhoto: photos[selectedIndex]?.url })}
+          <View style={styles.photoDotsContainer}>
+            {photos.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.photoDot,
+                  selectedIndex === index && styles.photoDotActive
+                ]}
+              />
+            ))}
           </View>
         )}
         
@@ -221,12 +227,6 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
                 resizeMode="cover"
               />
               
-              {/* Flagship indicator */}
-              {photo.isFlagship && (
-                <View style={styles.thumbnailFlagshipIndicator}>
-                  <Icon name="star" size={12} color="#ffc008" />
-                </View>
-              )}
             </TouchableOpacity>
           ))}
           
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   },
   mainPhotoContainer: {
     width: '100%',
-    height: 320,
+    aspectRatio: 1, // Square aspect ratio
     position: 'relative',
   },
   mainPhoto: {
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   },
   noPhotoContainer: {
     width: '100%',
-    height: 320,
+    aspectRatio: 1, // Square aspect ratio
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
@@ -286,19 +286,24 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Flagship badge styles removed - no longer shown to users
-  photoCounter: {
+  photoDotsContainer: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  photoCounterText: {
-    color: '#fff',
-    fontSize: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  photoDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginHorizontal: 3,
+  },
+  photoDotActive: {
+    backgroundColor: 'rgba(255, 255, 255, 1)',
   },
   removeButton: {
     position: 'absolute',
@@ -342,22 +347,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 6,
   },
-  thumbnailFlagshipIndicator: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    width: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
   addPhotoThumbnail: {
     width: 60,
     height: 60,
@@ -371,7 +360,7 @@ const styles = StyleSheet.create({
   },
   addPhotoPlus: {
     fontSize: 36,
-    color: '#ffc008',
+    color: '#1a2b49',
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 36,

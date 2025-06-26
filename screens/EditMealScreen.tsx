@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform
@@ -15,6 +15,7 @@ import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import * as ImagePicker from 'react-native-image-picker';
 import ImageResizer from 'react-native-image-resizer';
+import Geolocation from '@react-native-community/geolocation';
 
 // Navigation types
 type EditMealScreenNavigationProp = CompositeNavigationProp<
@@ -106,6 +107,51 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     fetchFreshMealData();
   }, [mealId]);
+  
+  // Handle processed photo returned from CropScreen
+  const handleProcessedPhotoReturn = useCallback(async (processedImageUri: string) => {
+    try {
+      setUploadingPhoto(true);
+      
+      // Upload the processed photo to storage
+      const downloadURL = await uploadPhotoToStorage(processedImageUri);
+      
+      // Add to photos array
+      const newPhoto: PhotoItem = {
+        url: downloadURL,
+        isFlagship: photos.length === 0, // First photo becomes flagship
+        order: photos.length,
+        uploadedAt: new Date()
+      };
+      
+      setPhotos(prev => [...prev, newPhoto]);
+      
+      console.log('EditMealScreen: Added processed photo to meal:', downloadURL);
+      
+    } catch (error) {
+      console.error('Error adding processed photo:', error);
+      Alert.alert('Error', 'Failed to add photo. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }, [photos.length]);
+  
+  // Check if we're returning from CropScreen with a processed photo
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Check if there's a processed photo waiting for us
+      const params = route.params as any;
+      if (params?.processedPhotoUri) {
+        console.log('EditMealScreen: Received processed photo from CropScreen:', params.processedPhotoUri);
+        handleProcessedPhotoReturn(params.processedPhotoUri);
+        
+        // Clear the parameter to prevent reprocessing
+        navigation.setParams({ processedPhotoUri: undefined });
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, route.params, handleProcessedPhotoReturn]);
   
   // Debug: Log the initial values
   useEffect(() => {
@@ -348,28 +394,51 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
-    try {
-      setUploadingPhoto(true);
-      
-      // Upload photo to storage
-      const downloadURL = await uploadPhotoToStorage(asset.uri);
-      
-      // Add to photos array
-      const newPhoto: PhotoItem = {
-        url: downloadURL,
-        isFlagship: photos.length === 0, // First photo becomes flagship
-        order: photos.length,
-        uploadedAt: new Date()
-      };
-      
-      setPhotos(prev => [...prev, newPhoto]);
-      
-    } catch (error) {
-      console.error('Error adding photo:', error);
-      Alert.alert('Error', 'Failed to add photo. Please try again.');
-    } finally {
-      setUploadingPhoto(false);
-    }
+    // Create photo object for CropScreen
+    const photoObject = {
+      uri: asset.uri,
+      width: asset.width || 1000,
+      height: asset.height || 1000
+    };
+
+    // Get current location for the crop screen
+    Geolocation.getCurrentPosition(
+      position => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          source: 'device'
+        };
+
+        // Navigate to CropScreen for editing before adding to meal
+        navigation.navigate('Crop', {
+          photo: photoObject,
+          location: location,
+          photoSource: 'gallery',
+          _navigationKey: `add_photo_${Date.now()}`,
+          // New parameters to indicate this is adding to existing meal
+          isAddingToExistingMeal: true,
+          existingMealId: mealId,
+          returnToEditMeal: true
+        });
+      },
+      error => {
+        console.log('Location error:', error);
+        
+        // Navigate without location info
+        navigation.navigate('Crop', {
+          photo: photoObject,
+          location: null,
+          photoSource: 'gallery',
+          _navigationKey: `add_photo_${Date.now()}`,
+          // New parameters to indicate this is adding to existing meal
+          isAddingToExistingMeal: true,
+          existingMealId: mealId,
+          returnToEditMeal: true
+        });
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
   };
 
   const handleRemovePhoto = (index: number) => {
@@ -485,7 +554,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         mealId,
         photosCount: photos.length,
         photos: photos.map(p => ({ url: p.url, isFlagship: p.isFlagship, order: p.order })),
-        flagshipPhotoUrl: flagshipPhoto?.url
+        flagshipPhotoUrl: flagshipPhoto?.url,
+        rawPhotosArray: photos,
+        updateDataPhotos: updateData.photos
       });
       
       // If the current user has a displayName and this meal shows "Anonymous User", update it
@@ -502,6 +573,16 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       
       // Update the meal data in Firestore
       await firestore().collection('mealEntries').doc(mealId).update(updateData);
+      
+      // Verify the data was saved by reading it back
+      const verifyDoc = await firestore().collection('mealEntries').doc(mealId).get();
+      const verifyData = verifyDoc.data();
+      console.log('EditMealScreen - Verification after save:', {
+        mealId,
+        hasPhotos: !!verifyData?.photos,
+        photosLength: verifyData?.photos?.length,
+        photosArray: verifyData?.photos
+      });
 
       // Success notification
       Alert.alert(

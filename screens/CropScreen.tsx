@@ -49,6 +49,10 @@ declare module '../App' {
       } | null;
       exifData?: any;
       _navigationKey: string;
+      // New parameters for adding photos to existing meals
+      isAddingToExistingMeal?: boolean;
+      existingMealId?: string;
+      returnToEditMeal?: boolean;
     };
   }
 }
@@ -69,7 +73,7 @@ type Props = {
 const { width: screenWidth } = Dimensions.get('window');
 
 const CropScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, location, _navigationKey } = route.params;
+  const { photo, location, _navigationKey, isAddingToExistingMeal, existingMealId, returnToEditMeal } = route.params;
   const [processing, setProcessing] = useState(false);
   const [prefetchingSuggestions, setPrefetchingSuggestions] = useState(false);
   const [brightnessValue, setBrightnessValue] = useState(1.0);
@@ -137,6 +141,21 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       // Apply filters and get final image URI
       const finalImageUri = await applyFiltersAndSave(croppedImage.uri);
       
+      // Check if this is adding to an existing meal
+      if (isAddingToExistingMeal && returnToEditMeal && existingMealId) {
+        console.log('Adding processed photo to existing meal:', existingMealId);
+        
+        // Navigate back to EditMealScreen with the processed photo
+        navigation.navigate('EditMeal', {
+          mealId: existingMealId,
+          meal: {}, // This will be refreshed by EditMealScreen
+          processedPhotoUri: finalImageUri
+        });
+        
+        return;
+      }
+      
+      // Original flow for new meals
       const timestamp = new Date().getTime();
       const cachedSuggestions = (global as any).prefetchedSuggestions;
       const isFromCamera = !route.params.photo?.fromGallery;
@@ -839,7 +858,9 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
             {processing ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text style={styles.continueButtonText}>Continue</Text>
+              <Text style={styles.continueButtonText}>
+                {isAddingToExistingMeal ? 'Add Photo' : 'Continue'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>

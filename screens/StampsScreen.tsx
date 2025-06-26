@@ -321,17 +321,11 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       onPress={() => setSelectedPhoto(item)}
     >
       <View style={styles.photoContainer}>
-        {/* Background photo - smaller, centered within frame */}
+        {/* Background photo */}
         <Image
           source={{ uri: item.photoUrl }}
           style={styles.topPhotoImage}
           resizeMode="cover"
-        />
-        {/* PNG frame overlay - larger to frame the photo */}
-        <Image
-          source={require('../assets/icons/frames/photo-frame.png')}
-          style={styles.photoFrameOverlay}
-          resizeMode="contain"
         />
       </View>
     </TouchableOpacity>
@@ -429,7 +423,6 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {!photosLoading && topRatedPhotos.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Wall Hangers</Text>
-              <Text style={styles.subtitle}>(Highly rated - by AI - food photography)</Text>
               
               <FlatList
                 data={topRatedPhotos}
@@ -479,18 +472,11 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             
             <View style={styles.enlargedPhotoContainer}>
               {selectedPhoto && (
-                <>
-                  <Image
-                    source={{ uri: selectedPhoto.photoUrl }}
-                    style={styles.enlargedPhoto}
-                    resizeMode="cover"
-                  />
-                  <Image
-                    source={require('../assets/icons/frames/photo-frame-large.png')}
-                    style={styles.enlargedPhotoFrame}
-                    resizeMode="contain"
-                  />
-                </>
+                <Image
+                  source={{ uri: selectedPhoto.photoUrl }}
+                  style={styles.enlargedPhoto}
+                  resizeMode="cover"
+                />
               )}
             </View>
             
@@ -596,7 +582,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: 'normal',
     marginHorizontal: 15,
     marginTop: 15,
     color: '#1a2b49',
@@ -621,7 +607,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,
-    backgroundColor: '#FAF3E0', // Updated to match app's card background color
+    backgroundColor: '#ffffff', // White background for consistency
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -715,7 +701,7 @@ const styles = StyleSheet.create({
   detailCard: {
     width: STAMP_SIZE * 2.5, // 2.5x the original stamp width
     height: (STAMP_SIZE + 30) * 2.5, // 2.5x the original stamp height (including text area)
-    backgroundColor: '#FAF3E0', // Updated to match app's card background color
+    backgroundColor: '#ffffff', // White background for consistency
     borderRadius: 25, // Proportionally scaled from original 10px
     alignItems: 'center',
     justifyContent: 'center', // Center the content like original stamps
@@ -831,18 +817,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topPhotoImage: {
-    width: '91%', // Increased to 91% for better frame fit
-    height: '91%',
-    borderRadius: 8,
-    position: 'absolute',
-  },
-  photoFrameOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%', // Fill container
+    width: '100%', // Full container without frame
     height: '100%',
-    zIndex: 1,
+    borderRadius: 8,
   },
   // Photo Modal Styles
   photoDetailOverlay: {
@@ -862,7 +839,7 @@ const styles = StyleSheet.create({
     width: '90%',
     maxWidth: 400,
     maxHeight: '80%',
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#ffffff',
     borderRadius: 15,
     padding: 20,
     alignItems: 'center',
@@ -891,14 +868,6 @@ const styles = StyleSheet.create({
     height: 291,
     borderRadius: 15,
     position: 'absolute',
-  },
-  enlargedPhotoFrame: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 320,
-    height: 320,
-    zIndex: 1,
   },
   photoDetailInfo: {
     alignItems: 'center',
@@ -931,7 +900,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#ffffff',
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

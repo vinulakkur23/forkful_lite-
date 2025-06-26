@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   mealCard: {
     width: itemWidth,
     marginBottom: 15,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     elevation: 1,
     shadowColor: '#000',

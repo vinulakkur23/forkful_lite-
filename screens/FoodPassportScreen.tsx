@@ -786,8 +786,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
             {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#ffc008" />
-                    <Text style={styles.loadingText}>Loading your food passport...</Text>
+                    <ActivityIndicator size="large" color="#1a2b49" />
                 </View>
             ) : (
                     <FlatList
@@ -1344,7 +1343,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 12,
         right: 12,
-        backgroundColor: '#FAF3E0',
+        backgroundColor: '#ffffff',
         borderWidth: 1,
         borderColor: '#1a2b49',
         borderRadius: 6,

@@ -50,6 +50,10 @@ export type RootStackParamList = {
     } | null;
     photoSource?: 'camera' | 'gallery';
     _navigationKey?: string; // For forcing screen refresh
+    // New parameters for adding photos to existing meals
+    isAddingToExistingMeal?: boolean;
+    existingMealId?: string;
+    returnToEditMeal?: boolean;
   };
   RatingScreen1: {
     photo: {
@@ -122,6 +126,12 @@ export type RootStackParamList = {
   EditMeal: {
     mealId: string;
     meal: any;
+    processedPhotoUri?: string; // For returning from CropScreen with processed photo
+    previousScreen?: string;
+    previousTabIndex?: number;
+    passportUserId?: string;
+    passportUserName?: string;
+    passportUserPhoto?: string;
   };
 };
 

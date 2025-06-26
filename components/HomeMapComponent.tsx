@@ -17,6 +17,7 @@ import { FilterItem } from './SimpleFilterComponent';
 import EmojiDisplay from './EmojiDisplay';
 import { getFollowing } from '../services/followService';
 import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 // Map button icons - same as MapScreen
 const MAP_ICONS = {
@@ -241,10 +242,12 @@ const HomeMapComponent: React.FC<Props> = ({
   // Store centerOnLocation locally to prevent it from being lost when params are cleared
   const storedCenterLocationRef = useRef<typeof centerOnLocation>(null);
   
-  // Following filter state (map-specific, isolated from parent)
-  const [showFollowingOnly, setShowFollowingOnly] = useState(false);
+  // Filter state (map-specific, isolated from parent)
+  const [filterMode, setFilterMode] = useState<'all' | 'following' | 'saved'>('all');
   const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
+  const [savedMealIds, setSavedMealIds] = useState<string[]>([]);
   const [loadingFollowing, setLoadingFollowing] = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(false);
   const [currentZoom, setCurrentZoom] = useState<number>(10); // Track current zoom level
 
   const handleLocationPress = (meals: MealEntry[]) => {
@@ -264,13 +267,17 @@ const HomeMapComponent: React.FC<Props> = ({
     }
   };
 
-  // Load following list when component mounts or when toggle is first enabled
+  // Load data when filter mode changes
   useEffect(() => {
-    if (showFollowingOnly && !loadingFollowing) {
-      // Always refresh when toggle is turned on to get latest following list
+    if (filterMode === 'following' && !loadingFollowing) {
+      console.log('HomeMapComponent: Loading following list for filter');
       loadFollowingList();
     }
-  }, [showFollowingOnly]);
+    if (filterMode === 'saved' && !loadingSaved) {
+      console.log('HomeMapComponent: Loading saved meals for filter');
+      loadSavedMealsList();
+    }
+  }, [filterMode]);
 
   const loadFollowingList = async () => {
     setLoadingFollowing(true);
@@ -287,28 +294,60 @@ const HomeMapComponent: React.FC<Props> = ({
     }
   };
 
-  // Filter meals based on following toggle (without affecting parent component)
+  const loadSavedMealsList = async () => {
+    setLoadingSaved(true);
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return;
+
+      const savedMealsRef = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('savedMeals');
+      
+      const snapshot = await savedMealsRef.get();
+      const mealIds = snapshot.docs.map(doc => doc.data().mealId);
+      setSavedMealIds(mealIds);
+      console.log('HomeMapComponent: Saved meals loaded:', mealIds.length, 'meals');
+    } catch (error) {
+      console.error('HomeMapComponent: Error loading saved meals:', error);
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
+
+  // Filter meals based on selected filter mode (without affecting parent component)
   const filteredMealsForMap = React.useMemo(() => {
-    console.log(`HomeMapComponent: Filter memo recalculating - showFollowingOnly: ${showFollowingOnly}, followingUserIds: ${followingUserIds.length}`);
+    console.log(`HomeMapComponent: Filter memo recalculating - filterMode: ${filterMode}, followingUserIds: ${followingUserIds.length}, savedMealIds: ${savedMealIds.length}`);
     
-    if (!showFollowingOnly) {
+    if (filterMode === 'all') {
       console.log(`HomeMapComponent: Showing all ${nearbyMeals.length} meals`);
       return nearbyMeals;
     }
     
     const currentUserId = auth().currentUser?.uid;
-    const filtered = nearbyMeals.filter(meal => {
-      // Always include own meals
-      if (meal.userId === currentUserId) {
-        return true;
-      }
-      // Include meals from followed users
-      return followingUserIds.includes(meal.userId);
-    });
+    let filtered: any[] = [];
     
-    console.log(`HomeMapComponent: Following filter - ${nearbyMeals.length} meals -> ${filtered.length} meals (following: ${followingUserIds.length} users)`);
+    if (filterMode === 'following') {
+      filtered = nearbyMeals.filter(meal => {
+        // Always include own meals
+        if (meal.userId === currentUserId) {
+          return true;
+        }
+        // Include meals from followed users
+        return followingUserIds.includes(meal.userId);
+      });
+      console.log(`HomeMapComponent: Following filter - ${nearbyMeals.length} meals -> ${filtered.length} meals (following: ${followingUserIds.length} users)`);
+    } else if (filterMode === 'saved') {
+      filtered = nearbyMeals.filter(meal => {
+        // Include meals that are in saved list
+        return savedMealIds.includes(meal.id);
+      });
+      console.log(`HomeMapComponent: Saved filter - ${nearbyMeals.length} meals -> ${filtered.length} meals (saved: ${savedMealIds.length} meals)`);
+    }
+    
     return filtered;
-  }, [nearbyMeals, showFollowingOnly, followingUserIds]);
+  }, [nearbyMeals, filterMode, followingUserIds, savedMealIds]);
 
   // Group meals by location for carousel display
   const locationGroupedMarkers = React.useMemo(() => {
@@ -554,11 +593,18 @@ const HomeMapComponent: React.FC<Props> = ({
     return (
       <View style={styles.emptyContainer}>
         <Icon name="place" size={64} color="#ddd" />
-        {showFollowingOnly ? (
+        {filterMode === 'following' ? (
           <>
             <Text style={styles.emptyText}>No meals from followed users</Text>
             <Text style={styles.emptySubtext}>
-              Toggle off the following filter to see all meals
+              Toggle the filter to see all meals
+            </Text>
+          </>
+        ) : filterMode === 'saved' ? (
+          <>
+            <Text style={styles.emptyText}>No saved meals in this area</Text>
+            <Text style={styles.emptySubtext}>
+              Toggle the filter to see all meals
             </Text>
           </>
         ) : activeFilters && activeFilters.length > 0 ? (
@@ -702,29 +748,33 @@ const HomeMapComponent: React.FC<Props> = ({
         })}
       </MapView>
       
-      {showingLimitedResults && (
-        <View style={styles.limitedResultsIndicator}>
-          <Text style={styles.limitedResultsText}>
-            Showing closest {MAX_MEALS_TO_DISPLAY} meals
-          </Text>
-        </View>
-      )}
       
-      {/* Following filter toggle - positioned at top left */}
+      {/* Filter toggle - positioned at top left */}
       <View style={styles.followingToggleContainer}>
         <TouchableOpacity
-          style={[styles.followingToggleButton, showFollowingOnly && styles.followingToggleButtonActive]}
+          style={[
+            styles.followingToggleButton, 
+            filterMode === 'following' && styles.followingToggleButtonActive,
+            filterMode === 'saved' && styles.savedToggleButtonActive
+          ]}
           onPress={() => {
-            console.log(`HomeMapComponent: Toggle pressed - current state: ${showFollowingOnly}, new state: ${!showFollowingOnly}`);
-            setShowFollowingOnly(!showFollowingOnly);
+            const nextMode = filterMode === 'all' ? 'following' : filterMode === 'following' ? 'saved' : 'all';
+            console.log(`HomeMapComponent: Toggle pressed - current mode: ${filterMode}, new mode: ${nextMode}`);
+            setFilterMode(nextMode);
           }}
-          disabled={loadingFollowing}
+          disabled={loadingFollowing || loadingSaved}
         >
-          {loadingFollowing ? (
+          {(loadingFollowing || loadingSaved) ? (
             <ActivityIndicator size="small" color="#1a2b49" />
           ) : (
-            <Text style={[styles.followingToggleText, showFollowingOnly && styles.followingToggleTextActive]}>
-              {showFollowingOnly ? 'Showing: Following' : 'Showing: All'}
+            <Text style={[
+              styles.followingToggleText, 
+              filterMode === 'following' && styles.followingToggleTextActive,
+              filterMode === 'saved' && styles.followingToggleTextActive
+            ]}>
+              {filterMode === 'all' ? 'Showing: All' : 
+               filterMode === 'following' ? 'Showing: Following' : 
+               'Showing: Wishlist'}
             </Text>
           )}
         </TouchableOpacity>
@@ -926,7 +976,11 @@ const styles = StyleSheet.create({
     borderColor: '#E63946',
   },
   followingToggleButtonActive: {
-    backgroundColor: '#ffc008', // Gold when showing following
+    backgroundColor: '#1a2b49', // Navy blue when showing following
+    borderColor: '#1a2b49',
+  },
+  savedToggleButtonActive: {
+    backgroundColor: '#ffc008', // Gold when showing wishlist
     borderColor: '#ffc008',
   },
   followingToggleText: {
@@ -936,7 +990,7 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   followingToggleTextActive: {
-    color: '#1a2b49', // Navy text on gold background
+    color: '#ffffff', // White text on colored background
   },
   mapButtonContainer: {
     position: 'absolute',
@@ -964,21 +1018,6 @@ const styles = StyleSheet.create({
     height: 24,
     resizeMode: 'contain',
     tintColor: '#ffffff', // White tint for the icon - using full hex
-  },
-  limitedResultsIndicator: {
-    position: 'absolute',
-    top: 18,
-    right: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  limitedResultsText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'center',
   },
   // Simple pin marker styles for zoomed out view
   simplePinMarker: {

@@ -1216,7 +1216,7 @@ const styles = StyleSheet.create({
   feedbackSection: {
     marginTop: 12,
     marginBottom: 12,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAF9F6',
     borderRadius: 8,
     padding: 15,
     borderLeftWidth: 3,
@@ -1434,7 +1434,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cityTag: {
-    backgroundColor: '#4285F4', // Different color for city to distinguish it
+    backgroundColor: '#1a2b49', // Navy blue to match app theme
   },
   metadataTagText: {
     color: '#fff',

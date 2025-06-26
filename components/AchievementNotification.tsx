@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'ios' ? 60 : 40, // Increased top spacing to avoid status bar
     left: 0,
     right: 0,
-    backgroundColor: '#FAF3E0', // Changed to match food card background color
+    backgroundColor: '#ffffff', // White background for consistency
     borderRadius: 12, // Match food card radius
     marginHorizontal: 16,
     marginTop: 10,

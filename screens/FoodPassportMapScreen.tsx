@@ -645,8 +645,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     if (loading && !refreshing) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your food passport...</Text>
+          <ActivityIndicator size="large" color="#1a2b49" />
         </View>
       );
     }
@@ -872,8 +871,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
     if (loading && !refreshing) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your food passport...</Text>
+          <ActivityIndicator size="large" color="#1a2b49" />
         </View>
       );
     }
@@ -1095,8 +1093,7 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
       
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading your food passport...</Text>
+          <ActivityIndicator size="large" color="#1a2b49" />
         </View>
       ) : (
         <TabView
