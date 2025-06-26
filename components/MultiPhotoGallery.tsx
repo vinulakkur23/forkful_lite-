@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
-  Alert
+  Alert,
+  PanResponder
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -38,6 +39,69 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
   maxPhotos = 5
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  
+  // Debug selectedIndex changes
+  React.useEffect(() => {
+    console.log('selectedIndex changed to:', selectedIndex, 'of', photos.length, 'photos');
+  }, [selectedIndex, photos.length]);
+  
+  // Reset selectedIndex when photos change
+  React.useEffect(() => {
+    console.log('Photos effect triggered. Photos length:', photos.length, 'selectedIndex:', selectedIndex);
+    if (selectedIndex >= photos.length && photos.length > 0) {
+      console.log('Resetting selectedIndex from', selectedIndex, 'to 0 because photos changed');
+      setSelectedIndex(0);
+    }
+  }, [photos]);
+  
+  // Debug photos array changes
+  React.useEffect(() => {
+    console.log('Photos array changed:', photos.map(p => p.url.slice(-20)));
+  }, [photos]);
+  
+  // Use a ref to store current selectedIndex to avoid stale closure
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  
+  // Simplified swipe gesture handling
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Respond to horizontal swipes greater than 5 pixels
+        return Math.abs(gestureState.dx) > 5 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const swipeThreshold = 50; // Lower threshold for easier swiping
+        const velocity = gestureState.vx;
+        const currentIndex = selectedIndexRef.current; // Use ref to get current value
+        
+        console.log('Swipe detected:', {
+          dx: gestureState.dx,
+          velocity: velocity,
+          selectedIndex: currentIndex, // Use ref value
+          photosLength: photos.length,
+          canGoPrevious: currentIndex > 0,
+          canGoNext: currentIndex < photos.length - 1
+        });
+        
+        // Check velocity for quick swipes or distance for slow swipes
+        if ((gestureState.dx > swipeThreshold || velocity > 0.3) && currentIndex > 0) {
+          // Swipe right - go to previous photo
+          console.log('Going to previous photo:', currentIndex - 1);
+          setSelectedIndex(currentIndex - 1);
+        } else if ((gestureState.dx < -swipeThreshold || velocity < -0.3) && currentIndex < photos.length - 1) {
+          // Swipe left - go to next photo  
+          console.log('Going to next photo:', currentIndex + 1);
+          setSelectedIndex(currentIndex + 1);
+        } else {
+          console.log('Swipe not strong enough or at boundary');
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => false,
+    })
+  ).current;
 
   const handleRemovePhoto = (index: number) => {
     if (photos[index]?.isFlagship && photos.length > 1) {
@@ -92,20 +156,17 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
     const currentPhoto = photos[selectedIndex] || photos[0];
     
     return (
-      <View style={styles.mainPhotoContainer}>
+      <View 
+        style={styles.mainPhotoContainer}
+        {...panResponder.panHandlers}
+      >
         <Image
           source={{ uri: currentPhoto.url }}
           style={styles.mainPhoto}
           resizeMode="cover"
         />
         
-        {/* Flagship badge */}
-        {currentPhoto.isFlagship && (
-          <View style={styles.flagshipBadge}>
-            <Icon name="star" size={16} color="#fff" />
-            <Text style={styles.flagshipText}>Flagship</Text>
-          </View>
-        )}
+        {/* Flagship badge removed - users don't need to see this */}
 
         {/* Photo counter */}
         {photos.length > 1 && (
@@ -113,8 +174,11 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
             <Text style={styles.photoCounterText}>
               {selectedIndex + 1} of {photos.length}
             </Text>
+            {console.log('PhotoCounter render:', { selectedIndex, photosLength: photos.length, currentPhoto: photos[selectedIndex]?.url })}
           </View>
         )}
+        
+        {/* Swipe indicators removed - users understand from photo position */}
 
         {/* Remove button (only if editable and not the only photo) */}
         {editable && photos.length > 1 && (
@@ -122,7 +186,7 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
             style={styles.removeButton}
             onPress={() => handleRemovePhoto(selectedIndex)}
           >
-            <Icon name="close" size={20} color="#fff" />
+            <Text style={styles.removeButtonText}>×</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -130,7 +194,9 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
   };
 
   const renderThumbnails = () => {
-    if (photos.length <= 1 && !editable) return null;
+    // Only show thumbnails when editing
+    if (!editable) return null;
+    if (photos.length <= 1 && photos.length >= maxPhotos) return null;
 
     return (
       <View style={styles.thumbnailsContainer}>
@@ -165,13 +231,12 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
           ))}
           
           {/* Add photo button */}
-          {editable && photos.length < maxPhotos && (
+          {photos.length < maxPhotos && (
             <TouchableOpacity 
               style={styles.addPhotoThumbnail}
               onPress={onAddPhoto}
             >
-              <Icon name="add-a-photo" size={24} color="#666" />
-              <Text style={styles.addPhotoText}>Add Photo</Text>
+              <Text style={styles.addPhotoPlus}>+</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -220,24 +285,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  flagshipBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: 'rgba(255, 192, 8, 0.9)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  flagshipText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
+  // Flagship badge styles removed - no longer shown to users
   photoCounter: {
     position: 'absolute',
     top: 12,
@@ -256,12 +304,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 12,
     right: 12,
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     borderRadius: 20,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  removeButtonText: {
+    color: '#ffc008',
+    fontSize: 24,
+    fontWeight: 'bold',
+    lineHeight: 24,
+    textAlign: 'center',
   },
   thumbnailsContainer: {
     backgroundColor: '#f8f8f8',
@@ -308,18 +363,18 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: '#1a2b49',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f9f9f9',
   },
-  addPhotoText: {
-    fontSize: 8,
-    color: '#666',
-    marginTop: 2,
+  addPhotoPlus: {
+    fontSize: 36,
+    color: '#ffc008',
+    fontWeight: 'bold',
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    lineHeight: 36,
   },
 });
 
