@@ -63,9 +63,18 @@ export const getCachedDishCriteria = async (
       const data = doc.data() as DishCriteria;
       console.log(`Found cached criteria for: ${dishSpecific}`);
       
-      // Note: Usage statistics update would need to be done server-side
-      // due to security rules preventing client writes
-      console.log('Note: Usage statistics tracked server-side');
+      // Update usage statistics
+      try {
+        await firestore()
+          .collection('dishCriteria')
+          .doc(dishKey)
+          .update({
+            usage_count: (data.usage_count || 0) + 1,
+            last_used: new Date().toISOString()
+          });
+      } catch (updateError) {
+        console.log('Could not update usage stats:', updateError);
+      }
       
       return data;
     }
@@ -78,9 +87,37 @@ export const getCachedDishCriteria = async (
 };
 
 /**
+ * Cache dish criteria to Firestore
+ */
+const cacheDishCriteria = async (criteriaData: DishCriteria): Promise<void> => {
+  try {
+    const dishKey = criteriaData.dish_key;
+    console.log(`Caching criteria for dish_key: ${dishKey}`);
+    
+    // Add caching metadata
+    const cacheData = {
+      ...criteriaData,
+      cached_at: new Date().toISOString(),
+      usage_count: 1,
+      last_used: new Date().toISOString()
+    };
+    
+    await firestore()
+      .collection('dishCriteria')
+      .doc(dishKey)
+      .set(cacheData);
+    
+    console.log(`Successfully cached criteria for: ${criteriaData.dish_specific}`);
+  } catch (error) {
+    console.error('Error caching dish criteria:', error);
+    // Don't throw - caching failure shouldn't break the feature
+  }
+};
+
+/**
  * Extract dish criteria from API
  */
-export const extractAndCacheDishCriteria = async (
+const extractAndCacheDishCriteria = async (
   dishSpecific: string,
   dishGeneral?: string,
   cuisineType?: string
@@ -138,10 +175,23 @@ export const getDishCriteria = async (
   cuisineType?: string
 ): Promise<DishCriteria | null> => {
   try {
-    // For now, always call the API to generate criteria
-    // TODO: Add caching once server-side caching is implemented
-    console.log(`Generating criteria for: ${dishSpecific}`);
-    return await extractAndCacheDishCriteria(dishSpecific, dishGeneral, cuisineType);
+    // First, check cache
+    const cachedCriteria = await getCachedDishCriteria(dishSpecific, cuisineType);
+    if (cachedCriteria) {
+      console.log(`Using cached criteria for: ${dishSpecific}`);
+      return cachedCriteria;
+    }
+    
+    // Not in cache, call API to generate
+    console.log(`Generating new criteria for: ${dishSpecific}`);
+    const newCriteria = await extractAndCacheDishCriteria(dishSpecific, dishGeneral, cuisineType);
+    
+    // Cache the result if successful
+    if (newCriteria) {
+      await cacheDishCriteria(newCriteria);
+    }
+    
+    return newCriteria;
     
   } catch (error) {
     console.error('Error getting dish criteria:', error);
