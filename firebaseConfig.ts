@@ -4,14 +4,14 @@ import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-// Your Firebase configuration - replace with your actual Firebase config
+// Your Firebase configuration - Explorer project config
 const firebaseConfig = {
-  apiKey: "AIzaSyBw89gPw8CjF__uelKgPbvxB-JrK91tOvw",
-  authDomain: "mealratingapp.firebaseapp.com",
-  projectId: "mealratingapp",
-  storageBucket: "mealratingapp.appspot.com",
-  messagingSenderId: "476812977799",
-  appId: "1:476812977799:web:7f1c18d1be5b424706fa22",
+  apiKey: "AIzaSyC1DaoxD2IKXUuxb0YRGXn_TfZhz1eNGUc",
+  authDomain: "dishitout-explorer.firebaseapp.com",
+  projectId: "dishitout-explorer",
+  storageBucket: "dishitout-explorer.firebasestorage.app",
+  messagingSenderId: "498038344155",
+  appId: "1:498038344155:ios:c7ba5226fe3e7d53883ffe",
   measurementId: "G-1D131XEPV1"
 };
 
@@ -28,7 +28,7 @@ const firebaseStorage = firebase.app().storage();
 
 // Configure Google Sign-In
 GoogleSignin.configure({
-  webClientId: '476812977799-7dmlpm8g3plslrsftesst7op6ipm71a4.apps.googleusercontent.com', // Get this from Firebase console
+  webClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com', // Get this from Firebase console
 });
 
 // Setup Firestore

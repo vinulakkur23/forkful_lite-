@@ -348,7 +348,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = manu.mealratingapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dishitout.explorer;
 				PRODUCT_NAME = MealRatingAppNew;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MealRatingAppNew-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -377,7 +377,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = manu.mealratingapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dishitout.explorer;
 				PRODUCT_NAME = MealRatingAppNew;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MealRatingAppNew-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

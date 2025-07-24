@@ -13,6 +13,10 @@ import EmojiDisplay from '../components/EmojiDisplay';
 import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
+// Import enhanced metadata service
+import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
+// Import dish criteria service
+import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaService';
 // Import achievement service
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
@@ -265,12 +269,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         console.log("No Firebase apps found, initializing...");
         try {
           firebase.initializeApp({
-            apiKey: "AIzaSyBw89gPw8CjF__uelKgPbvxB-JrK91tOvw",
-            authDomain: "mealratingapp.firebaseapp.com",
-            projectId: "mealratingapp",
-            storageBucket: "mealratingapp.appspot.com",
-            messagingSenderId: "476812977799",
-            appId: "1:476812977799:web:7f1c18d1be5b424706fa22",
+            apiKey: "AIzaSyC1DaoxD2IKXUuxb0YRGXn_TfZhz1eNGUc",
+            authDomain: "dishitout-explorer.firebaseapp.com",
+            projectId: "dishitout-explorer",
+            storageBucket: "dishitout-explorer.firebasestorage.app",
+            messagingSenderId: "498038344155",
+            appId: "1:498038344155:ios:c7ba5226fe3e7d53883ffe",
             measurementId: "G-1D131XEPV1"
           });
           console.log("Firebase initialized successfully");
@@ -740,9 +744,48 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Store the meal ID so we can use it for achievement checking
         setMealId(docRef.id);
 
-        // Process image metadata and then check for achievements
-        // This ensures we have metadata before checking for food-type based achievements
+        // Process both regular and enhanced metadata in parallel
         console.log("Starting metadata processing and achievement check flow...");
+        
+        // Extract enhanced metadata (don't wait for it to complete before regular metadata)
+        extractEnhancedMetadata(photo.uri, meal, restaurant, undefined)
+          .then(async (enhancedMetadata) => {
+            if (enhancedMetadata) {
+              console.log("Enhanced metadata extracted successfully:", enhancedMetadata);
+              // Update the document with enhanced metadata
+              try {
+                await firestore().collection('mealEntries').doc(docRef.id).update({
+                  metadata_enriched: enhancedMetadata
+                });
+                console.log("Enhanced metadata saved to Firestore");
+                
+                // Extract dish criteria based on enhanced metadata
+                console.log("Extracting dish criteria for mindful eating...");
+                const dishCriteria = await getDishCriteria(
+                  enhancedMetadata.dish_specific,
+                  enhancedMetadata.dish_general,
+                  enhancedMetadata.cuisine_type
+                );
+                
+                if (dishCriteria) {
+                  console.log("Dish criteria extracted successfully:", dishCriteria);
+                  // Link criteria to the meal
+                  await linkCriteriaToMeal(docRef.id, dishCriteria);
+                  console.log("Dish criteria linked to meal");
+                } else {
+                  console.log("No dish criteria could be generated");
+                }
+                
+              } catch (error) {
+                console.error("Error saving enhanced metadata or dish criteria:", error);
+              }
+            }
+          })
+          .catch(error => {
+            console.error("Error extracting enhanced metadata:", error);
+          });
+        
+        // Process regular metadata
         processImageMetadata(docRef.id, imageUrl, {
           mealName: meal || undefined,
           restaurantName: restaurant || undefined,

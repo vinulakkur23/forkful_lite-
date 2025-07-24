@@ -11,5 +11,12 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules",
+    "bucket": "dishitout-explorer.firebasestorage.app"
+  }
 }

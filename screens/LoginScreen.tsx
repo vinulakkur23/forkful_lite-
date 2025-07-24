@@ -22,8 +22,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   // Configure Google Sign In
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: '476812977799-7dmlpm8g3plslrsftesst7op6ipm71a4.apps.googleusercontent.com',
-      iosClientId: '476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4.apps.googleusercontent.com',
+      webClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
+      iosClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
       offlineAccess: true,
       forceCodeForRefreshToken: true,
       scopes: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email']

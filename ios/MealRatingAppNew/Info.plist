@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>DishItOut</string>
+	<string>Dishitout Explorer</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconName</key>
@@ -31,7 +31,7 @@
 			<string>manu.mealratingapp.googleSignIn</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.476812977799-vutvsmj3dit2ov9ko1sgp4p2p0u57kh4</string>
+				<string>com.googleusercontent.apps.498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie</string>
 			</array>
 		</dict>
 	</array>

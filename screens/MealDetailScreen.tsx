@@ -19,6 +19,8 @@ import { testMetadataApi } from '../services/apiTest';
 import { BUTTON_ICONS, hasCustomIcons } from '../config/buttonIcons';
 // Import cheers service
 import { toggleCheer, subscribeToCheersData } from '../services/cheersService';
+// Import dish criteria service
+import { getMealDishCriteria, DishCriteria } from '../services/dishCriteriaService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -48,6 +50,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [hasUserCheered, setHasUserCheered] = useState(false);
   const [totalCheers, setTotalCheers] = useState(0);
   const [cheersLoading, setCheersLoading] = useState(false);
+  const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
+  const [criteriaLoading, setCriteriaLoading] = useState(false);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
@@ -119,11 +123,37 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       const processedPhotos = processMealPhotos(mealData);
       setPhotos(processedPhotos);
       console.log('Processed photos for MealDetail:', processedPhotos);
+      
+      // Load dish criteria after meal data is loaded
+      loadDishCriteria();
+      
     } catch (err) {
       console.error('Error fetching meal details:', err);
       setError('Failed to load meal details');
     } finally {
       setLoading(false);
+    }
+  }, [mealId]);
+  
+  // Load dish criteria for this meal
+  const loadDishCriteria = useCallback(async () => {
+    try {
+      setCriteriaLoading(true);
+      console.log(`Loading dish criteria for meal: ${mealId}`);
+      
+      const criteria = await getMealDishCriteria(mealId);
+      if (criteria) {
+        console.log('Dish criteria loaded successfully:', criteria);
+        setDishCriteria(criteria);
+      } else {
+        console.log('No dish criteria found for this meal');
+        setDishCriteria(null);
+      }
+    } catch (error) {
+      console.error('Error loading dish criteria:', error);
+      setDishCriteria(null);
+    } finally {
+      setCriteriaLoading(false);
     }
   }, [mealId]);
   
@@ -803,6 +833,120 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
               )}
             </View>
+          </View>
+        )}
+
+        {/* Enhanced Metadata Section - For Testing */}
+        {meal.metadata_enriched && (
+          <View style={[styles.metadataSection, styles.enhancedMetadataSection]}>
+            <Text style={styles.enhancedMetadataTitle}>Enhanced Metadata (Testing)</Text>
+            
+            {/* Two-tier categorization */}
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Specific Dish:</Text>
+              <Text style={styles.metadataValue}>{meal.metadata_enriched.dish_specific}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>General Category:</Text>
+              <Text style={styles.metadataValue}>{meal.metadata_enriched.dish_general}</Text>
+            </View>
+            
+            {/* Cuisine and confidence */}
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Cuisine:</Text>
+              <Text style={styles.metadataValue}>
+                {meal.metadata_enriched.cuisine_type} 
+                {meal.metadata_enriched.confidence_score && 
+                  ` (${Math.round(meal.metadata_enriched.confidence_score * 100)}% confident)`}
+              </Text>
+            </View>
+            
+            {/* Interesting ingredient - highlighted */}
+            {meal.metadata_enriched.interesting_ingredient && meal.metadata_enriched.interesting_ingredient !== 'Unknown' && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Star Ingredient:</Text>
+                <Text style={[styles.metadataValue, styles.interestingIngredient]}>
+                  ⭐ {meal.metadata_enriched.interesting_ingredient}
+                </Text>
+              </View>
+            )}
+            
+            {/* Key ingredients */}
+            {meal.metadata_enriched.key_ingredients && meal.metadata_enriched.key_ingredients.length > 0 && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Ingredients:</Text>
+                <Text style={styles.metadataValue}>
+                  {meal.metadata_enriched.key_ingredients.join(', ')}
+                </Text>
+              </View>
+            )}
+            
+            {/* Flavor profile */}
+            {meal.metadata_enriched.flavor_profile && meal.metadata_enriched.flavor_profile.length > 0 && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Flavors:</Text>
+                <Text style={styles.metadataValue}>
+                  {meal.metadata_enriched.flavor_profile.join(', ')}
+                </Text>
+              </View>
+            )}
+            
+            {/* Dietary info */}
+            {meal.metadata_enriched.dietary_info && meal.metadata_enriched.dietary_info.length > 0 && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Dietary:</Text>
+                <Text style={styles.metadataValue}>
+                  {meal.metadata_enriched.dietary_info.join(', ')}
+                </Text>
+              </View>
+            )}
+            
+            {/* Cooking method and presentation */}
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Cooking Method:</Text>
+              <Text style={styles.metadataValue}>{meal.metadata_enriched.cooking_method}</Text>
+            </View>
+            
+            {/* Normalization info */}
+            {meal.metadata_enriched.matched_to_existing && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Normalized to:</Text>
+                <Text style={styles.metadataValue}>
+                  {meal.metadata_enriched.dish_specific_normalized}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Dish Criteria Section - What to Look For */}
+        {dishCriteria && (
+          <View style={[styles.metadataSection, styles.dishCriteriaSection]}>
+            <Text style={styles.dishCriteriaTitle}>What to Look For 🍽️</Text>
+            <Text style={styles.dishCriteriaSubtitle}>
+              {dishCriteria.dish_specific} {dishCriteria.cuisine_type && `(${dishCriteria.cuisine_type})`}
+            </Text>
+            
+            {dishCriteria.criteria.map((criterion, index) => (
+              <View key={index} style={styles.criterionItem}>
+                <View style={styles.criterionHeader}>
+                  <Text style={styles.criterionNumber}>{index + 1}.</Text>
+                  <Text style={styles.criterionTitle}>{criterion.title}</Text>
+                </View>
+                <Text style={styles.criterionDescription}>{criterion.description}</Text>
+              </View>
+            ))}
+            
+            <Text style={styles.criteriaFooter}>
+              Use these indicators to mindfully appreciate your dining experience ✨
+            </Text>
+          </View>
+        )}
+        
+        {criteriaLoading && (
+          <View style={styles.loadingSection}>
+            <ActivityIndicator size="small" color="#1a2b49" />
+            <Text style={styles.loadingText}>Loading dining insights...</Text>
           </View>
         )}
 
@@ -1512,6 +1656,122 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     // No tintColor - preserves original icon colors
+  },
+  // Enhanced metadata styles
+  enhancedMetadataSection: {
+    backgroundColor: '#f0f8ff', // Light blue background to distinguish from regular metadata
+    borderRadius: 8,
+    padding: 15,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#d0e7ff',
+  },
+  enhancedMetadataTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 12,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    alignItems: 'flex-start',
+  },
+  metadataLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a2b49',
+    minWidth: 120,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  metadataValue: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  interestingIngredient: {
+    fontWeight: 'bold',
+    color: '#ff6b6b', // Bright color to make it stand out
+    fontSize: 15, // Slightly larger
+  },
+  // Dish criteria styles
+  dishCriteriaSection: {
+    backgroundColor: '#f8fff8', // Very light green background for mindful eating theme
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#e0f2e0',
+  },
+  dishCriteriaTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2d5016', // Dark green for mindful eating theme
+    marginBottom: 4,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  dishCriteriaSubtitle: {
+    fontSize: 14,
+    color: '#5a7c47',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionItem: {
+    marginBottom: 12,
+    paddingLeft: 8,
+  },
+  criterionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  criterionNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2d5016',
+    marginRight: 8,
+    minWidth: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2d5016',
+    flex: 1,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionDescription: {
+    fontSize: 13,
+    color: '#4a6741',
+    lineHeight: 18,
+    marginLeft: 28,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criteriaFooter: {
+    fontSize: 12,
+    color: '#5a7c47',
+    textAlign: 'center',
+    marginTop: 12,
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  loadingSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    marginTop: 10,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

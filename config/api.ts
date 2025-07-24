@@ -18,6 +18,8 @@ export const API_CONFIG = {
     SUGGEST_MEAL_FOR_RESTAURANT: '/suggest-meal-for-restaurant',
     EXTRACT_METADATA: '/extract-meal-metadata',
     EXTRACT_METADATA_FROM_URL: '/extract-meal-metadata-from-url',
+    EXTRACT_ENHANCED_METADATA: '/extract-enhanced-metadata',
+    EXTRACT_DISH_CRITERIA: '/extract-dish-criteria',
     // Meal enhancement endpoints
     MEAL_ENHANCEMENT_HAIKU: '/meal-enhancement/haiku',
     MEAL_ENHANCEMENT_RESTAURANT: '/meal-enhancement/restaurant-history',
