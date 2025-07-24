@@ -37,6 +37,8 @@ import RNFS from 'react-native-fs';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
+import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
+import { getDishCriteria, DishCriteria } from '../services/dishCriteriaService';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
@@ -823,7 +825,48 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         sessionId: sessionId
       };
       
-      // Navigate to Result screen with all collected data
+      // Step 1: Extract enhanced metadata
+      logWithSession('Extracting enhanced metadata...');
+      let enhancedMetadata: EnhancedMetadata | null = null;
+      try {
+        enhancedMetadata = await extractEnhancedMetadata(
+          freshPhoto.uri,
+          mealName,
+          mealType === "Restaurant" ? restaurant : undefined,
+          undefined // cuisineContext - will be inferred by the service
+        );
+        logWithSession('Enhanced metadata extracted successfully');
+      } catch (metadataError) {
+        logWithSession(`Error extracting enhanced metadata: ${metadataError}`);
+        // Continue without metadata - it's not critical for the flow
+      }
+      
+      // Step 2: Extract dish criteria (only if we have enhanced metadata)
+      logWithSession('Extracting dish criteria...');
+      let dishCriteria: DishCriteria | null = null;
+      try {
+        if (enhancedMetadata) {
+          dishCriteria = await getDishCriteria(
+            enhancedMetadata.dish_specific,
+            enhancedMetadata.dish_general,
+            enhancedMetadata.cuisine_type
+          );
+          logWithSession('Dish criteria extracted successfully');
+        } else {
+          // Fallback: use meal name as dish_specific
+          dishCriteria = await getDishCriteria(
+            mealName,
+            undefined, // dish_general - will be inferred
+            undefined  // cuisine_type - will be inferred
+          );
+          logWithSession('Dish criteria extracted with fallback data');
+        }
+      } catch (criteriaError) {
+        logWithSession(`Error extracting dish criteria: ${criteriaError}`);
+        // Continue without criteria - it's not critical for the flow
+      }
+      
+      // Navigate to Result screen with all collected data including metadata and criteria
       navigation.navigate('Result', {
         photo: freshPhoto,
         location: location,
@@ -835,6 +878,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Keep for backward compatibility
         likedComment: likedComment,
         dislikedComment: dislikedComment,
+        // New: Pass the extracted metadata and criteria
+        enhancedMetadata: enhancedMetadata,
+        dishCriteria: dishCriteria,
         _uniqueKey: sessionId
       });
     } catch (error) {

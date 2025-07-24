@@ -20,7 +20,7 @@ import { BUTTON_ICONS, hasCustomIcons } from '../config/buttonIcons';
 // Import cheers service
 import { toggleCheer, subscribeToCheersData } from '../services/cheersService';
 // Import dish criteria service
-import { getMealDishCriteria, DishCriteria } from '../services/dishCriteriaService';
+import { DishCriteria } from '../services/dishCriteriaService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -51,7 +51,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [totalCheers, setTotalCheers] = useState(0);
   const [cheersLoading, setCheersLoading] = useState(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
-  const [criteriaLoading, setCriteriaLoading] = useState(false);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
@@ -124,8 +123,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setPhotos(processedPhotos);
       console.log('Processed photos for MealDetail:', processedPhotos);
       
-      // Load dish criteria after meal data is loaded
-      loadDishCriteria();
+      // Set dish criteria from saved meal data (no API calls needed)
+      if (mealData.dish_criteria) {
+        console.log('Using saved dish criteria from meal data');
+        setDishCriteria(mealData.dish_criteria);
+      } else {
+        console.log('No dish criteria saved for this meal');
+        setDishCriteria(null);
+      }
       
     } catch (err) {
       console.error('Error fetching meal details:', err);
@@ -135,27 +140,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [mealId]);
   
-  // Load dish criteria for this meal
-  const loadDishCriteria = useCallback(async () => {
-    try {
-      setCriteriaLoading(true);
-      console.log(`Loading dish criteria for meal: ${mealId}`);
-      
-      const criteria = await getMealDishCriteria(mealId);
-      if (criteria) {
-        console.log('Dish criteria loaded successfully:', criteria);
-        setDishCriteria(criteria);
-      } else {
-        console.log('No dish criteria found for this meal');
-        setDishCriteria(null);
-      }
-    } catch (error) {
-      console.error('Error loading dish criteria:', error);
-      setDishCriteria(null);
-    } finally {
-      setCriteriaLoading(false);
-    }
-  }, [mealId]);
   
   // Fetch the meal data when the component mounts or when returning to this screen
   useEffect(() => {
@@ -940,13 +924,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.criteriaFooter}>
               Use these indicators to mindfully appreciate your dining experience ✨
             </Text>
-          </View>
-        )}
-        
-        {criteriaLoading && (
-          <View style={styles.loadingSection}>
-            <ActivityIndicator size="small" color="#1a2b49" />
-            <Text style={styles.loadingText}>Loading dining insights...</Text>
           </View>
         )}
 

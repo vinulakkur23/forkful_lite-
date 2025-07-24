@@ -20,8 +20,7 @@ import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaSer
 // Import achievement service
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
-// Import meal enhancement service
-import { getRandomMealEnhancement, getEnhancementTitle, MealEnhancement, getPhotoScore } from '../services/mealEnhancementService';
+// Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Result'>,
@@ -49,17 +48,17 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     thoughts = '',
     // Keep for backward compatibility
     likedComment = '',
-    dislikedComment = ''
+    dislikedComment = '',
+    // New: Enhanced metadata and dish criteria
+    enhancedMetadata,
+    dishCriteria
   } = route.params;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [mealId, setMealId] = useState<string | null>(null);
-  // Meal enhancement states
-  const [enhancement, setEnhancement] = useState<MealEnhancement | null>(null);
-  const [enhancementLoading, setEnhancementLoading] = useState(false);
-  const [photoScore, setPhotoScore] = useState<number | null>(null); // Store photo score from enhancement
+  // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}`;
@@ -97,8 +96,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaved(false);
     setPhotoUrl(null);
     
-    // Load meal enhancement randomly (now includes photo rating)
-    loadMealEnhancement();
+    // Meal enhancement removed - now using dish criteria passed from RatingScreen2
     
     // If user is logged in, save data automatically
     const user = auth().currentUser;
@@ -115,58 +113,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     };
   }, [instanceKey]); // Using instanceKey ensures this runs for each unique navigation
 
-  // Load a random meal enhancement
-  const loadMealEnhancement = async () => {
-    try {
-      setEnhancementLoading(true);
-      setEnhancement(null);
-      
-      console.log('🎲 Loading random meal enhancement...');
-      // Include city with restaurant name for more accurate location-specific results
-      const restaurantWithCity = restaurant && location?.city 
-        ? `${restaurant}, ${location.city}`
-        : restaurant || 'Local Restaurant';
-      
-      // First, get the random enhancement
-      const enhancement = await getRandomMealEnhancement(
-        meal || 'Unknown Dish',
-        restaurantWithCity,
-        photo?.uri,
-        likedComment || undefined,
-        dislikedComment || undefined
-      );
-      
-      setEnhancement(enhancement);
-      
-      // Only calculate photo score separately if enhancement is NOT photo_rating
-      if (enhancement.type === 'photo_rating' && enhancement.rating) {
-        // Use the score from the photo rating enhancement
-        setPhotoScore(enhancement.rating);
-        console.log(`📸 Photo score from rating enhancement: ${enhancement.rating}/10`);
-      } else if (photo?.uri) {
-        // Calculate photo score separately since enhancement didn't provide it
-        try {
-          const calculatedPhotoScore = await getPhotoScore(photo.uri);
-          setPhotoScore(calculatedPhotoScore);
-          console.log(`📸 Photo score calculated separately: ${calculatedPhotoScore}/10`);
-        } catch (error) {
-          console.error('Error calculating photo score:', error);
-          setPhotoScore(6.5); // Default fallback
-        }
-      }
-      
-      console.log('✅ Enhancement loaded:', enhancement.type);
-    } catch (error) {
-      console.error('❌ Error loading meal enhancement:', error);
-      // Set a fallback enhancement
-      setEnhancement({
-        type: 'haiku',
-        content: 'Food on the table\nMoments shared with those we love\nMemories made here'
-      });
-    } finally {
-      setEnhancementLoading(false);
-    }
-  };
+  // Removed loadMealEnhancement function - no longer using meal enhancement service
 
   const uploadImageToFirebase = async (): Promise<string> => {
     // Get current user directly from auth module
@@ -664,22 +611,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Extra logging for debugging
         console.log("Final city info to be saved:", cityInfo);
         
-        // Use photo score from enhancement if available, otherwise calculate it
-        let finalPhotoScore = photoScore || 5; // Use enhancement score or default
-        
-        // If we don't have a photo score from enhancement, calculate it now
-        if (!photoScore) {
-          try {
-            console.log("Calculating photo score for Firebase (no enhancement score available)...");
-            finalPhotoScore = await getPhotoScore(imageUrl);
-            console.log(`Photo score calculated: ${finalPhotoScore}/10`);
-          } catch (scoreError) {
-            console.error("Error calculating photo score:", scoreError);
-            finalPhotoScore = 5; // Continue with default score
-          }
-        } else {
-          console.log(`Using photo score from enhancement: ${finalPhotoScore}/10`);
-        }
+        // Use default photo score since we're no longer using photo enhancement
+        const finalPhotoScore = 5; // Default photo score
         
         // Save meal data to Firestore, ensuring location data is preserved
         const mealData = {
@@ -722,7 +655,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           sessionId,
           platform: Platform.OS,
           appVersion: '1.0.0', // Add app version for debugging
-          photoScore: finalPhotoScore // Always save the photo quality score
+          photoScore: finalPhotoScore, // Always save the photo quality score
+          // Add enhanced metadata if available
+          metadata_enriched: enhancedMetadata || null,
+          // Add dish criteria if available  
+          dish_criteria: dishCriteria || null
         };
         
         // Final log of what's being saved to database
@@ -1011,32 +948,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
 
 
-        {/* Meal Enhancement Section */}
-        <View style={styles.enhancementCard}>
-          {enhancementLoading ? (
-            <View style={styles.enhancementLoading}>
-              <ActivityIndicator size="small" color="#ff6b6b" />
-              <Text style={styles.enhancementLoadingText}>Generating something special...</Text>
-            </View>
-          ) : enhancement ? (
-            <View style={styles.enhancementContent}>
-              <Text style={styles.enhancementTitle}>
-                {(enhancement.title || getEnhancementTitle(enhancement.type)).replace(/[🎋🏪🍽️✨📸]/g, '').trim()}
-              </Text>
-              <View style={styles.enhancementTextContainer}>
-                {enhancement.type === 'haiku' ? (
-                  <Text style={styles.enhancementHaiku}>{enhancement.content}</Text>
-                ) : enhancement.type === 'photo_rating' ? (
-                  <View style={styles.photoRatingContainer}>
-                    <Text style={styles.enhancementText}>{enhancement.content}</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.enhancementText}>{enhancement.content}</Text>
-                )}
+        {/* Dish Criteria Section */}
+        {dishCriteria && dishCriteria.criteria && (
+          <View style={styles.dishCriteriaCard}>
+            <Text style={styles.dishCriteriaTitle}>What to Look For 🍽️</Text>
+            {dishCriteria.criteria.map((criterion, index) => (
+              <View key={index} style={styles.criterionItem}>
+                <Text style={styles.criterionTitle}>{criterion.title}</Text>
+                <Text style={styles.criterionDescription}>{criterion.description}</Text>
               </View>
-            </View>
-          ) : null}
-        </View>
+            ))}
+          </View>
+        )}
 
         {/* Action buttons - now part of scrollable content */}
         <View style={styles.actionsContainer}>
@@ -1357,9 +1280,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  // Enhancement section styles
-  enhancementCard: {
-    backgroundColor: '#FAF3E0',
+  // Dish criteria section styles
+  dishCriteriaCard: {
+    backgroundColor: '#f0f8f0',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1369,72 +1292,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  enhancementLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  enhancementLoadingText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  enhancementContent: {
-    alignItems: 'center',
-  },
-  enhancementTitle: {
-    fontSize: 16,
+  dishCriteriaTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    marginBottom: 12,
+    color: '#2d5016',
+    marginBottom: 16,
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  enhancementTextContainer: {
-    backgroundColor: '#FFF8E7',
+  criterionItem: {
+    backgroundColor: '#ffffff',
     borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    width: '100%',
+    padding: 12,
+    marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#ff6b6b',
+    borderLeftColor: '#4CAF50',
   },
-  enhancementHaiku: {
-    fontSize: 16,
-    color: '#1a2b49',
-    textAlign: 'center',
-    lineHeight: 24,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  enhancementText: {
+  criterionTitle: {
     fontSize: 14,
-    color: '#1a2b49',
-    textAlign: 'left',
-    lineHeight: 20,
+    fontWeight: 'bold',
+    color: '#2d5016',
+    marginBottom: 4,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  regenerateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#ff6b6b',
-  },
-  regenerateButtonText: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: '#ff6b6b',
-    fontWeight: '500',
+  criterionDescription: {
+    fontSize: 13,
+    color: '#4a5d4a',
+    lineHeight: 18,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  // Photo rating specific styles
-  photoRatingContainer: {
-    alignItems: 'center',
   },
 });
 

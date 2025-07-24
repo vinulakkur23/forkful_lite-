@@ -103,8 +103,11 @@ export type RootStackParamList = {
     restaurant?: string;
     meal?: string;
     mealType?: string;
+    thoughts?: string;
     likedComment?: string;
     dislikedComment?: string;
+    enhancedMetadata?: any; // Enhanced metadata from service
+    dishCriteria?: any; // Dish criteria from service
     _uniqueKey?: string; // Ensure Result screen reloads
   };
   FoodPassport: {
