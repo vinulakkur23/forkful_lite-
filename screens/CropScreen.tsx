@@ -168,30 +168,17 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         height: croppedImage.height,
       };
       
-      if (isFromCamera) {
-        // Camera photos: Skip RatingScreen1, go directly to RatingScreen2
-        console.log('Camera photo detected - navigating to RatingScreen2 with edits');
-        navigation.navigate('RatingScreen2', {
-          photo: photoData,
-          location: locationToUse,
-          rating: 0,
-          likedComment: '',
-          dislikedComment: '',
-          suggestionData: cachedSuggestions || undefined,
-          _uniqueKey: `rating_screen2_${timestamp}`,
-        });
-      } else {
-        // Gallery photos: Go to RatingScreen1
-        console.log('Gallery photo detected - navigating to RatingScreen1 with edits');
-        navigation.navigate('RatingScreen1', {
-          photo: photoData,
-          location: locationToUse,
-          exifData: route.params.exifData,
-          suggestionData: cachedSuggestions || undefined,
-          photoSource: route.params.photoSource,
-          _uniqueKey: `rating_screen1_${timestamp}`,
-        });
-      }
+      // Both camera and gallery photos now go to RatingScreen2 for unified flow
+      console.log('Navigating to RatingScreen2 with edits (unified flow)');
+      navigation.navigate('RatingScreen2', {
+        photo: photoData,
+        location: locationToUse,
+        rating: 0,
+        likedComment: '',
+        dislikedComment: '',
+        suggestionData: cachedSuggestions || undefined,
+        _uniqueKey: `rating_screen2_${timestamp}`,
+      });
       
       console.log('Passing location data to RatingScreen:', 
         locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');
