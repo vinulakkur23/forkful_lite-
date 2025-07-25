@@ -51,7 +51,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     dislikedComment = '',
     // New: Enhanced metadata and dish criteria
     enhancedMetadata,
-    dishCriteria
+    dishCriteria,
+    // TESTING: Combined result for comparison
+    combinedResult
   } = route.params;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -659,7 +661,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           // Add enhanced metadata if available
           metadata_enriched: enhancedMetadata || null,
           // Add dish criteria if available  
-          dish_criteria: dishCriteria || null
+          dish_criteria: dishCriteria || null,
+          // TESTING: Add combined result for comparison
+          combined_result: combinedResult || null
         };
         
         // Final log of what's being saved to database

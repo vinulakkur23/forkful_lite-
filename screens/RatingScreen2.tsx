@@ -39,6 +39,7 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
 import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
 import { getDishCriteria, DishCriteria } from '../services/dishCriteriaService';
+import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
@@ -865,6 +866,26 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Error extracting dish criteria: ${criteriaError}`);
         // Continue without criteria - it's not critical for the flow
       }
+
+      // Step 3: TESTING - Extract combined metadata and criteria for comparison
+      logWithSession('🧪 Testing combined metadata and criteria extraction...');
+      let combinedResult: CombinedResponse | null = null;
+      try {
+        combinedResult = await extractCombinedMetadataAndCriteria(
+          freshPhoto.uri,
+          mealName,
+          mealType === "Restaurant" ? restaurant : undefined,
+          undefined // cuisineContext - will be inferred by the service
+        );
+        logWithSession('✅ Combined extraction completed successfully');
+        console.log('Combined result preview:', {
+          dish_specific: combinedResult?.metadata?.dish_specific,
+          criteria_count: combinedResult?.dish_criteria?.criteria?.length
+        });
+      } catch (combinedError) {
+        logWithSession(`❌ Error in combined extraction: ${combinedError}`);
+        // Continue without combined result - this is just for testing
+      }
       
       // Navigate to Result screen with all collected data including metadata and criteria
       navigation.navigate('Result', {
@@ -881,6 +902,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // New: Pass the extracted metadata and criteria
         enhancedMetadata: enhancedMetadata,
         dishCriteria: dishCriteria,
+        // TESTING: Pass combined result for comparison
+        combinedResult: combinedResult,
         _uniqueKey: sessionId
       });
     } catch (error) {

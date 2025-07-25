@@ -108,6 +108,7 @@ export type RootStackParamList = {
     dislikedComment?: string;
     enhancedMetadata?: any; // Enhanced metadata from service
     dishCriteria?: any; // Dish criteria from service
+    combinedResult?: any; // TESTING: Combined metadata and criteria from new service
     _uniqueKey?: string; // Ensure Result screen reloads
   };
   FoodPassport: {

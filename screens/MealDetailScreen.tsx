@@ -21,6 +21,8 @@ import { BUTTON_ICONS, hasCustomIcons } from '../config/buttonIcons';
 import { toggleCheer, subscribeToCheersData } from '../services/cheersService';
 // Import dish criteria service
 import { DishCriteria } from '../services/dishCriteriaService';
+// Import combined service types for testing
+import { CombinedResponse } from '../services/combinedMetadataCriteriaService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -51,6 +53,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [totalCheers, setTotalCheers] = useState(0);
   const [cheersLoading, setCheersLoading] = useState(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
+  const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
@@ -130,6 +133,15 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       } else {
         console.log('No dish criteria saved for this meal');
         setDishCriteria(null);
+      }
+
+      // TESTING: Set combined result from saved meal data
+      if (mealData.combined_result) {
+        console.log('🧪 Using saved combined result from meal data');
+        setCombinedResult(mealData.combined_result);
+      } else {
+        console.log('🧪 No combined result saved for this meal');
+        setCombinedResult(null);
       }
       
     } catch (err) {
@@ -923,6 +935,40 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             
             <Text style={styles.criteriaFooter}>
               Use these indicators to mindfully appreciate your dining experience ✨
+            </Text>
+          </View>
+        )}
+
+        {/* TESTING: Combined Result Comparison Section */}
+        {combinedResult && (
+          <View style={[styles.metadataSection, styles.combinedTestSection]}>
+            <Text style={styles.combinedTestTitle}>🧪 TESTING: Combined Approach Results</Text>
+            
+            {/* Combined Metadata */}
+            <Text style={styles.combinedTestSubtitle}>Combined Metadata:</Text>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Dish Specific:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_specific}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Cuisine:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.cuisine_type}</Text>
+            </View>
+            
+            {/* Combined Criteria */}
+            <Text style={styles.combinedTestSubtitle}>Combined Criteria:</Text>
+            {combinedResult.dish_criteria.criteria.map((criterion, index) => (
+              <View key={index} style={styles.criterionItem}>
+                <View style={styles.criterionHeader}>
+                  <Text style={styles.criterionNumber}>{index + 1}.</Text>
+                  <Text style={styles.criterionTitle}>{criterion.title}</Text>
+                </View>
+                <Text style={styles.criterionDescription}>{criterion.description}</Text>
+              </View>
+            ))}
+            
+            <Text style={styles.criteriaFooter}>
+              ⚡ Generated in one API call with visual context from the actual photo
             </Text>
           </View>
         )}
@@ -1748,6 +1794,32 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Combined test section styles
+  combinedTestSection: {
+    backgroundColor: '#fff8e1', // Light yellow background for testing
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 15,
+    borderWidth: 2,
+    borderColor: '#ffc107',
+    borderStyle: 'dashed',
+  },
+  combinedTestTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#f57f17', // Darker yellow/orange for testing
+    marginBottom: 8,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  combinedTestSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef6c00',
+    marginTop: 12,
+    marginBottom: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
