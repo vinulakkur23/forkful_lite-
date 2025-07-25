@@ -10,6 +10,8 @@ import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
+import DynamicCriteriaRating from '../components/DynamicCriteriaRating';
+import { DishCriterion } from '../services/dishCriteriaService';
 import { RootStackParamList, TabParamList } from '../App';
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -72,6 +74,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
+  // State for dish criteria and detailed ratings
+  const [dishCriteria, setDishCriteria] = useState<DishCriterion[]>([]);
+  const [criteriaRatings, setCriteriaRatings] = useState<{ [key: string]: number }>({});
+  
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
@@ -93,7 +99,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         id: freshMealData.id,
         hasPhotos: !!freshMealData.photos,
         photosCount: freshMealData.photos?.length || 0,
-        hasPhotoUrl: !!freshMealData.photoUrl
+        hasPhotoUrl: !!freshMealData.photoUrl,
+        hasDishCriteria: !!freshMealData.dish_criteria,
+        hasCriteriaArray: !!freshMealData.dish_criteria?.criteria,
+        dishCriteriaLength: freshMealData.dish_criteria?.criteria?.length || 0,
+        allFields: Object.keys(freshMealData)
       });
       
       setMeal(freshMealData);
@@ -161,6 +171,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       thoughtsLegacyLiked: meal.comments?.liked,
       thoughtsLegacyDisliked: meal.comments?.disliked,
       hasComments: !!meal.comments,
+      hasDishCriteria: !!meal.dish_criteria,
+      dishCriteriaLength: meal.dish_criteria?.length || 0,
+      dishCriteriaData: meal.dish_criteria,
       allKeys: Object.keys(meal)
     });
   }, []);
@@ -189,6 +202,43 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       setPhotos([]);
     }
     
+    // Load dish criteria and ratings if available
+    console.log('EditMealScreen - Checking for dish criteria in meal:', {
+      hasDishCriteria: !!meal.dish_criteria,
+      hasCriteriaArray: !!meal.dish_criteria?.criteria,
+      isArray: Array.isArray(meal.dish_criteria?.criteria),
+      length: meal.dish_criteria?.criteria?.length,
+      criteriaData: meal.dish_criteria
+    });
+    
+    if (meal.dish_criteria && meal.dish_criteria.criteria && Array.isArray(meal.dish_criteria.criteria)) {
+      console.log('EditMealScreen - Loading dish criteria from meal data:', meal.dish_criteria.criteria);
+      setDishCriteria(meal.dish_criteria.criteria);
+      
+      // Load existing criteria ratings if available
+      if (meal.criteria_ratings) {
+        console.log('EditMealScreen - Loading existing criteria ratings:', meal.criteria_ratings);
+        setCriteriaRatings(meal.criteria_ratings);
+      } else {
+        // Initialize with default ratings if no previous ratings exist
+        const defaultRatings: { [key: string]: number } = {};
+        meal.dish_criteria.criteria.forEach((criterion: DishCriterion) => {
+          defaultRatings[criterion.title] = 5; // Default to 5/10
+        });
+        console.log('EditMealScreen - Created default ratings:', defaultRatings);
+        setCriteriaRatings(defaultRatings);
+      }
+    } else {
+      console.log('EditMealScreen - No dish criteria found in meal data, reasons:', {
+        noDishCriteria: !meal.dish_criteria,
+        noCriteriaArray: meal.dish_criteria && !meal.dish_criteria.criteria,
+        notArray: meal.dish_criteria?.criteria && !Array.isArray(meal.dish_criteria.criteria),
+        emptyArray: Array.isArray(meal.dish_criteria?.criteria) && meal.dish_criteria.criteria.length === 0
+      });
+      setDishCriteria([]);
+      setCriteriaRatings({});
+    }
+    
     // Handle both new thoughts format and legacy liked/disliked format
     if (meal.comments?.thoughts) {
       // New format - use thoughts directly
@@ -208,7 +258,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         setThoughts('');
       }
     }
-  }, [meal.id, meal.rating, meal.photoUrl, meal.photos, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
+  }, [meal.id, meal.rating, meal.photoUrl, meal.photos, meal.dish_criteria, meal.criteria_ratings, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
   
   // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
@@ -250,11 +300,19 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     })();
     const isThoughtsChanged = thoughts !== originalThoughts;
     
-    setHasUnsavedChanges(isRatingChanged || isThoughtsChanged);
-  }, [rating, thoughts, meal]);
+    // Check if criteria ratings have changed
+    const originalCriteriaRatings = meal.criteria_ratings || {};
+    const isCriteriaRatingsChanged = JSON.stringify(criteriaRatings) !== JSON.stringify(originalCriteriaRatings);
+    
+    setHasUnsavedChanges(isRatingChanged || isThoughtsChanged || isCriteriaRatingsChanged);
+  }, [rating, thoughts, criteriaRatings, meal]);
 
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
+  };
+
+  const handleCriteriaRatingsChange = (ratings: { [key: string]: number }): void => {
+    setCriteriaRatings(ratings);
   };
 
   // Handle image load error
@@ -510,15 +568,21 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     
     const photosChanged = JSON.stringify(photos) !== JSON.stringify(originalPhotos);
     
+    // Check if criteria ratings have changed
+    const originalCriteriaRatings = meal.criteria_ratings || {};
+    const criteriaRatingsChanged = JSON.stringify(criteriaRatings) !== JSON.stringify(originalCriteriaRatings);
+    
     console.log('EditMealScreen - Change detection:', {
       ratingChanged: rating !== meal.rating,
       thoughtsChanged: thoughts !== originalThoughts,
       photosChanged,
+      criteriaRatingsChanged,
       originalPhotosCount: originalPhotos.length,
-      currentPhotosCount: photos.length
+      currentPhotosCount: photos.length,
+      hasCriteria: dishCriteria.length > 0
     });
     
-    if (rating === meal.rating && thoughts === originalThoughts && !photosChanged) {
+    if (rating === meal.rating && thoughts === originalThoughts && !photosChanged && !criteriaRatingsChanged) {
       Alert.alert(
         "No Changes",
         "You haven't made any changes to this meal.",
@@ -548,6 +612,12 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         photoUrl: flagshipPhoto?.url || photos[0]?.url || meal.photoUrl, // Maintain backward compatibility
         updatedAt: firestore.FieldValue.serverTimestamp()
       };
+      
+      // Add criteria ratings if there are criteria
+      if (dishCriteria.length > 0 && Object.keys(criteriaRatings).length > 0) {
+        updateData.criteria_ratings = criteriaRatings;
+        console.log('EditMealScreen - Including criteria ratings in save:', criteriaRatings);
+      }
       
       // Debug logging
       console.log('EditMealScreen - Saving meal with data:', {
@@ -675,9 +745,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
           )}
 
-          {/* Rating Section */}
+          {/* Overall Rating Section */}
           <View style={styles.ratingSection}>
-            <Text style={styles.sectionTitle}>Rating:</Text>
+            <Text style={styles.sectionTitle}>Overall Rating:</Text>
             <EmojiRating 
               rating={rating} 
               onRatingChange={handleRating}
@@ -694,6 +764,38 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             )}
           </View>
+
+          {/* Dynamic Criteria Rating Section */}
+          {console.log('EditMealScreen - Render check:', { 
+            dishCriteriaLength: dishCriteria.length, 
+            criteriaRatingsKeys: Object.keys(criteriaRatings),
+            shouldRender: dishCriteria.length > 0 
+          })}
+          {dishCriteria.length > 0 && (
+            <View style={styles.criteriaSection}>
+              {console.log('EditMealScreen - Rendering DynamicCriteriaRating with:', { 
+                criteria: dishCriteria, 
+                initialRatings: criteriaRatings 
+              })}
+              <DynamicCriteriaRating 
+                criteria={dishCriteria}
+                initialRatings={criteriaRatings}
+                onRatingsChange={handleCriteriaRatingsChange}
+              />
+            </View>
+          )}
+          
+          {/* Debug info - remove after testing */}
+          {__DEV__ && (
+            <View style={{ padding: 10, backgroundColor: '#f0f0f0', margin: 10 }}>
+              <Text style={{ fontSize: 12, color: '#666' }}>
+                DEBUG: dishCriteria.length = {dishCriteria.length}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>
+                Has criteria: {dishCriteria.length > 0 ? 'YES' : 'NO'}
+              </Text>
+            </View>
+          )}
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
@@ -865,6 +967,9 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingSection: {
+    marginBottom: 20,
+  },
+  criteriaSection: {
     marginBottom: 20,
   },
   sectionTitle: {

@@ -54,10 +54,19 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [cheersLoading, setCheersLoading] = useState(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
+  const [criteriaRatings, setCriteriaRatings] = useState<{ [key: string]: number } | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
+
+  // Helper function to get color based on rating value (same as DynamicCriteriaRating)
+  const getRatingColor = (rating: number) => {
+    if (rating >= 8) return '#4CAF50'; // Green for excellent
+    if (rating >= 6) return '#FFC107'; // Yellow for good
+    if (rating >= 4) return '#FF9800'; // Orange for okay
+    return '#F44336'; // Red for poor
+  };
   console.log("Meal ID:", mealId);
   
   // Use the useIsFocused hook to detect when the screen comes into focus
@@ -142,6 +151,15 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       } else {
         console.log('🧪 No combined result saved for this meal');
         setCombinedResult(null);
+      }
+
+      // Load saved criteria ratings if available
+      if (mealData.criteria_ratings) {
+        console.log('📊 Loading saved criteria ratings:', mealData.criteria_ratings);
+        setCriteriaRatings(mealData.criteria_ratings);
+      } else {
+        console.log('📊 No criteria ratings saved for this meal');
+        setCriteriaRatings(null);
       }
       
     } catch (err) {
@@ -923,15 +941,43 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               {dishCriteria.dish_specific} {dishCriteria.cuisine_type && `(${dishCriteria.cuisine_type})`}
             </Text>
             
-            {dishCriteria.criteria.map((criterion, index) => (
-              <View key={index} style={styles.criterionItem}>
-                <View style={styles.criterionHeader}>
-                  <Text style={styles.criterionNumber}>{index + 1}.</Text>
-                  <Text style={styles.criterionTitle}>{criterion.title}</Text>
+            {dishCriteria.criteria.map((criterion, index) => {
+              const userRating = criteriaRatings?.[criterion.title];
+              return (
+                <View key={index} style={styles.criterionItem}>
+                  <View style={styles.criterionHeader}>
+                    <Text style={styles.criterionNumber}>{index + 1}.</Text>
+                    <Text style={styles.criterionTitle}>{criterion.title}</Text>
+                    {userRating && (
+                      <View style={[styles.ratingBadge, { backgroundColor: getRatingColor(userRating) }]}>
+                        <Text style={styles.ratingBadgeText}>{userRating}/10</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.criterionDescription}>{criterion.description}</Text>
+                  {userRating && (
+                    <Text style={styles.userRatingNote}>
+                      Your rating: <Text style={{ color: getRatingColor(userRating), fontWeight: 'bold' }}>{userRating}/10</Text>
+                    </Text>
+                  )}
                 </View>
-                <Text style={styles.criterionDescription}>{criterion.description}</Text>
+              );
+            })}
+            
+            {criteriaRatings && Object.keys(criteriaRatings).length > 0 && (
+              <View style={styles.ratingSummary}>
+                <Text style={styles.ratingSummaryTitle}>Your Detailed Rating Summary</Text>
+                <View style={styles.averageRatingContainer}>
+                  <Text style={styles.averageRatingLabel}>Average Score:</Text>
+                  <Text style={[
+                    styles.averageRatingValue,
+                    { color: getRatingColor(Object.values(criteriaRatings).reduce((sum, rating) => sum + rating, 0) / Object.values(criteriaRatings).length) }
+                  ]}>
+                    {(Object.values(criteriaRatings).reduce((sum, rating) => sum + rating, 0) / Object.values(criteriaRatings).length).toFixed(1)}/10
+                  </Text>
+                </View>
               </View>
-            ))}
+            )}
             
             <Text style={styles.criteriaFooter}>
               Use these indicators to mindfully appreciate your dining experience ✨
@@ -1752,6 +1798,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 4,
+  },
+  ratingBadge: {
+    marginLeft: 'auto',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  ratingBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  userRatingNote: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  ratingSummary: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#28a745',
+  },
+  ratingSummaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a2b49',
+    marginBottom: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  averageRatingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  averageRatingLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  averageRatingValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criterionNumber: {
     fontSize: 14,
