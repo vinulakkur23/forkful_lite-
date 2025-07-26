@@ -933,15 +933,64 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Dish Criteria Section - What to Look For */}
-        {dishCriteria && (
-          <View style={[styles.metadataSection, styles.dishCriteriaSection]}>
-            <Text style={styles.dishCriteriaTitle}>What to Look For 🍽️</Text>
-            <Text style={styles.dishCriteriaSubtitle}>
-              {dishCriteria.dish_specific} {dishCriteria.cuisine_type && `(${dishCriteria.cuisine_type})`}
-            </Text>
+
+        {/* TESTING: Combined Result Comparison Section */}
+        {combinedResult && (
+          <View style={[styles.metadataSection, styles.combinedTestSection]}>
+            <Text style={styles.combinedTestTitle}>🤖 AI Analysis Results</Text>
             
-            {dishCriteria.criteria.map((criterion, index) => {
+            {/* Combined Metadata */}
+            <Text style={styles.combinedTestSubtitle}>Combined Metadata:</Text>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Dish Specific:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_specific}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Dish General:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_general}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Cuisine:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.cuisine_type}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Meal Type:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.meal_type}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Cooking Method:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.cooking_method}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Presentation:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.presentation_style}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Confidence:</Text>
+              <Text style={[styles.metadataValue, { color: combinedResult.metadata.confidence_score >= 0.8 ? '#4CAF50' : combinedResult.metadata.confidence_score >= 0.6 ? '#FF9800' : '#F44336' }]}>
+                {(combinedResult.metadata.confidence_score * 100).toFixed(0)}%
+              </Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Key Ingredients:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.key_ingredients?.join(', ') || 'N/A'}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Flavor Profile:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.flavor_profile?.join(', ') || 'N/A'}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Dietary Info:</Text>
+              <Text style={styles.metadataValue}>{combinedResult.metadata.dietary_info?.join(', ') || 'N/A'}</Text>
+            </View>
+            <View style={styles.metadataRow}>
+              <Text style={styles.metadataLabel}>Special Ingredient:</Text>
+              <Text style={[styles.metadataValue, { fontStyle: 'italic' }]}>{combinedResult.metadata.interesting_ingredient}</Text>
+            </View>
+            
+            {/* Combined Criteria */}
+            <Text style={styles.combinedTestSubtitle}>What to Look For 🍽️</Text>
+            {combinedResult.dish_criteria.criteria.map((criterion, index) => {
               const userRating = criteriaRatings?.[criterion.title];
               return (
                 <View key={index} style={styles.criterionItem}>
@@ -981,40 +1030,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             
             <Text style={styles.criteriaFooter}>
               Use these indicators to mindfully appreciate your dining experience ✨
-            </Text>
-          </View>
-        )}
-
-        {/* TESTING: Combined Result Comparison Section */}
-        {combinedResult && (
-          <View style={[styles.metadataSection, styles.combinedTestSection]}>
-            <Text style={styles.combinedTestTitle}>🧪 TESTING: Combined Approach Results</Text>
-            
-            {/* Combined Metadata */}
-            <Text style={styles.combinedTestSubtitle}>Combined Metadata:</Text>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Dish Specific:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_specific}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Cuisine:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.cuisine_type}</Text>
-            </View>
-            
-            {/* Combined Criteria */}
-            <Text style={styles.combinedTestSubtitle}>Combined Criteria:</Text>
-            {combinedResult.dish_criteria.criteria.map((criterion, index) => (
-              <View key={index} style={styles.criterionItem}>
-                <View style={styles.criterionHeader}>
-                  <Text style={styles.criterionNumber}>{index + 1}.</Text>
-                  <Text style={styles.criterionTitle}>{criterion.title}</Text>
-                </View>
-                <Text style={styles.criterionDescription}>{criterion.description}</Text>
-              </View>
-            ))}
-            
-            <Text style={styles.criteriaFooter}>
-              ⚡ Generated in one API call with visual context from the actual photo
             </Text>
           </View>
         )}

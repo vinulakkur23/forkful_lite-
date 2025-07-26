@@ -36,9 +36,7 @@ import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
-import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
-import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
-import { getDishCriteria, DishCriteria } from '../services/dishCriteriaService';
+// import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // TEMPORARILY DISABLED FOR PERFORMANCE
 import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService';
 import Geolocation from '@react-native-community/geolocation';
 
@@ -371,7 +369,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             // If we don't have prefetched meal suggestions but we do have a restaurant, 
             // fetch them now (as a fallback)
             logWithSession("No prefetched meal suggestions, will try to fetch them now");
-            updateMealSuggestionsForRestaurant(restaurants[0].name);
+            // Menu suggestions removed for performance
           }
           
           // Don't auto-populate the meal field anymore
@@ -397,6 +395,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // which properly handles multi-word city names like "New Brunswick"
   
   // Function for when restaurant changes - fetches menu items and meal suggestions
+  // TEMPORARILY DISABLED FOR PERFORMANCE - Uncomment to re-enable menu suggestions
+  /*
   const updateMealSuggestionsForRestaurant = async (restaurantName: string) => {
     if (!restaurantName) {
       logWithSession("No restaurant name provided");
@@ -463,6 +463,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
     }
   };
+  */
   
   // Return the best available location based on priority
   const getBestAvailableLocation = (): LocationData | null => {
@@ -547,14 +548,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       logWithSession(`No location data available for selected restaurant`);
     }
     
-    // Always fetch menu items and meal suggestions for the selected restaurant
-    // Clear existing meal suggestions to avoid confusion
-    setSuggestedMeals([]);
-    setMenuItems([]);
-    setIsLoadingMealSuggestions(true);
-    
-    // Fetch menu items for this restaurant
-    updateMealSuggestionsForRestaurant(restaurant.name);
+    // Menu suggestions removed for performance - users can type their own meal names
   };
   
   // Clear all state for a new photo session
@@ -826,49 +820,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         sessionId: sessionId
       };
       
-      // Step 1: Extract enhanced metadata
-      logWithSession('Extracting enhanced metadata...');
-      let enhancedMetadata: EnhancedMetadata | null = null;
-      try {
-        enhancedMetadata = await extractEnhancedMetadata(
-          freshPhoto.uri,
-          mealName,
-          mealType === "Restaurant" ? restaurant : undefined,
-          undefined // cuisineContext - will be inferred by the service
-        );
-        logWithSession('Enhanced metadata extracted successfully');
-      } catch (metadataError) {
-        logWithSession(`Error extracting enhanced metadata: ${metadataError}`);
-        // Continue without metadata - it's not critical for the flow
-      }
-      
-      // Step 2: Extract dish criteria (only if we have enhanced metadata)
-      logWithSession('Extracting dish criteria...');
-      let dishCriteria: DishCriteria | null = null;
-      try {
-        if (enhancedMetadata) {
-          dishCriteria = await getDishCriteria(
-            enhancedMetadata.dish_specific,
-            enhancedMetadata.dish_general,
-            enhancedMetadata.cuisine_type
-          );
-          logWithSession('Dish criteria extracted successfully');
-        } else {
-          // Fallback: use meal name as dish_specific
-          dishCriteria = await getDishCriteria(
-            mealName,
-            undefined, // dish_general - will be inferred
-            undefined  // cuisine_type - will be inferred
-          );
-          logWithSession('Dish criteria extracted with fallback data');
-        }
-      } catch (criteriaError) {
-        logWithSession(`Error extracting dish criteria: ${criteriaError}`);
-        // Continue without criteria - it's not critical for the flow
-      }
-
-      // Step 3: TESTING - Extract combined metadata and criteria for comparison
-      logWithSession('🧪 Testing combined metadata and criteria extraction...');
+      // Extract combined metadata and criteria using single service call
+      logWithSession('Extracting combined metadata and criteria...');
       let combinedResult: CombinedResponse | null = null;
       try {
         combinedResult = await extractCombinedMetadataAndCriteria(
@@ -880,11 +833,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession('✅ Combined extraction completed successfully');
         console.log('Combined result preview:', {
           dish_specific: combinedResult?.metadata?.dish_specific,
-          criteria_count: combinedResult?.dish_criteria?.criteria?.length
+          criteria_count: combinedResult?.dish_criteria?.criteria?.length,
+          metadata_confidence: combinedResult?.metadata?.confidence_score
         });
       } catch (combinedError) {
         logWithSession(`❌ Error in combined extraction: ${combinedError}`);
-        // Continue without combined result - this is just for testing
+        // Continue without combined result - the meal can still be saved with basic info
       }
       
       // Navigate to Result screen with all collected data including metadata and criteria
@@ -899,10 +853,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Keep for backward compatibility
         likedComment: likedComment,
         dislikedComment: dislikedComment,
-        // New: Pass the extracted metadata and criteria
-        enhancedMetadata: enhancedMetadata,
-        dishCriteria: dishCriteria,
-        // TESTING: Pass combined result for comparison
+        // Pass combined result data in expected format
+        enhancedMetadata: combinedResult?.metadata || null,
+        dishCriteria: combinedResult?.dish_criteria || null,
+        // Pass full combined result for saving
         combinedResult: combinedResult,
         _uniqueKey: sessionId
       });
@@ -1121,7 +1075,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                     setShowMealSuggestionsModal(true);
                   } else if (restaurant) {
                     // If no suggestions but we have a restaurant, try to fetch them
-                    updateMealSuggestionsForRestaurant(restaurant);
+                    // Menu suggestions removed for performance
                     // Show a loading toast to indicate we're fetching suggestions
                     Alert.alert('Fetching Suggestions', 'Getting meal suggestions for ' + restaurant);
                   } else {
@@ -1320,7 +1274,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                     style={[styles.reloadButton, isLoadingMealSuggestions ? styles.reloadButtonDisabled : {}]}
                     onPress={() => {
                       if (!isLoadingMealSuggestions) {
-                        updateMealSuggestionsForRestaurant(restaurant);
+                        // Menu suggestions removed for performance
                       }
                     }}
                     disabled={isLoadingMealSuggestions}

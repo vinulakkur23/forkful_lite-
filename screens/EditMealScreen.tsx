@@ -103,6 +103,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         hasDishCriteria: !!freshMealData.dish_criteria,
         hasCriteriaArray: !!freshMealData.dish_criteria?.criteria,
         dishCriteriaLength: freshMealData.dish_criteria?.criteria?.length || 0,
+        hasCombinedResult: !!freshMealData.combined_result,
+        hasCombinedCriteria: !!freshMealData.combined_result?.dish_criteria?.criteria,
+        combinedCriteriaLength: freshMealData.combined_result?.dish_criteria?.criteria?.length || 0,
         allFields: Object.keys(freshMealData)
       });
       
@@ -202,18 +205,27 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       setPhotos([]);
     }
     
-    // Load dish criteria and ratings if available
+    // Load dish criteria and ratings from combined service (preferred) or fallback to separate service
     console.log('EditMealScreen - Checking for dish criteria in meal:', {
-      hasDishCriteria: !!meal.dish_criteria,
-      hasCriteriaArray: !!meal.dish_criteria?.criteria,
-      isArray: Array.isArray(meal.dish_criteria?.criteria),
-      length: meal.dish_criteria?.criteria?.length,
-      criteriaData: meal.dish_criteria
+      hasCombinedResult: !!meal.combined_result,
+      hasCombinedCriteria: !!meal.combined_result?.dish_criteria?.criteria,
+      combinedCriteriaLength: meal.combined_result?.dish_criteria?.criteria?.length || 0,
+      hasSeparateCriteria: !!meal.dish_criteria?.criteria,
+      separateCriteriaLength: meal.dish_criteria?.criteria?.length || 0
     });
     
-    if (meal.dish_criteria && meal.dish_criteria.criteria && Array.isArray(meal.dish_criteria.criteria)) {
-      console.log('EditMealScreen - Loading dish criteria from meal data:', meal.dish_criteria.criteria);
-      setDishCriteria(meal.dish_criteria.criteria);
+    // Try combined service first (preferred), fallback to separate service
+    let criteriaToUse = null;
+    if (meal.combined_result?.dish_criteria?.criteria && Array.isArray(meal.combined_result.dish_criteria.criteria)) {
+      console.log('EditMealScreen - Using criteria from combined service:', meal.combined_result.dish_criteria.criteria);
+      criteriaToUse = meal.combined_result.dish_criteria.criteria;
+    } else if (meal.dish_criteria?.criteria && Array.isArray(meal.dish_criteria.criteria)) {
+      console.log('EditMealScreen - Fallback to separate service criteria:', meal.dish_criteria.criteria);
+      criteriaToUse = meal.dish_criteria.criteria;
+    }
+    
+    if (criteriaToUse) {
+      setDishCriteria(criteriaToUse);
       
       // Load existing criteria ratings if available
       if (meal.criteria_ratings) {
@@ -222,19 +234,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       } else {
         // Initialize with default ratings if no previous ratings exist
         const defaultRatings: { [key: string]: number } = {};
-        meal.dish_criteria.criteria.forEach((criterion: DishCriterion) => {
+        criteriaToUse.forEach((criterion: DishCriterion) => {
           defaultRatings[criterion.title] = 5; // Default to 5/10
         });
         console.log('EditMealScreen - Created default ratings:', defaultRatings);
         setCriteriaRatings(defaultRatings);
       }
     } else {
-      console.log('EditMealScreen - No dish criteria found in meal data, reasons:', {
-        noDishCriteria: !meal.dish_criteria,
-        noCriteriaArray: meal.dish_criteria && !meal.dish_criteria.criteria,
-        notArray: meal.dish_criteria?.criteria && !Array.isArray(meal.dish_criteria.criteria),
-        emptyArray: Array.isArray(meal.dish_criteria?.criteria) && meal.dish_criteria.criteria.length === 0
-      });
+      console.log('EditMealScreen - No dish criteria found in meal data');
       setDishCriteria([]);
       setCriteriaRatings({});
     }
