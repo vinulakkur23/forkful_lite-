@@ -850,12 +850,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Enhanced Metadata Section - For Testing */}
+        {/* Enhanced Metadata Section - COMMENTED OUT, using combined metadata instead */}
+        {/* 
         {meal.metadata_enriched && (
           <View style={[styles.metadataSection, styles.enhancedMetadataSection]}>
             <Text style={styles.enhancedMetadataTitle}>Enhanced Metadata (Testing)</Text>
             
             {/* Two-tier categorization */}
+            {/*
             <View style={styles.metadataRow}>
               <Text style={styles.metadataLabel}>Specific Dish:</Text>
               <Text style={styles.metadataValue}>{meal.metadata_enriched.dish_specific}</Text>
@@ -866,6 +868,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             {/* Cuisine and confidence */}
+            {/*
             <View style={styles.metadataRow}>
               <Text style={styles.metadataLabel}>Cuisine:</Text>
               <Text style={styles.metadataValue}>
@@ -876,6 +879,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             {/* Interesting ingredient - highlighted */}
+            {/*
             {meal.metadata_enriched.interesting_ingredient && meal.metadata_enriched.interesting_ingredient !== 'Unknown' && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Star Ingredient:</Text>
@@ -886,6 +890,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Key ingredients */}
+            {/*
             {meal.metadata_enriched.key_ingredients && meal.metadata_enriched.key_ingredients.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Ingredients:</Text>
@@ -896,6 +901,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Flavor profile */}
+            {/*
             {meal.metadata_enriched.flavor_profile && meal.metadata_enriched.flavor_profile.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Flavors:</Text>
@@ -906,6 +912,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Dietary info */}
+            {/*
             {meal.metadata_enriched.dietary_info && meal.metadata_enriched.dietary_info.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Dietary:</Text>
@@ -916,12 +923,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Cooking method and presentation */}
+            {/*
             <View style={styles.metadataRow}>
               <Text style={styles.metadataLabel}>Cooking Method:</Text>
               <Text style={styles.metadataValue}>{meal.metadata_enriched.cooking_method}</Text>
             </View>
             
             {/* Normalization info */}
+            {/*
             {meal.metadata_enriched.matched_to_existing && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Normalized to:</Text>
@@ -932,6 +941,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
           </View>
         )}
+        */}
 
 
         {/* TESTING: Combined Result Comparison Section */}

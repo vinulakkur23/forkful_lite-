@@ -316,14 +316,13 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
 
     const mainTabs = [
       { 
-        name: 'Home', 
-        label: 'Nearby', 
+        name: 'FoodPassport', 
+        label: 'My Passport', 
         icon: (focused: boolean) => (
           <Image 
-            source={focused ? tabIcons.place.active : tabIcons.place.inactive} 
+            source={focused ? tabIcons.passport.active : tabIcons.passport.inactive} 
             style={{ width: 20, height: 20 }} // ORIGINAL: width: 24, height: 24 - made smaller
-            // Force image to be reloaded properly
-            key={`home-icon-${focused ? 'active' : 'inactive'}`}
+            key={`passport-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
       },
@@ -351,13 +350,14 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         customAction: true
       },
       { 
-        name: 'FoodPassport', 
-        label: 'My Passport', 
+        name: 'Home', 
+        label: 'Nearby', 
         icon: (focused: boolean) => (
           <Image 
-            source={focused ? tabIcons.passport.active : tabIcons.passport.inactive} 
+            source={focused ? tabIcons.place.active : tabIcons.place.inactive} 
             style={{ width: 20, height: 20 }} // ORIGINAL: width: 24, height: 24 - made smaller
-            key={`passport-icon-${focused ? 'active' : 'inactive'}`}
+            // Force image to be reloaded properly
+            key={`home-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
       }
@@ -427,22 +427,6 @@ function TabNavigator() {
       }}
     >
       <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          title: 'Nearby',
-          headerShown: false,
-        }}
-      />
-      <Tab.Screen
-        name="Camera"
-        component={CameraScreen}
-        options={{
-          title: 'Capture Meal',
-          headerShown: false,
-        }}
-      />
-      <Tab.Screen
         name="FoodPassport"
         component={FoodPassportWrapper} // This wrapper handles FoodPassportScreen
         options={{
@@ -457,6 +441,22 @@ function TabNavigator() {
             navigation.navigate('FoodPassport', { tabIndex: 0 });
           },
         })}
+      />
+      <Tab.Screen
+        name="Camera"
+        component={CameraScreen}
+        options={{
+          title: 'Capture Meal',
+          headerShown: false,
+        }}
+      />
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          title: 'Nearby',
+          headerShown: false,
+        }}
       />
       
       {/* Screens part of flows, hidden from tab bar */}

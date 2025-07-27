@@ -797,7 +797,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
                         ListHeaderComponent={() => (
-                            <View style={styles.profileCard}>
+                            <>
+                                {/* Dishitout Logo - only show on own profile */}
+                                {(!userId || userId === auth().currentUser?.uid) && (
+                                    <View style={styles.logoContainer}>
+                                        <Text style={styles.logoText}>Dishitout</Text>
+                                    </View>
+                                )}
+                                <View style={styles.profileCard}>
                                 {/* Follow button in top right corner */}
                                 {userId && userId !== auth().currentUser?.uid && (
                                     <TouchableOpacity 
@@ -976,6 +983,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     </View>
                                 </View>
                             </View>
+                            </>
                         )}
                         ListFooterComponent={() => (
                             <>
@@ -1014,6 +1022,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FAF9F6', // Back to original
+    },
+    logoContainer: {
+        alignItems: 'center',
+        paddingTop: 10,
+        paddingBottom: 5,
+        backgroundColor: '#FAF9F6',
+    },
+    logoText: {
+        fontFamily: 'Lobster-Regular',
+        fontSize: 28,
+        color: '#ff6b6b',
+        letterSpacing: 0.5,
     },
     header: {
         flexDirection: 'row',

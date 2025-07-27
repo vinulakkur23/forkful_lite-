@@ -13,8 +13,8 @@ import EmojiDisplay from '../components/EmojiDisplay';
 import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
-// Import enhanced metadata service
-import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
+// Import enhanced metadata service - COMMENTED OUT, using combined service instead
+// import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
 // Import dish criteria service
 import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaService';
 // Import achievement service
@@ -688,7 +688,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Process both regular and enhanced metadata in parallel
         console.log("Starting metadata processing and achievement check flow...");
         
-        // Extract enhanced metadata (don't wait for it to complete before regular metadata)
+        // Enhanced metadata extraction is now handled by combined service in RatingScreen2
+        // This separate extraction is no longer needed since we pass combinedResult from RatingScreen2
+        
+        /* COMMENTED OUT - Using combined service instead
         extractEnhancedMetadata(photo.uri, meal, restaurant, undefined)
           .then(async (enhancedMetadata) => {
             if (enhancedMetadata) {
@@ -725,6 +728,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           .catch(error => {
             console.error("Error extracting enhanced metadata:", error);
           });
+        */
         
         // Process regular metadata
         processImageMetadata(docRef.id, imageUrl, {
