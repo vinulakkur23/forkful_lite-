@@ -20,6 +20,8 @@ import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaSer
 // Import achievement service
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
+// Import enhanced metadata facts service
+import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
@@ -52,14 +54,19 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // New: Enhanced metadata and dish criteria
     enhancedMetadata,
     dishCriteria,
-    // TESTING: Combined result for comparison
-    combinedResult
+    // Combined result for backward compatibility
+    combinedResult,
+    // NEW: Quick criteria result from fast service
+    quickCriteriaResult
   } = route.params;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [mealId, setMealId] = useState<string | null>(null);
+  // Enhanced metadata facts state
+  const [enhancedFacts, setEnhancedFacts] = useState<EnhancedFactsData | null>(null);
+  const [enhancedFactsLoading, setEnhancedFactsLoading] = useState(false);
   // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
@@ -110,10 +117,79 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }, 100);
     }
     
+    // Load enhanced metadata facts if we have quick criteria data
+    if (quickCriteriaResult && !enhancedFacts && !enhancedFactsLoading) {
+      loadEnhancedMetadataFacts();
+    }
+    
     return () => {
       console.log("ResultScreen with key unmounting:", instanceKey);
     };
-  }, [instanceKey]); // Using instanceKey ensures this runs for each unique navigation
+  }, [instanceKey, quickCriteriaResult, enhancedFacts, enhancedFactsLoading]); // Using instanceKey ensures this runs for each unique navigation
+
+  // Load enhanced metadata facts for detailed information
+  const loadEnhancedMetadataFacts = async () => {
+    if (!quickCriteriaResult || !photo?.uri) {
+      console.log("Cannot load enhanced facts - missing quick criteria or photo");
+      return;
+    }
+    
+    console.log("Loading enhanced metadata and facts...");
+    setEnhancedFactsLoading(true);
+    
+    try {
+      // Extract city from location or restaurant
+      let city = '';
+      if (location && location.city) {
+        city = location.city;
+      } else if (restaurant) {
+        const restaurantParts = restaurant.split(',');
+        if (restaurantParts.length > 1) {
+          city = restaurantParts[1].trim();
+        }
+      }
+      
+      const result = await extractEnhancedMetadataFacts(
+        photo.uri,
+        quickCriteriaResult.dish_specific,
+        quickCriteriaResult.dish_general,
+        quickCriteriaResult.cuisine_type,
+        meal,
+        restaurant,
+        city
+      );
+      
+      if (result) {
+        console.log("Enhanced metadata and facts loaded successfully");
+        setEnhancedFacts(result);
+        
+        // Update Firebase with enhanced facts if we have a meal ID
+        if (mealId && saved) {
+          updateMealWithEnhancedFacts(mealId, result);
+        }
+      } else {
+        console.log("Failed to load enhanced metadata and facts");
+      }
+    } catch (error) {
+      console.error("Error loading enhanced metadata and facts:", error);
+    } finally {
+      setEnhancedFactsLoading(false);
+    }
+  };
+
+  // Update Firebase meal with enhanced metadata facts
+  const updateMealWithEnhancedFacts = async (mealId: string, facts: EnhancedFactsData) => {
+    try {
+      console.log("Updating meal with enhanced metadata and facts...");
+      await firestore().collection('mealEntries').doc(mealId).update({
+        enhanced_metadata_facts: facts,
+        enhanced_facts_updated_at: firestore.FieldValue.serverTimestamp()
+      });
+      console.log("Successfully updated meal with enhanced facts");
+    } catch (error) {
+      console.error("Error updating meal with enhanced facts:", error);
+    }
+  };
 
   // Removed loadMealEnhancement function - no longer using meal enhancement service
 
@@ -658,12 +734,16 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           platform: Platform.OS,
           appVersion: '1.0.0', // Add app version for debugging
           photoScore: finalPhotoScore, // Always save the photo quality score
-          // Add enhanced metadata if available
+          // Add enhanced metadata if available (legacy)
           metadata_enriched: enhancedMetadata || null,
           // Add dish criteria if available  
           dish_criteria: dishCriteria || null,
-          // TESTING: Add combined result for comparison
-          combined_result: combinedResult || null
+          // Add combined result for backward compatibility
+          combined_result: combinedResult || null,
+          // NEW: Add quick criteria result from fast service
+          quick_criteria_result: quickCriteriaResult || null,
+          // NEW: Add enhanced metadata facts (will be updated when loaded)
+          enhanced_metadata_facts: enhancedFacts || null
         };
         
         // Final log of what's being saved to database
@@ -966,6 +1046,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Text style={styles.criterionDescription}>{criterion.description}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Dish History Section - from quick criteria service */}
+        {quickCriteriaResult && quickCriteriaResult.dish_history && (
+          <View style={styles.dishHistoryCard}>
+            <Text style={styles.dishHistoryTitle}>About This Dish 📖</Text>
+            <Text style={styles.dishHistoryText}>{quickCriteriaResult.dish_history}</Text>
           </View>
         )}
 
@@ -1327,6 +1415,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#4a5d4a',
     lineHeight: 18,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Dish history section styles
+  dishHistoryCard: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dishHistoryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a365d',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  dishHistoryText: {
+    fontSize: 14,
+    color: '#2d3748',
+    lineHeight: 20,
+    textAlign: 'left',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

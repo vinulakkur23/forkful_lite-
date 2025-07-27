@@ -106,9 +106,10 @@ export type RootStackParamList = {
     thoughts?: string;
     likedComment?: string;
     dislikedComment?: string;
-    enhancedMetadata?: any; // Enhanced metadata from service
+    enhancedMetadata?: any; // Enhanced metadata from service (legacy)
     dishCriteria?: any; // Dish criteria from service
-    combinedResult?: any; // TESTING: Combined metadata and criteria from new service
+    combinedResult?: any; // Combined metadata and criteria (backward compatibility)
+    quickCriteriaResult?: any; // NEW: Quick criteria result from fast service
     _uniqueKey?: string; // Ensure Result screen reloads
   };
   FoodPassport: {

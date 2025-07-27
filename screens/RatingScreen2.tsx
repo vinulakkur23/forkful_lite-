@@ -37,7 +37,8 @@ import RNFS from 'react-native-fs';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // TEMPORARILY DISABLED FOR PERFORMANCE
-import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService';
+// import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
+import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService';
 import Geolocation from '@react-native-community/geolocation';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
@@ -820,6 +821,27 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         sessionId: sessionId
       };
       
+      // Extract quick criteria for immediate display - optimized for speed
+      logWithSession('Extracting quick dish criteria...');
+      let quickCriteriaResult: QuickCriteriaData | null = null;
+      try {
+        quickCriteriaResult = await extractQuickCriteria(
+          freshPhoto.uri,
+          mealName,
+          mealType === "Restaurant" ? restaurant : undefined
+        );
+        logWithSession('✅ Quick criteria extraction completed successfully');
+        console.log('Quick criteria result preview:', {
+          dish_specific: quickCriteriaResult?.dish_specific,
+          criteria_count: quickCriteriaResult?.dish_criteria?.length,
+          has_history: !!quickCriteriaResult?.dish_history
+        });
+      } catch (quickCriteriaError) {
+        logWithSession(`❌ Error in quick criteria extraction: ${quickCriteriaError}`);
+        // Continue without quick criteria - the meal can still be saved with basic info
+      }
+      
+      /* COMMENTED OUT - Using new quick criteria service instead
       // Extract combined metadata and criteria using single service call
       logWithSession('Extracting combined metadata and criteria...');
       let combinedResult: CombinedResponse | null = null;
@@ -840,8 +862,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`❌ Error in combined extraction: ${combinedError}`);
         // Continue without combined result - the meal can still be saved with basic info
       }
+      */
       
-      // Navigate to Result screen with all collected data including metadata and criteria
+      // Navigate to Result screen with quick criteria data
       navigation.navigate('Result', {
         photo: freshPhoto,
         location: location,
@@ -853,11 +876,30 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Keep for backward compatibility
         likedComment: likedComment,
         dislikedComment: dislikedComment,
-        // Pass combined result data in expected format
-        enhancedMetadata: combinedResult?.metadata || null,
-        dishCriteria: combinedResult?.dish_criteria || null,
-        // Pass full combined result for saving
-        combinedResult: combinedResult,
+        // Pass quick criteria data in compatible format for existing screens
+        dishCriteria: quickCriteriaResult ? {
+          criteria: quickCriteriaResult.dish_criteria,
+          dish_specific: quickCriteriaResult.dish_specific,
+          dish_general: quickCriteriaResult.dish_general,
+          cuisine_type: quickCriteriaResult.cuisine_type,
+          dish_key: quickCriteriaResult.dish_key
+        } : null,
+        // Pass quick criteria result for new enhanced experience
+        quickCriteriaResult: quickCriteriaResult,
+        // Create compatible combined result structure for backward compatibility
+        combinedResult: quickCriteriaResult ? {
+          metadata: {
+            dish_specific: quickCriteriaResult.dish_specific,
+            dish_general: quickCriteriaResult.dish_general,
+            cuisine_type: quickCriteriaResult.cuisine_type
+          },
+          dish_criteria: {
+            criteria: quickCriteriaResult.dish_criteria,
+            dish_specific: quickCriteriaResult.dish_specific,
+            dish_general: quickCriteriaResult.dish_general,
+            cuisine_type: quickCriteriaResult.cuisine_type
+          }
+        } : null,
         _uniqueKey: sessionId
       });
     } catch (error) {

@@ -944,63 +944,74 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         */}
 
 
-        {/* TESTING: Combined Result Comparison Section */}
-        {combinedResult && (
+        {/* AI Analysis Results - Updated for new service structure */}
+        {(meal.quick_criteria_result || meal.enhanced_metadata_facts || combinedResult) && (
           <View style={[styles.metadataSection, styles.combinedTestSection]}>
             <Text style={styles.combinedTestTitle}>🤖 AI Analysis Results</Text>
             
-            {/* Combined Metadata */}
-            <Text style={styles.combinedTestSubtitle}>Combined Metadata:</Text>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Dish Specific:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_specific}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Dish General:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.dish_general}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Cuisine:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.cuisine_type}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Meal Type:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.meal_type}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Cooking Method:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.cooking_method}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Presentation:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.presentation_style}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Confidence:</Text>
-              <Text style={[styles.metadataValue, { color: combinedResult.metadata.confidence_score >= 0.8 ? '#4CAF50' : combinedResult.metadata.confidence_score >= 0.6 ? '#FF9800' : '#F44336' }]}>
-                {(combinedResult.metadata.confidence_score * 100).toFixed(0)}%
-              </Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Key Ingredients:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.key_ingredients?.join(', ') || 'N/A'}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Flavor Profile:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.flavor_profile?.join(', ') || 'N/A'}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Dietary Info:</Text>
-              <Text style={styles.metadataValue}>{combinedResult.metadata.dietary_info?.join(', ') || 'N/A'}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Special Ingredient:</Text>
-              <Text style={[styles.metadataValue, { fontStyle: 'italic' }]}>{combinedResult.metadata.interesting_ingredient}</Text>
-            </View>
+            {/* Basic Dish Information - from quick criteria */}
+            {meal.quick_criteria_result && (
+              <>
+                <Text style={styles.combinedTestSubtitle}>Dish Information:</Text>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Dish Specific:</Text>
+                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.dish_specific}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Dish General:</Text>
+                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.dish_general}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Cuisine:</Text>
+                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.cuisine_type}</Text>
+                </View>
+              </>
+            )}
             
-            {/* Combined Criteria */}
+            {/* Enhanced Metadata - from enhanced service */}
+            {meal.enhanced_metadata_facts?.metadata && (
+              <>
+                <Text style={styles.combinedTestSubtitle}>Enhanced Metadata:</Text>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Meal Type:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.meal_type}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Cooking Method:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.cooking_method}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Presentation:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.presentation_style}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Confidence:</Text>
+                  <Text style={[styles.metadataValue, { color: meal.enhanced_metadata_facts.metadata.confidence_score >= 0.8 ? '#4CAF50' : meal.enhanced_metadata_facts.metadata.confidence_score >= 0.6 ? '#FF9800' : '#F44336' }]}>
+                    {(meal.enhanced_metadata_facts.metadata.confidence_score * 100).toFixed(0)}%
+                  </Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Key Ingredients:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.key_ingredients?.join(', ') || 'N/A'}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Flavor Profile:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.flavor_profile?.join(', ') || 'N/A'}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Dietary Info:</Text>
+                  <Text style={styles.metadataValue}>{meal.enhanced_metadata_facts.metadata.dietary_info?.join(', ') || 'N/A'}</Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Special Ingredient:</Text>
+                  <Text style={[styles.metadataValue, { fontStyle: 'italic' }]}>{meal.enhanced_metadata_facts.metadata.interesting_ingredient}</Text>
+                </View>
+              </>
+            )}
+            
+            {/* Dish Criteria from Quick Service */}
             <Text style={styles.combinedTestSubtitle}>What to Look For 🍽️</Text>
-            {combinedResult.dish_criteria.criteria.map((criterion, index) => {
+            {(meal.quick_criteria_result?.dish_criteria || combinedResult?.dish_criteria?.criteria || []).map((criterion, index) => {
               const userRating = criteriaRatings?.[criterion.title];
               return (
                 <View key={index} style={styles.criterionItem}>
