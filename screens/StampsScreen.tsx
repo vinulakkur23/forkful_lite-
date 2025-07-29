@@ -391,9 +391,11 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     <TouchableOpacity
       style={styles.challengeItem}
       onPress={() => {
+        const description = item.challenge_description || 
+                           `${item.why_this_dish || ''}\n\n${item.what_to_notice || ''}`.trim();
         Alert.alert(
           item.recommended_dish_name,
-          `${item.why_this_dish}\n\nWhat to notice: ${item.what_to_notice}`,
+          description,
           [{ text: 'OK', style: 'default' }]
         );
       }}

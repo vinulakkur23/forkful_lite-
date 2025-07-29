@@ -8,8 +8,7 @@ const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
 export interface DishChallenge {
   recommended_dish_name: string;
   cuisine_type: string;
-  why_this_dish: string;
-  what_to_notice: string;
+  challenge_description: string; // 2 paragraphs connecting to original criteria
   skill_connection: string;
   new_experience: string;
   challenge_id: string;
@@ -30,6 +29,9 @@ export interface DishChallenge {
   image_data?: string; // Base64 encoded image data
   image_url?: string; // Original image URL from DALL-E
   image_cached?: boolean; // Whether the image was loaded from cache
+  // Legacy fields for backward compatibility
+  why_this_dish?: string;
+  what_to_notice?: string;
 }
 
 export interface ChallengeResponse {
