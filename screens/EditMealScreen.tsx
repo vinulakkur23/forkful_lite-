@@ -12,6 +12,8 @@ import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import DynamicCriteriaRating from '../components/DynamicCriteriaRating';
 import { DishCriterion } from '../services/dishCriteriaService';
+import { generateNextDishChallenge } from '../services/nextDishChallengeService';
+import { saveUserChallenge, hasActiveChallengeForDish, getPreviousChallengeNames } from '../services/userChallengesService';
 import { RootStackParamList, TabParamList } from '../App';
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -528,6 +530,85 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     })));
   };
 
+  // Generate a challenge for the user based on their meal experience
+  const generateChallengeForMeal = async (mealData: any) => {
+    try {
+      // Check if we have the necessary data for challenge generation
+      const hasQuickCriteria = mealData.quick_criteria_result?.dish_criteria;
+      const hasCombinedCriteria = mealData.combined_result?.dish_criteria?.criteria;
+      
+      if (!hasQuickCriteria && !hasCombinedCriteria) {
+        console.log('EditMealScreen: No criteria data available for challenge generation');
+        return;
+      }
+
+      // Extract dish information
+      let dishSpecific, dishGeneral, criteria;
+      
+      if (hasQuickCriteria) {
+        // Use new service data
+        dishSpecific = mealData.quick_criteria_result.dish_specific;
+        dishGeneral = mealData.quick_criteria_result.dish_general;
+        criteria = mealData.quick_criteria_result.dish_criteria;
+      } else if (hasCombinedCriteria) {
+        // Use old combined service data
+        dishSpecific = mealData.combined_result.dish_specific || mealData.meal || 'Unknown Dish';
+        dishGeneral = mealData.combined_result.dish_general || 'Food';
+        criteria = mealData.combined_result.dish_criteria.criteria;
+      }
+
+      // Check if user already has an active challenge for this dish
+      const hasExistingChallenge = await hasActiveChallengeForDish(dishSpecific);
+      if (hasExistingChallenge) {
+        console.log('EditMealScreen: User already has an active challenge for this dish');
+        return;
+      }
+
+      // Get user's city for context (if available)
+      let userCity = undefined;
+      if (mealData.city) {
+        userCity = mealData.city;
+      } else if (mealData.location?.city) {
+        userCity = mealData.location.city;
+      }
+
+      // Get previous challenges for context
+      const previousChallenges = await getPreviousChallengeNames();
+
+      console.log('EditMealScreen: Generating challenge for:', {
+        dishSpecific,
+        dishGeneral,
+        criteriaCount: criteria?.length,
+        userCity,
+        previousChallengesCount: previousChallenges.length
+      });
+
+      // Generate the challenge
+      const challenge = await generateNextDishChallenge(
+        dishSpecific,
+        dishGeneral,
+        criteria,
+        userCity,
+        previousChallenges
+      );
+
+      if (challenge) {
+        // Save the challenge to Firebase
+        const success = await saveUserChallenge(challenge);
+        if (success) {
+          console.log('EditMealScreen: Challenge generated and saved:', challenge.recommended_dish_name);
+        } else {
+          console.error('EditMealScreen: Failed to save challenge to Firebase');
+        }
+      } else {
+        console.error('EditMealScreen: Failed to generate challenge');
+      }
+    } catch (error) {
+      console.error('EditMealScreen: Error generating challenge:', error);
+      // Don't show error to user - this is a background operation
+    }
+  };
+
   // Save edited meal data
   const saveMeal = async () => {
     // Validate rating
@@ -660,6 +741,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         photosLength: verifyData?.photos?.length,
         photosArray: verifyData?.photos
       });
+
+      // Generate a challenge based on this meal experience (background operation)
+      if (verifyData) {
+        generateChallengeForMeal(verifyData).catch(error => {
+          console.error('EditMealScreen: Background challenge generation failed:', error);
+        });
+      }
 
       // Success notification
       Alert.alert(

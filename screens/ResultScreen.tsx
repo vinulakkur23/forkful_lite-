@@ -72,6 +72,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}`;
 
+  // Initialization effect - runs only once per instance
   useEffect(() => {
     console.log("ResultScreen mounted with key:", instanceKey);
 
@@ -105,9 +106,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaved(false);
     setPhotoUrl(null);
     
-    // Meal enhancement removed - now using dish criteria passed from RatingScreen2
-    
-    // If user is logged in, save data automatically
+    // If user is logged in, save data automatically (only once per instance)
     const user = auth().currentUser;
     if (user) {
       // Small delay to ensure component renders first
@@ -117,15 +116,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }, 100);
     }
     
+    return () => {
+      console.log("ResultScreen with key unmounting:", instanceKey);
+    };
+  }, [instanceKey]); // Only depend on instanceKey for initialization
+  
+  // Enhanced facts loading effect - separate from initialization
+  useEffect(() => {
     // Load enhanced metadata facts if we have quick criteria data
     if (quickCriteriaResult && !enhancedFacts && !enhancedFactsLoading) {
       loadEnhancedMetadataFacts();
     }
-    
-    return () => {
-      console.log("ResultScreen with key unmounting:", instanceKey);
-    };
-  }, [instanceKey, quickCriteriaResult, enhancedFacts, enhancedFactsLoading]); // Using instanceKey ensures this runs for each unique navigation
+  }, [quickCriteriaResult, enhancedFacts, enhancedFactsLoading]);
 
   // Load enhanced metadata facts for detailed information
   const loadEnhancedMetadataFacts = async () => {
@@ -1036,11 +1038,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
 
 
-        {/* Dish Criteria Section */}
-        {dishCriteria && dishCriteria.criteria && (
+        {/* Dish Criteria Section - from quick criteria service */}
+        {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
           <View style={styles.dishCriteriaCard}>
             <Text style={styles.dishCriteriaTitle}>What to Look For 🍽️</Text>
-            {dishCriteria.criteria.map((criterion, index) => (
+            {quickCriteriaResult.dish_criteria.map((criterion, index) => (
               <View key={index} style={styles.criterionItem}>
                 <Text style={styles.criterionTitle}>{criterion.title}</Text>
                 <Text style={styles.criterionDescription}>{criterion.description}</Text>

@@ -985,10 +985,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             </View>
                             </>
                         )}
-                        ListFooterComponent={() => (
-                            <>
-                            </>
-                        )}
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}

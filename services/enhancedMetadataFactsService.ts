@@ -90,9 +90,7 @@ export const extractEnhancedMetadataFacts = async (
     const response = await fetch(`${BASE_URL}/extract-enhanced-metadata-facts`, {
       method: 'POST',
       body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // Don't set Content-Type manually - let fetch set it with proper boundary
     });
     
     if (!response.ok) {

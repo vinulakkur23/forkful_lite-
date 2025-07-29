@@ -20,6 +20,7 @@ import { clearUserStamps } from '../services/clearUserStamps';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import { FilterItem } from '../components/SimpleFilterComponent';
+import { getActiveChallenges, UserChallenge } from '../services/userChallengesService';
 
 const { width } = Dimensions.get('window');
 const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
@@ -63,6 +64,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [selectedPhoto, setSelectedPhoto] = useState<TopRatedPhoto | null>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(true);
+  const [activeChallenges, setActiveChallenges] = useState<UserChallenge[]>([]);
+  const [challengesLoading, setChallengesLoading] = useState(true);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
@@ -70,6 +73,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     loadAchievements();
     loadTopRatedPhotos();
     loadCities();
+    loadActiveChallenges();
   }, [userId]);
 
   const loadAchievements = async () => {
@@ -197,6 +201,22 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       console.error('Error loading cities:', error);
     } finally {
       setCitiesLoading(false);
+    }
+  };
+
+  const loadActiveChallenges = async () => {
+    try {
+      setChallengesLoading(true);
+      const targetUserId = userId || auth().currentUser?.uid;
+      console.log(`🍽️ Loading active challenges for user: ${targetUserId}`);
+      
+      const challenges = await getActiveChallenges();
+      console.log(`🍽️ Found ${challenges.length} active challenges`);
+      setActiveChallenges(challenges);
+    } catch (error) {
+      console.error('Error loading challenges:', error);
+    } finally {
+      setChallengesLoading(false);
     }
   };
 
@@ -367,6 +387,26 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     </TouchableOpacity>
   );
 
+  const renderChallengeItem = ({ item }: { item: UserChallenge }) => (
+    <TouchableOpacity
+      style={styles.challengeItem}
+      onPress={() => {
+        Alert.alert(
+          item.recommended_dish_name,
+          `${item.why_this_dish}\n\nWhat to notice: ${item.what_to_notice}`,
+          [{ text: 'OK', style: 'default' }]
+        );
+      }}
+    >
+      <View style={styles.challengeContent}>
+        <Icon name="restaurant" size={40} color="#ff6b6b" />
+        <Text style={styles.challengeTitle}>{item.recommended_dish_name}</Text>
+        <Text style={styles.challengeCuisine}>{item.cuisine_type}</Text>
+        <Text style={styles.challengeStatus}>Active Challenge</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <>
       <ScrollView 
@@ -401,6 +441,22 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                 Keep using the app to earn stamps!
               </Text>
             </View>
+          )}
+
+          {/* Active Challenges Section */}
+          {!challengesLoading && activeChallenges.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>What to Eat Next 🍽️</Text>
+              <FlatList
+                data={activeChallenges}
+                renderItem={renderChallengeItem}
+                keyExtractor={item => item.challenge_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.challengesList}
+                scrollEnabled={true}
+              />
+            </>
           )}
 
           {/* Cities Section */}
@@ -931,6 +987,44 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     color: '#1a2b49',
     minHeight: 24, // Reduced height for tighter spacing
+  },
+  challengeItem: {
+    width: 150,
+    marginRight: 12,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e7ff',
+  },
+  challengeContent: {
+    alignItems: 'center',
+  },
+  challengeTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginTop: 8,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  challengeCuisine: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  challengeStatus: {
+    fontSize: 11,
+    color: '#ff6b6b',
+    marginTop: 8,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  challengesList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
 });
 
