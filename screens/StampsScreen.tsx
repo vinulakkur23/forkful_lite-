@@ -399,7 +399,17 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       }}
     >
       <View style={styles.challengeContent}>
-        <Icon name="restaurant" size={40} color="#ff6b6b" />
+        {item.image_data ? (
+          <View style={styles.challengeImageContainer}>
+            <Image
+              source={{ uri: item.image_data }}
+              style={styles.challengeImage}
+              resizeMode="cover"
+            />
+          </View>
+        ) : (
+          <Icon name="restaurant" size={40} color="#ff6b6b" />
+        )}
         <Text style={styles.challengeTitle}>{item.recommended_dish_name}</Text>
         <Text style={styles.challengeCuisine}>{item.cuisine_type}</Text>
         <Text style={styles.challengeStatus}>Active Challenge</Text>
@@ -1025,6 +1035,18 @@ const styles = StyleSheet.create({
   challengesList: {
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  challengeImageContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    marginBottom: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  challengeImage: {
+    width: '100%',
+    height: '100%',
   },
 });
 

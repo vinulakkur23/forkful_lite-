@@ -27,6 +27,9 @@ export interface DishChallenge {
     flexible_matching: boolean;
   };
   is_fallback?: boolean;
+  image_data?: string; // Base64 encoded image data
+  image_url?: string; // Original image URL from DALL-E
+  image_cached?: boolean; // Whether the image was loaded from cache
 }
 
 export interface ChallengeResponse {
