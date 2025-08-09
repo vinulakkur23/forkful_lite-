@@ -14,6 +14,7 @@ import DynamicCriteriaRating from '../components/DynamicCriteriaRating';
 import { DishCriterion } from '../services/dishCriteriaService';
 import { generateNextDishChallenge } from '../services/nextDishChallengeService';
 import { saveUserChallenge, hasActiveChallengeForDish, getPreviousChallengeNames } from '../services/userChallengesService';
+import challengeNotificationService from '../services/challengeNotificationService';
 import { RootStackParamList, TabParamList } from '../App';
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -597,6 +598,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         const success = await saveUserChallenge(challenge);
         if (success) {
           console.log('EditMealScreen: Challenge generated and saved:', challenge.recommended_dish_name);
+          // Show challenge notification
+          challengeNotificationService.showChallenge(challenge);
         } else {
           console.error('EditMealScreen: Failed to save challenge to Firebase');
         }

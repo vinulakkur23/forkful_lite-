@@ -39,6 +39,25 @@ type Props = {
 // Define possible meal types
 type MealType = "Restaurant" | "Homemade";
 
+// Helper function to render text with bold markdown
+const renderTextWithBold = (text: string, baseStyle: any) => {
+  // Split text by **bold** markers
+  const parts = text.split(/\*\*(.*?)\*\*/g);
+  
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, index) => {
+        // Even indices are regular text, odd indices are bold
+        if (index % 2 === 0) {
+          return <Text key={index}>{part}</Text>;
+        } else {
+          return <Text key={index} style={{ fontWeight: 'bold' }}>{part}</Text>;
+        }
+      })}
+    </Text>
+  );
+};
+
 const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const {
     photo,
@@ -1012,50 +1031,65 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Meal image card */}
-        <View style={styles.imageCard}>
-          <View style={styles.imageContainer}>
-          {!imageError && photo && photo.uri ? (
-            <Image
-              source={{ uri: photo.uri }}
-              style={styles.image}
-              resizeMode="cover"
-              onError={handleImageError}
-            />
-          ) : (
-            <View style={styles.noImageContainer}>
-              <MaterialIcon name="no-photography" size={64} color="#ccc" />
-              <Text style={styles.noImageText}>No image available</Text>
-            </View>
-          )}
-          {saving && (
-            <View style={styles.savingOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.savingText}>Saving your meal...</Text>
-            </View>
-          )}
-          </View>
-        </View>
+        {/* Photo and saving overlay removed per user request */}
 
 
         {/* Dish Criteria Section - from quick criteria service */}
         {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
           <View style={styles.dishCriteriaCard}>
-            <Text style={styles.dishCriteriaTitle}>What to Look For 🍽️</Text>
-            {quickCriteriaResult.dish_criteria.map((criterion, index) => (
-              <View key={index} style={styles.criterionItem}>
-                <Text style={styles.criterionTitle}>{criterion.title}</Text>
-                <Text style={styles.criterionDescription}>{criterion.description}</Text>
-              </View>
-            ))}
+            <View style={styles.dishCriteriaTitleContainer}>
+              <Text style={styles.dishCriteriaTitle}>What to Look For</Text>
+              {/* LLM Provider Badge */}
+              {quickCriteriaResult.llm_provider && (
+                <View style={[
+                  styles.llmProviderBadge,
+                  quickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
+                ]}>
+                  <Text style={styles.llmProviderText}>
+                    {quickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {quickCriteriaResult.dish_criteria.map((criterion, index) => {
+              // Ensure criterion is an object with string properties
+              if (!criterion || typeof criterion !== 'object') return null;
+              
+              const title = typeof criterion.title === 'string' ? criterion.title : '';
+              
+              // Handle both old format (description) and new format (what_to_look_for + insight)
+              const whatToLookFor = typeof criterion.what_to_look_for === 'string' ? criterion.what_to_look_for : 
+                                   (typeof criterion.description === 'string' ? criterion.description : '');
+              const insight = typeof criterion.insight === 'string' ? criterion.insight : '';
+              
+              return (
+                <View key={index} style={styles.criterionItem}>
+                  <Text style={styles.criterionTitle}>{title}</Text>
+                  
+                  {/* What to Look For section - no label */}
+                  {whatToLookFor && (
+                    <View style={styles.criterionSubSection}>
+                      {renderTextWithBold(whatToLookFor, styles.criterionDescription)}
+                    </View>
+                  )}
+                  
+                  {/* Insight section - no label, full line spacing */}
+                  {insight && (
+                    <View style={[styles.criterionSubSection, { marginTop: 16 }]}>
+                      {renderTextWithBold(insight, styles.criterionInsight)}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
         {/* Dish History Section - from quick criteria service */}
         {quickCriteriaResult && quickCriteriaResult.dish_history && (
           <View style={styles.dishHistoryCard}>
-            <Text style={styles.dishHistoryTitle}>About This Dish 📖</Text>
-            <Text style={styles.dishHistoryText}>{quickCriteriaResult.dish_history}</Text>
+            <Text style={styles.dishHistoryTitle}>About This Dish</Text>
+            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
           </View>
         )}
 
@@ -1390,11 +1424,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  dishCriteriaTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
   dishCriteriaTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2d5016',
-    marginBottom: 16,
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
@@ -1407,16 +1447,34 @@ const styles = StyleSheet.create({
     borderLeftColor: '#4CAF50',
   },
   criterionTitle: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#2d5016',
-    marginBottom: 4,
+    marginBottom: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criterionDescription: {
     fontSize: 13,
     color: '#4a5d4a',
     lineHeight: 18,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionSubSection: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  criterionSubTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b8e6b',
+    marginBottom: 3,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionInsight: {
+    fontSize: 13,
+    color: '#5a6d5a',
+    lineHeight: 18,
+    fontStyle: 'italic',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Dish history section styles
@@ -1445,6 +1503,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'left',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // LLM Provider Badge styles
+  llmProviderBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  llmProviderGemini: {
+    backgroundColor: '#e8f0fe',
+    borderColor: '#4285f4',
+  },
+  llmProviderOpenAI: {
+    backgroundColor: '#e6f4ea',
+    borderColor: '#10a37f',
+  },
+  llmProviderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
   },
 });
 

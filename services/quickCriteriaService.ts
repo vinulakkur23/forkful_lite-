@@ -17,6 +17,8 @@ export interface QuickCriteriaData {
   extraction_timestamp: string;
   extraction_version: string;
   dish_key: string;
+  llm_provider?: string; // Added: "gemini" or "openai"
+  extraction_model?: string; // Added: specific model used
 }
 
 export interface QuickCriteriaResponse {

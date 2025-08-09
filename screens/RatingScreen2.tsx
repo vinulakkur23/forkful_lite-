@@ -109,8 +109,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [restaurant, setRestaurant] = useState(route.params.restaurant || "");
   const [mealName, setMealName] = useState(route.params.meal || "");
-  // Add meal type selector state - use existing or default to "Restaurant"
-  const [mealType, setMealType] = useState<"Restaurant" | "Homemade">(route.params.mealType as "Restaurant" | "Homemade" || "Restaurant");
+  // Meal type is always "Restaurant" - toggle removed
+  const mealType = "Restaurant";
   const [suggestedRestaurants, setSuggestedRestaurants] = useState<Restaurant[]>([]);
   const [autocompleteRestaurants, setAutocompleteRestaurants] = useState<Restaurant[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -828,7 +828,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         quickCriteriaResult = await extractQuickCriteria(
           freshPhoto.uri,
           mealName,
-          mealType === "Restaurant" ? restaurant : undefined
+          restaurant // Always pass restaurant since meal type is always "Restaurant"
         );
         logWithSession('✅ Quick criteria extraction completed successfully');
         console.log('Quick criteria result preview:', {
@@ -869,9 +869,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         photo: freshPhoto,
         location: location,
         rating: rating,
-        restaurant: mealType === "Restaurant" ? restaurant : "", // Only include restaurant for Restaurant type
+        restaurant: restaurant, // Always include restaurant since meal type is always "Restaurant"
         meal: mealName,
-        mealType: mealType, // Include the meal type for saving to Firebase
+        mealType: "Restaurant", // Always "Restaurant" - toggle removed
         thoughts: thoughts,
         // Keep for backward compatibility
         likedComment: likedComment,
@@ -928,159 +928,138 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.contentContainer}>
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>
-            {/* Meal Type Selector */}
-            <View style={styles.mealTypeContainer}>
-              <TouchableOpacity
-                style={[styles.mealTypeButton, mealType === "Restaurant" && styles.mealTypeButtonActive]}
-                onPress={() => {
-                  if (mealType !== "Restaurant") {
-                    setMealType("Restaurant");
-                  }
-                }}
-              >
-                <Text style={[styles.mealTypeText, mealType === "Restaurant" && styles.mealTypeTextActive]}>Restaurant</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mealTypeButton, mealType === "Homemade" && styles.mealTypeButtonActive]}
-                onPress={() => setMealType("Homemade")}
-              >
-                <Text style={[styles.mealTypeText, mealType === "Homemade" && styles.mealTypeTextActive]}>Homemade</Text>
-              </TouchableOpacity>
-            </View>
-            {/* Restaurant Input - Only shown for Restaurant meal type */}
-            {mealType === "Restaurant" && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Restaurant:</Text>
-                <View style={styles.autocompleteContainer}>
-                <TextInput
-                  style={styles.infoInput}
-                  value={restaurant}
-                  onChangeText={handleRestaurantSearch}
-                  onFocus={() => {
-                    logWithSession("User focused on restaurant input");
-                    setIsUserEditingRestaurant(true);
-                    
-                    // Immediately show autocomplete with nearby restaurants when user focuses
-                    setShowAutocomplete(true);
-                    
-                    // If we already have suggestions from prefetch, display them
-                    if (suggestedRestaurants.length > 0) {
-                      logWithSession(`Showing ${suggestedRestaurants.length} prefetched restaurant suggestions as autocomplete`);
-                      setAutocompleteRestaurants(suggestedRestaurants);
-                    } 
-                    // Otherwise try to fetch nearby restaurants at a small radius
-                    else {
-                      const bestLocation = getBestAvailableLocation();
-                      if (bestLocation) {
-                        logWithSession(`Fetching nearby restaurants on field focus with location: ${bestLocation.source}`);
-                        setIsSearchingRestaurants(true);
-                        
-                        // Use a small radius (30 meters) to get very nearby restaurants
-                        searchNearbyRestaurants(bestLocation, 30)
-                          .then(restaurants => {
-                            logWithSession(`Found ${restaurants.length} nearby restaurants on field focus`);
-                            setAutocompleteRestaurants(restaurants);
-                            setSuggestedRestaurants(restaurants); // Also save for later use
-                          })
-                          .catch(error => {
-                            logWithSession(`Error fetching nearby restaurants on focus: ${error}`);
-                          })
-                          .finally(() => {
-                            setIsSearchingRestaurants(false);
-                          });
-                      }
-                    }
-                  }}
-                  onBlur={() => {
-                    logWithSession("User blurred restaurant input");
-                    setTimeout(() => {
-                      setShowAutocomplete(false);
-                    }, 200);
-                  }}
-                  placeholder="Enter restaurant name"
-                />
-                
-                {/* Autocomplete dropdown */}
-                {showAutocomplete && autocompleteRestaurants.length > 0 && (
-                  <View style={styles.autocompleteDropdown}>
-                    {isSearchingRestaurants && (
-                      <ActivityIndicator size="small" color="#ffc008" style={styles.autocompleteLoading} />
-                    )}
-                    <FlatList
-                      data={autocompleteRestaurants}
-                      keyExtractor={(item) => item.id || item.name}
-                      keyboardShouldPersistTaps="handled"
-                      style={styles.autocompleteList}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={styles.autocompleteItem}
-                          onPress={() => {
-                            handleRestaurantSelection(item);
-                            setShowAutocomplete(false);
-                          }}
-                        >
-                          <View style={styles.autocompleteTextContainer}>
-                            <Text style={styles.autocompleteItemName}>{item.name}</Text>
-                            <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>
-                            
-                            {/* Show location badge if available */}
-                            {item.geometry && item.geometry.location && (
-                              <View style={styles.locationBadgeSmall}>
-                                <MaterialIcon name="place" size={10} color="#fff" />
-                                <Text style={styles.locationBadgeTextSmall}>Location available</Text>
-                              </View>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      )}
-                    />
-                  </View>
-                )}
-              </View>
-
-              {/* Suggestions button for restaurant */}
-              <TouchableOpacity
-                style={styles.suggestButton}
-                onPress={() => {
-                  // If we already have suggestions, show them
+            {/* Restaurant Input */}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Restaurant:</Text>
+              <View style={styles.autocompleteContainer}>
+              <TextInput
+                style={styles.infoInput}
+                value={restaurant}
+                onChangeText={handleRestaurantSearch}
+                onFocus={() => {
+                  logWithSession("User focused on restaurant input");
+                  setIsUserEditingRestaurant(true);
+                  
+                  // Immediately show autocomplete with nearby restaurants when user focuses
+                  setShowAutocomplete(true);
+                  
+                  // If we already have suggestions from prefetch, display them
                   if (suggestedRestaurants.length > 0) {
-                    setShowRestaurantModal(true);
+                    logWithSession(`Showing ${suggestedRestaurants.length} prefetched restaurant suggestions as autocomplete`);
+                    setAutocompleteRestaurants(suggestedRestaurants);
                   } 
-                  // Otherwise try to fetch nearby restaurants
+                  // Otherwise try to fetch nearby restaurants at a small radius
                   else {
                     const bestLocation = getBestAvailableLocation();
                     if (bestLocation) {
-                      logWithSession(`Fetching nearby restaurants on button press with location: ${bestLocation.source}`);
-                      setIsLoadingSuggestions(true);
+                      logWithSession(`Fetching nearby restaurants on field focus with location: ${bestLocation.source}`);
+                      setIsSearchingRestaurants(true);
                       
-                      // Use a 100-meter radius to find more restaurants on button press
-                      searchNearbyRestaurants(bestLocation, 100)
+                      // Use a small radius (30 meters) to get very nearby restaurants
+                      searchNearbyRestaurants(bestLocation, 30)
                         .then(restaurants => {
-                          logWithSession(`Found ${restaurants.length} nearby restaurants on button press`);
-                          setSuggestedRestaurants(restaurants);
-                          if (restaurants.length > 0) {
-                            setShowRestaurantModal(true);
-                          } else {
-                            Alert.alert('No Restaurants Found', 'No restaurants found nearby. Try searching by name instead.');
-                          }
+                          logWithSession(`Found ${restaurants.length} nearby restaurants on field focus`);
+                          setAutocompleteRestaurants(restaurants);
+                          setSuggestedRestaurants(restaurants); // Also save for later use
                         })
                         .catch(error => {
-                          logWithSession(`Error fetching nearby restaurants on button press: ${error}`);
-                          Alert.alert('Error', 'Failed to fetch nearby restaurants. Try searching by name instead.');
+                          logWithSession(`Error fetching nearby restaurants on focus: ${error}`);
                         })
                         .finally(() => {
-                          setIsLoadingSuggestions(false);
+                          setIsSearchingRestaurants(false);
                         });
-                    } else {
-                      Alert.alert('Location Unavailable', 'Cannot find nearby restaurants without location data. Try searching by name instead.');
                     }
                   }
                 }}
-              >
-                <MaterialIcon name="restaurant" size={16} color="white" />
-              </TouchableOpacity>
+                onBlur={() => {
+                  logWithSession("User blurred restaurant input");
+                  setTimeout(() => {
+                    setShowAutocomplete(false);
+                  }, 200);
+                }}
+                placeholder="Enter restaurant name"
+              />
+              
+              {/* Autocomplete dropdown */}
+              {showAutocomplete && autocompleteRestaurants.length > 0 && (
+                <View style={styles.autocompleteDropdown}>
+                  {isSearchingRestaurants && (
+                    <ActivityIndicator size="small" color="#ffc008" style={styles.autocompleteLoading} />
+                  )}
+                  <FlatList
+                    data={autocompleteRestaurants}
+                    keyExtractor={(item) => item.id || item.name}
+                    keyboardShouldPersistTaps="handled"
+                    style={styles.autocompleteList}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.autocompleteItem}
+                        onPress={() => {
+                          handleRestaurantSelection(item);
+                          setShowAutocomplete(false);
+                        }}
+                      >
+                        <View style={styles.autocompleteTextContainer}>
+                          <Text style={styles.autocompleteItemName}>{item.name}</Text>
+                          <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>
+                          
+                          {/* Show location badge if available */}
+                          {item.geometry && item.geometry.location && (
+                            <View style={styles.locationBadgeSmall}>
+                              <MaterialIcon name="place" size={10} color="#fff" />
+                              <Text style={styles.locationBadgeTextSmall}>Location available</Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              )}
             </View>
-            )}
+
+            {/* Suggestions button for restaurant */}
+            <TouchableOpacity
+              style={styles.suggestButton}
+              onPress={() => {
+                // If we already have suggestions, show them
+                if (suggestedRestaurants.length > 0) {
+                  setShowRestaurantModal(true);
+                } 
+                // Otherwise try to fetch nearby restaurants
+                else {
+                  const bestLocation = getBestAvailableLocation();
+                  if (bestLocation) {
+                    logWithSession(`Fetching nearby restaurants on button press with location: ${bestLocation.source}`);
+                    setIsLoadingSuggestions(true);
+                    
+                    // Use a 100-meter radius to find more restaurants on button press
+                    searchNearbyRestaurants(bestLocation, 100)
+                      .then(restaurants => {
+                        logWithSession(`Found ${restaurants.length} nearby restaurants on button press`);
+                        setSuggestedRestaurants(restaurants);
+                        if (restaurants.length > 0) {
+                          setShowRestaurantModal(true);
+                        } else {
+                          Alert.alert('No Restaurants Found', 'No restaurants found nearby. Try searching by name instead.');
+                        }
+                      })
+                      .catch(error => {
+                        logWithSession(`Error fetching nearby restaurants on button press: ${error}`);
+                        Alert.alert('Error', 'Failed to fetch nearby restaurants. Try searching by name instead.');
+                      })
+                      .finally(() => {
+                        setIsLoadingSuggestions(false);
+                      });
+                  } else {
+                    Alert.alert('Location Unavailable', 'Cannot find nearby restaurants without location data. Try searching by name instead.');
+                  }
+                }
+              }}
+            >
+              <MaterialIcon name="restaurant" size={16} color="white" />
+            </TouchableOpacity>
+          </View>
             
             {/* Meal Input with Button Container */}
             <View style={styles.infoRow}>
@@ -1344,35 +1323,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  // Meal Type Selector Styles
-  mealTypeContainer: {
-    flexDirection: 'row',
-    width: '100%',
-    marginBottom: 15,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  mealTypeButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-  },
-  mealTypeButtonActive: {
-    backgroundColor: '#ffc008',
-  },
-  mealTypeText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  mealTypeTextActive: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
   container: {
     flex: 1,
     backgroundColor: '#FAF9F6', // Light off-white color matching HomeScreen

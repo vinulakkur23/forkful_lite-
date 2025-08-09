@@ -13,6 +13,7 @@ import { getPhotoWithMetadata } from './services/photoLibraryService';
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import GlobalAchievementListener from './components/GlobalAchievementListener';
+import GlobalChallengeListener from './components/GlobalChallengeListener';
 import OnboardingOverlay from './components/OnboardingOverlay';
 
 // Screens
@@ -746,6 +747,9 @@ const App: React.FC = () => {
       </View>
       {/* GlobalAchievementListener is rendered outside the main View to prevent layout interference */}
       <GlobalAchievementListener />
+      
+      {/* GlobalChallengeListener for food challenge notifications */}
+      <GlobalChallengeListener />
       
       {/* Onboarding overlay - shows on first app launch */}
       <OnboardingOverlay

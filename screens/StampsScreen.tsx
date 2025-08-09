@@ -17,6 +17,7 @@ import { Achievement, UserAchievement } from '../types/achievements';
 import { getUserAchievements, getAchievementById, getAllAchievements } from '../services/achievementService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { clearUserStamps } from '../services/clearUserStamps';
+import { clearAllUserData } from '../services/clearAllUserData';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import { FilterItem } from '../components/SimpleFilterComponent';
@@ -66,6 +67,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [citiesLoading, setCitiesLoading] = useState(true);
   const [activeChallenges, setActiveChallenges] = useState<UserChallenge[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
+  const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
@@ -335,6 +337,43 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     );
   };
 
+  // DEBUG: Handler to clear all user data (stamps, challenges, cities)
+  const handleClearAllData = async () => {
+    Alert.alert(
+      'Debug: Clear ALL Data',
+      'This will delete ALL your stamps, challenges, and cities for testing purposes. This cannot be undone. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Everything',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await clearAllUserData();
+              if (result.success) {
+                Alert.alert('Success', result.message, [
+                  { 
+                    text: 'OK', 
+                    onPress: () => {
+                      // Reload all data
+                      loadAchievements();
+                      loadActiveChallenges();
+                      loadCities();
+                    }
+                  }
+                ]);
+              } else {
+                Alert.alert('Error', result.message);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear all data');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderTopPhotoItem = ({ item }: { item: TopRatedPhoto }) => (
     <TouchableOpacity 
       style={styles.topPhotoItem}
@@ -389,33 +428,33 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
 
   const renderChallengeItem = ({ item }: { item: UserChallenge }) => (
     <TouchableOpacity
-      style={styles.challengeItem}
-      onPress={() => {
-        const description = item.challenge_description || 
-                           `${item.why_this_dish || ''}\n\n${item.what_to_notice || ''}`.trim();
-        Alert.alert(
-          item.recommended_dish_name,
-          description,
-          [{ text: 'OK', style: 'default' }]
-        );
-      }}
+      style={[
+        styles.stampItem,
+        styles.earnedStamp
+      ]}
+      onPress={() => setSelectedChallenge(item)}
     >
-      <View style={styles.challengeContent}>
+      <View style={styles.stampIconContainer}>
         {item.image_data ? (
-          <View style={styles.challengeImageContainer}>
-            <Image
-              source={{ uri: item.image_data }}
-              style={styles.challengeImage}
-              resizeMode="cover"
-            />
-          </View>
+          <Image
+            source={{ uri: item.image_data }}
+            style={styles.challengeEmojiImage}
+            resizeMode="contain"
+          />
         ) : (
           <Icon name="restaurant" size={40} color="#ff6b6b" />
         )}
-        <Text style={styles.challengeTitle}>{item.recommended_dish_name}</Text>
-        <Text style={styles.challengeCuisine}>{item.cuisine_type}</Text>
-        <Text style={styles.challengeStatus}>Active Challenge</Text>
       </View>
+      
+      <Text 
+        style={[
+          styles.stampName, 
+          styles.earnedStampText
+        ]}
+        numberOfLines={2}
+      >
+        {item.recommended_dish_name}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -458,15 +497,14 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {/* Active Challenges Section */}
           {!challengesLoading && activeChallenges.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>What to Eat Next 🍽️</Text>
+              <Text style={styles.sectionTitle}>What to Eat Next</Text>
               <FlatList
                 data={activeChallenges}
                 renderItem={renderChallengeItem}
                 keyExtractor={item => item.challenge_id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.challengesList}
-                scrollEnabled={true}
+                numColumns={3}
+                contentContainerStyle={styles.stampsList}
+                scrollEnabled={false}
               />
             </>
           )}
@@ -503,14 +541,20 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             </>
           )}
 
-          {/* HIDDEN DEBUG BUTTON - Functionality preserved but UI removed
+          {/* DEBUG BUTTONS */}
           <TouchableOpacity 
-            style={styles.debugButton}
+            style={[styles.debugButton, { bottom: 80 }]}
             onPress={handleClearStamps}
           >
-            <Text style={styles.debugButtonText}>🧪 Clear Stamps (Debug)</Text>
+            <Text style={styles.debugButtonText}>🧪 Clear Stamps</Text>
           </TouchableOpacity>
-          */}
+          
+          <TouchableOpacity 
+            style={[styles.debugButton, { bottom: 20 }]}
+            onPress={handleClearAllData}
+          >
+            <Text style={styles.debugButtonText}>🧹 Clear ALL Data</Text>
+          </TouchableOpacity>
           
 
         </>
@@ -619,6 +663,60 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                       </Text>
                     </View>
                   )}
+                </>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+    
+    {/* Challenge detail modal */}
+    <Modal
+      visible={selectedChallenge !== null}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setSelectedChallenge(null)}
+    >
+      <View style={styles.detailOverlay}>
+        <TouchableOpacity 
+          style={styles.detailOverlay}
+          onPress={() => setSelectedChallenge(null)}
+          activeOpacity={1}
+        >
+          <View style={styles.detailCard}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setSelectedChallenge(null)}
+            >
+              <Text style={styles.closeButtonX}>×</Text>
+            </TouchableOpacity>
+            
+            {/* Zoomed challenge image */}
+            <View style={styles.zoomedStampContainer}>
+              {selectedChallenge?.image_data ? (
+                <Image 
+                  source={{ uri: selectedChallenge.image_data }}
+                  style={styles.zoomedStampImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Icon name="restaurant" size={120} color="#ff6b6b" />
+              )}
+            </View>
+            
+            {/* Title and description at bottom */}
+            <View style={styles.stampInfo}>
+              {selectedChallenge && (
+                <>
+                  <Text style={styles.detailName}>
+                    {selectedChallenge.recommended_dish_name}
+                  </Text>
+                  
+                  <Text style={styles.detailDescription}>
+                    {selectedChallenge.challenge_description || 
+                     `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()}
+                  </Text>
                 </>
               )}
             </View>
@@ -767,12 +865,10 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   detailCard: {
-    width: STAMP_SIZE * 2.5, // 2.5x the original stamp width
-    height: (STAMP_SIZE + 30) * 2.5, // 2.5x the original stamp height (including text area)
+    width: STAMP_SIZE * 3, // Increased from 2.5x to 3x for more space
     backgroundColor: '#ffffff', // White background for consistency
     borderRadius: 25, // Proportionally scaled from original 10px
     alignItems: 'center',
-    justifyContent: 'center', // Center the content like original stamps
     padding: 25, // Proportionally scaled from original 10px
     elevation: 8, // Stronger shadow for the zoomed effect
     shadowColor: '#000',
@@ -801,9 +897,9 @@ const styles = StyleSheet.create({
   },
   // New zoomed stamp styles
   zoomedStampContainer: {
-    width: 60 * 2.5, // 2.5x the original 60px image area
-    height: 60 * 2.5, // 2.5x the original 60px image area
-    borderRadius: 75, // Circular like the original (half of width/height)
+    width: 60 * 2, // Reduced from 3x to 2x (120px)
+    height: 60 * 2, // Reduced from 3x to 2x (120px)
+    borderRadius: 60, // Circular like the original (half of width/height)
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
@@ -817,11 +913,10 @@ const styles = StyleSheet.create({
   stampInfo: {
     alignItems: 'center',
     paddingHorizontal: 0,
-    flex: 1, // Take remaining space like original stamps
-    justifyContent: 'center',
+    width: '100%', // Ensure full width for text
   },
   detailName: {
-    fontSize: 12 * 2.5, // 2.5x the original stamp name font size
+    fontSize: 20, // Significantly reduced from 36px to 20px
     fontWeight: 'bold',
     marginBottom: 12, // Proportionally scaled spacing
     textAlign: 'center',
@@ -829,12 +924,12 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailDescription: {
-    fontSize: 14, // Slightly larger for readability in the description
+    fontSize: 14, // Reduced from 16px to 14px
     color: '#1a2b49',
     textAlign: 'center',
     marginBottom: 15,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    lineHeight: 18,
+    lineHeight: 20, // Adjusted line height proportionally
   },
   statusContainer: {
     flexDirection: 'row',
@@ -1049,6 +1144,17 @@ const styles = StyleSheet.create({
   challengeImage: {
     width: '100%',
     height: '100%',
+  },
+  challengeEmojiImage: {
+    width: '100%',
+    height: '100%',
+  },
+  challengeStatusText: {
+    fontSize: 10,
+    color: '#ff6b6b',
+    marginTop: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
   },
 });
 

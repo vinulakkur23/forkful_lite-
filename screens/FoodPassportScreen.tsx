@@ -801,7 +801,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 {/* Dishitout Logo - only show on own profile */}
                                 {(!userId || userId === auth().currentUser?.uid) && (
                                     <View style={styles.logoContainer}>
-                                        <Text style={styles.logoText}>Dishitout</Text>
+                                        <Text style={styles.logoText}>DishItOut</Text>
                                     </View>
                                 )}
                                 <View style={styles.profileCard}>
@@ -1003,7 +1003,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     </>
                                 ) : (
                                     <>
-                                        <Text style={styles.emptyText}>Upload or take a photo to add your first meal!</Text>
+                                        <Text style={styles.emptyText}>Welcome to your Food Passport!</Text>
+                                        <TouchableOpacity 
+                                            style={styles.addFirstMealButton}
+                                            onPress={() => navigation.navigate('Camera')}
+                                        >
+                                            <Text style={styles.addFirstMealButtonText}>+</Text>
+                                        </TouchableOpacity>
+                                        <Text style={styles.emptySubText}>Track your culinary journey and enjoy a more mindful eating experience.</Text>
                                     </>
                                 )}
                             </View>
@@ -1028,7 +1035,7 @@ const styles = StyleSheet.create({
     logoText: {
         fontFamily: 'Lobster-Regular',
         fontSize: 28,
-        color: '#ff6b6b',
+        color: '#E63946',
         letterSpacing: 0.5,
     },
     header: {
@@ -1269,16 +1276,49 @@ const styles = StyleSheet.create({
         padding: 50,
     },
     emptyText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#555',
-        marginTop: 15,
+        color: '#1a2b49', // Navy blue
+        marginTop: -30, // Move text up
+        textAlign: 'center',
+        paddingHorizontal: 0,
+        lineHeight: 22,
+        marginBottom: 40, // Add space before button
+    },
+    emptySubText: {
+        fontSize: 14,
+        color: '#1a2b49', // Navy blue
+        textAlign: 'center',
+        paddingHorizontal: 0,
+        lineHeight: 20,
+        marginTop: 30, // Add space after button
     },
     emptySubtext: {
         fontSize: 14,
         color: '#888',
         textAlign: 'center',
         marginTop: 5,
+    },
+    addFirstMealButton: {
+        width: 150,
+        height: 150,
+        backgroundColor: 'transparent', // Fully transparent center
+        borderRadius: 25,
+        borderWidth: 5,
+        borderColor: '#1a2b49', // Bold navy blue outline
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+    },
+    addFirstMealButtonText: {
+        fontSize: 90, // Much bigger + sign
+        fontWeight: 'bold',
+        color: '#1a2b49', // Navy blue color
+        lineHeight: 90,
     },
     // Profile card styles
     userAvatarContainer: {
