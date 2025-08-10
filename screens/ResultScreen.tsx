@@ -86,6 +86,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // Enhanced metadata facts state
   const [enhancedFacts, setEnhancedFacts] = useState<EnhancedFactsData | null>(null);
   const [enhancedFactsLoading, setEnhancedFactsLoading] = useState(false);
+  // Track if we're waiting to navigate to EditMeal
+  const [navigateToEditAfterSave, setNavigateToEditAfterSave] = useState(false);
   // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
@@ -147,6 +149,28 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       loadEnhancedMetadataFacts();
     }
   }, [quickCriteriaResult, enhancedFacts, enhancedFactsLoading]);
+
+  // Navigate to EditMeal after save when requested
+  useEffect(() => {
+    if (navigateToEditAfterSave && mealId && saved) {
+      setNavigateToEditAfterSave(false); // Reset flag
+      navigation.navigate('EditMeal', {
+        mealId: mealId,
+        meal: {
+          id: mealId,
+          meal: meal,
+          restaurant: restaurant,
+          rating: rating,
+          mealType: mealType,
+          thoughts: thoughts,
+          dishCriteria: quickCriteriaResult?.dish_criteria || [],
+          dishSpecific: quickCriteriaResult?.dish_specific || '',
+          dishGeneral: quickCriteriaResult?.dish_general || '',
+          cuisineType: quickCriteriaResult?.cuisine_type || '',
+        }
+      });
+    }
+  }, [mealId, saved, navigateToEditAfterSave]);
 
   // Load enhanced metadata facts for detailed information
   const loadEnhancedMetadataFacts = async () => {
@@ -981,19 +1005,30 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const handleShare = async (): Promise<void> => {
-    try {
-      // Create share message based on meal type
-      const shareMessage = mealType === "Homemade"
-        ? `I rated my homemade ${meal || 'meal'} ${rating} stars!`
-        : `I rated my ${meal || 'meal'} ${rating} stars${restaurant ? ` at ${restaurant}` : ''}!`;
-
-      await Share.share({
-        message: shareMessage,
-        url: photoUrl || photo.uri
+  const handleRateNow = async (): Promise<void> => {
+    // Check if meal is already saved
+    if (saved && mealId) {
+      // If already saved, navigate directly to EditMeal
+      navigation.navigate('EditMeal', {
+        mealId: mealId,
+        meal: {
+          id: mealId,
+          meal: meal,
+          restaurant: restaurant,
+          rating: rating,
+          mealType: mealType,
+          thoughts: thoughts,
+          dishCriteria: quickCriteriaResult?.dish_criteria || [],
+          dishSpecific: quickCriteriaResult?.dish_specific || '',
+          dishGeneral: quickCriteriaResult?.dish_general || '',
+          cuisineType: quickCriteriaResult?.cuisine_type || '',
+        }
       });
-    } catch (error) {
-      console.log('Sharing error:', error);
+    } else {
+      // Set flag to navigate after save
+      setNavigateToEditAfterSave(true);
+      // Save the meal
+      await saveToFirebase();
     }
   };
 
@@ -1032,7 +1067,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Photo and saving overlay removed per user request */}
+        {saving && (
+          <View style={styles.savingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.savingText}>Preparing your rating...</Text>
+          </View>
+        )}
 
+        {/* Dish History Section - from quick criteria service */}
+        {quickCriteriaResult && quickCriteriaResult.dish_history && (
+          <View style={styles.dishHistoryCard}>
+            <Text style={styles.dishHistoryTitle}>About This Dish</Text>
+            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
+          </View>
+        )}
 
         {/* Dish Criteria Section - from quick criteria service */}
         {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
@@ -1055,28 +1103,36 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               // Ensure criterion is an object with string properties
               if (!criterion || typeof criterion !== 'object') return null;
               
-              const title = typeof criterion.title === 'string' ? criterion.title : '';
+              // Handle name field (previously title)
+              const name = typeof criterion.name === 'string' ? criterion.name : 
+                          (typeof criterion.title === 'string' ? criterion.title : '');
               
-              // Handle both old format (description) and new format (what_to_look_for + insight)
-              const whatToLookFor = typeof criterion.what_to_look_for === 'string' ? criterion.what_to_look_for : 
-                                   (typeof criterion.description === 'string' ? criterion.description : '');
+              // Get all fields
+              const whatToLookFor = typeof criterion.what_to_look_for === 'string' ? criterion.what_to_look_for : '';
               const insight = typeof criterion.insight === 'string' ? criterion.insight : '';
+              const test = typeof criterion.test === 'string' ? criterion.test : '';
               
               return (
                 <View key={index} style={styles.criterionItem}>
-                  <Text style={styles.criterionTitle}>{title}</Text>
+                  <Text style={styles.criterionTitle}>{name}</Text>
                   
-                  {/* What to Look For section - no label */}
-                  {whatToLookFor && (
-                    <View style={styles.criterionSubSection}>
-                      {renderTextWithBold(whatToLookFor, styles.criterionDescription)}
-                    </View>
-                  )}
+                  {/* Combined What to Look For and Insight section */}
+                  <View style={styles.criterionSubSection}>
+                    {/* What to Look For paragraph */}
+                    {whatToLookFor && renderTextWithBold(whatToLookFor, styles.criterionDescription)}
+                    
+                    {/* Insight paragraph with full line spacing */}
+                    {insight && (
+                      <View style={{ marginTop: 16 }}>
+                        {renderTextWithBold(insight, styles.criterionInsight)}
+                      </View>
+                    )}
+                  </View>
                   
-                  {/* Insight section - no label, full line spacing */}
-                  {insight && (
+                  {/* Test section */}
+                  {test && (
                     <View style={[styles.criterionSubSection, { marginTop: 16 }]}>
-                      {renderTextWithBold(insight, styles.criterionInsight)}
+                      {renderTextWithBold(`**Try it out!** ${test}`, styles.criterionTest)}
                     </View>
                   )}
                 </View>
@@ -1085,28 +1141,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Dish History Section - from quick criteria service */}
-        {quickCriteriaResult && quickCriteriaResult.dish_history && (
-          <View style={styles.dishHistoryCard}>
-            <Text style={styles.dishHistoryTitle}>About This Dish</Text>
-            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
-          </View>
-        )}
-
         {/* Action buttons - now part of scrollable content */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.shareButton}
-            onPress={handleShare}
+            onPress={handleRateNow}
           >
-            <Text style={styles.shareButtonText}>Share Review</Text>
+            <Text style={styles.shareButtonText}>Rate/Post Now</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.foodPassportButton}
             onPress={goToFoodPassport}
           >
-            <Text style={styles.foodPassportButtonText}>Food Passport</Text>
+            <Text style={styles.foodPassportButtonText}>Rate/Post Later</Text>
           </TouchableOpacity>
 
           {!auth().currentUser && (
@@ -1475,6 +1523,15 @@ const styles = StyleSheet.create({
     color: '#5a6d5a',
     lineHeight: 18,
     fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criterionTest: {
+    fontSize: 13,
+    color: '#3a4d3a',
+    lineHeight: 18,
+    backgroundColor: '#f0f4f0',
+    padding: 10,
+    borderRadius: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Dish history section styles
