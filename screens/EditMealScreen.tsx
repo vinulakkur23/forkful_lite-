@@ -217,14 +217,29 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       separateCriteriaLength: meal.dish_criteria?.criteria?.length || 0
     });
     
-    // Try combined service first (preferred), fallback to separate service
+    // Try to find criteria in the following priority order:
+    // 1. Converted criteria from quick service (saved by ResultScreen)
+    // 2. Combined service criteria (legacy)
+    // 3. Quick criteria result (raw format, needs conversion)
     let criteriaToUse = null;
-    if (meal.combined_result?.dish_criteria?.criteria && Array.isArray(meal.combined_result.dish_criteria.criteria)) {
+    
+    // First check for converted criteria saved by ResultScreen
+    if (meal.dish_criteria?.criteria && Array.isArray(meal.dish_criteria.criteria)) {
+      console.log('EditMealScreen - Using converted criteria from dish_criteria:', meal.dish_criteria.criteria);
+      criteriaToUse = meal.dish_criteria.criteria;
+    } 
+    // Fallback to combined service format
+    else if (meal.combined_result?.dish_criteria?.criteria && Array.isArray(meal.combined_result.dish_criteria.criteria)) {
       console.log('EditMealScreen - Using criteria from combined service:', meal.combined_result.dish_criteria.criteria);
       criteriaToUse = meal.combined_result.dish_criteria.criteria;
-    } else if (meal.dish_criteria?.criteria && Array.isArray(meal.dish_criteria.criteria)) {
-      console.log('EditMealScreen - Fallback to separate service criteria:', meal.dish_criteria.criteria);
-      criteriaToUse = meal.dish_criteria.criteria;
+    }
+    // If we have raw quick criteria result, convert it
+    else if (meal.quick_criteria_result?.dish_criteria && Array.isArray(meal.quick_criteria_result.dish_criteria)) {
+      console.log('EditMealScreen - Converting raw quick criteria result:', meal.quick_criteria_result.dish_criteria);
+      criteriaToUse = meal.quick_criteria_result.dish_criteria.map(criterion => ({
+        title: criterion.name || 'Quality Aspect',
+        description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+      }));
     }
     
     if (criteriaToUse) {

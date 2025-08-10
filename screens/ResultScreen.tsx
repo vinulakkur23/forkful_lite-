@@ -163,7 +163,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           rating: rating,
           mealType: mealType,
           thoughts: thoughts,
-          dishCriteria: quickCriteriaResult?.dish_criteria || [],
+          dishCriteria: quickCriteriaResult?.dish_criteria ? {
+            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+              title: criterion.name || criterion.title || 'Quality Aspect',
+              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+            }))
+          } : null,
           dishSpecific: quickCriteriaResult?.dish_specific || '',
           dishGeneral: quickCriteriaResult?.dish_general || '',
           cuisineType: quickCriteriaResult?.cuisine_type || '',
@@ -781,8 +786,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           photoScore: finalPhotoScore, // Always save the photo quality score
           // Add enhanced metadata if available (legacy)
           metadata_enriched: enhancedMetadata || null,
-          // Add dish criteria if available  
-          dish_criteria: dishCriteria || null,
+          // Add dish criteria if available - use converted format from quick service if available
+          dish_criteria: quickCriteriaResult?.dish_criteria ? {
+            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+              title: criterion.name || criterion.title || 'Quality Aspect',
+              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+            }))
+          } : dishCriteria || null,
           // Add combined result for backward compatibility
           combined_result: combinedResult || null,
           // NEW: Add quick criteria result from fast service
@@ -1018,7 +1028,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           rating: rating,
           mealType: mealType,
           thoughts: thoughts,
-          dishCriteria: quickCriteriaResult?.dish_criteria || [],
+          dishCriteria: quickCriteriaResult?.dish_criteria ? {
+            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+              title: criterion.name || criterion.title || 'Quality Aspect',
+              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+            }))
+          } : null,
           dishSpecific: quickCriteriaResult?.dish_specific || '',
           dishGeneral: quickCriteriaResult?.dish_general || '',
           cuisineType: quickCriteriaResult?.cuisine_type || '',
