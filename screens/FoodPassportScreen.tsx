@@ -629,12 +629,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
               source: 'exif'
             };
 
-            // Navigate with EXIF location data
-            navigation.navigate('Crop', {
+            // Navigate directly to RatingScreen2 with EXIF location data
+            navigation.navigate('RatingScreen2', {
               photo: photoObject,
               location: location,
               exifData: exifData, // Pass the full EXIF data for potential future use
-              _navigationKey: `image_${Date.now()}`
+              _navigationKey: `image_${Date.now()}`,
+              photoSource: 'gallery',
+              rating: 0,
+              likedComment: '',
+              dislikedComment: ''
             });
             return;
           } else {
@@ -654,22 +658,30 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
               source: 'device'
             };
 
-            // Navigate with device location as fallback
-            navigation.navigate('Crop', {
+            // Navigate directly to RatingScreen2 with device location as fallback
+            navigation.navigate('RatingScreen2', {
               photo: photoObject,
               location: location,
               // Generate a unique navigation key
-              _navigationKey: `image_${Date.now()}`
+              _navigationKey: `image_${Date.now()}`,
+              photoSource: 'gallery',
+              rating: 0,
+              likedComment: '',
+              dislikedComment: ''
             });
           },
           error => {
             console.log('Location error:', error);
 
-            // Navigate without location info
-            navigation.navigate('Crop', {
+            // Navigate directly to RatingScreen2 without location info
+            navigation.navigate('RatingScreen2', {
               photo: photoObject,
               location: null,
-              _navigationKey: `image_${Date.now()}`
+              _navigationKey: `image_${Date.now()}`,
+              photoSource: 'gallery',
+              rating: 0,
+              likedComment: '',
+              dislikedComment: ''
             });
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }

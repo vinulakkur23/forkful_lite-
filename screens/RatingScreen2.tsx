@@ -864,49 +864,86 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
       */
       
-      // Navigate to Result screen with quick criteria data
-      navigation.navigate('Result', {
+      // Start the API call for quick criteria and navigate to Crop screen
+      // The API call will run in background while user edits photo
+      startQuickCriteriaExtraction(freshPhoto, restaurant, mealName);
+      
+      // Navigate to Crop screen with all the meal data
+      // Clean navigation parameters to avoid circular references
+      const cropNavParams = {
         photo: freshPhoto,
-        location: location,
-        rating: rating,
-        restaurant: restaurant, // Always include restaurant since meal type is always "Restaurant"
-        meal: mealName,
-        mealType: "Restaurant", // Always "Restaurant" - toggle removed
-        thoughts: thoughts,
-        // Keep for backward compatibility
-        likedComment: likedComment,
-        dislikedComment: dislikedComment,
-        // Pass quick criteria data in compatible format for existing screens
-        dishCriteria: quickCriteriaResult ? {
-          criteria: quickCriteriaResult.dish_criteria,
+        location: location ? {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          source: location.source
+        } : null,
+        photoSource: route.params.photoSource || 'unknown',
+        // Pass meal data to be used later in Results
+        mealData: {
+          rating: rating,
+          restaurant: restaurant,
+          meal: mealName,
+          mealType: "Restaurant",
+          thoughts: thoughts,
+          likedComment: likedComment,
+          dislikedComment: dislikedComment
+        },
+        // Pass quick criteria data in simplified format to avoid issues
+        dishCriteria: quickCriteriaResult?.dish_criteria ? {
+          criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+            title: criterion.name || criterion.title || 'Quality Aspect',
+            description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim(),
+            name: criterion.name,
+            what_to_look_for: criterion.what_to_look_for,
+            insight: criterion.insight,
+            test: criterion.test
+          })),
+          dish_specific: quickCriteriaResult.dish_specific,
+          dish_general: quickCriteriaResult.dish_general,
+          cuisine_type: quickCriteriaResult.cuisine_type
+        } : null,
+        // Pass simplified quick criteria result
+        quickCriteriaResult: quickCriteriaResult ? {
           dish_specific: quickCriteriaResult.dish_specific,
           dish_general: quickCriteriaResult.dish_general,
           cuisine_type: quickCriteriaResult.cuisine_type,
-          dish_key: quickCriteriaResult.dish_key
-        } : null,
-        // Pass quick criteria result for new enhanced experience
-        quickCriteriaResult: quickCriteriaResult,
-        // Create compatible combined result structure for backward compatibility
-        combinedResult: quickCriteriaResult ? {
-          metadata: {
-            dish_specific: quickCriteriaResult.dish_specific,
-            dish_general: quickCriteriaResult.dish_general,
-            cuisine_type: quickCriteriaResult.cuisine_type
-          },
-          dish_criteria: {
-            criteria: quickCriteriaResult.dish_criteria,
-            dish_specific: quickCriteriaResult.dish_specific,
-            dish_general: quickCriteriaResult.dish_general,
-            cuisine_type: quickCriteriaResult.cuisine_type
-          }
+          dish_criteria: quickCriteriaResult.dish_criteria,
+          dish_history: quickCriteriaResult.dish_history,
+          llm_provider: quickCriteriaResult.llm_provider
         } : null,
         _uniqueKey: sessionId
-      });
+      };
+      
+      console.log('RatingScreen2 navigating to Crop with cleaned params');
+      navigation.navigate('Crop', cropNavParams);
     } catch (error) {
       logWithSession(`Error preparing image for Result screen: ${error}`);
       Alert.alert('Error', 'Failed to save rating. Please try again.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // Function to start quick criteria extraction in background
+  const startQuickCriteriaExtraction = async (photo: any, restaurant: string, mealName: string) => {
+    try {
+      logWithSession(`Starting background quick criteria extraction for: ${mealName} at ${restaurant}`);
+      
+      // Store the request in global scope so other screens can access it
+      // This allows Results screen to wait for completion
+      const extractionPromise = extractQuickCriteria(
+        photo.uri, 
+        { mealName, restaurant }
+      );
+      
+      // Store in global for later retrieval
+      (global as any).quickCriteriaExtractionPromise = extractionPromise;
+      (global as any).quickCriteriaStartTime = Date.now();
+      
+      logWithSession('Quick criteria extraction started in background');
+    } catch (error) {
+      logWithSession(`Error starting quick criteria extraction: ${error}`);
+      // Don't throw - this is a background operation
     }
   };
   

@@ -224,8 +224,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                   });
               }, 0);
 
-              // Navigate with EXIF location data
-              navigation.navigate('Crop', {
+              // Navigate directly to RatingScreen2 with EXIF location data
+              navigation.navigate('RatingScreen2', {
                 photo: {
                   uri: normalizedPath,
                   width: photo.width,
@@ -235,6 +235,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 exifData: exifData, // Pass the full EXIF data for potential future use
                 photoSource: 'camera',
                 _navigationKey: navigationKey,
+                rating: 0,
+                likedComment: '',
+                dislikedComment: ''
               });
               return;
             } else {
@@ -262,8 +265,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             }, 0);
           }
 
-          // Use device location as fallback if EXIF extraction fails or no GPS data available
-          navigation.navigate('Crop', {
+          // Use device location as fallback - navigate directly to RatingScreen2
+          navigation.navigate('RatingScreen2', {
             photo: {
               uri: normalizedPath,
               width: photo.width,
@@ -272,6 +275,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             location: location, // Use the device location as fallback
             photoSource: 'camera',
             _navigationKey: navigationKey, // Add navigation key for component refresh
+            rating: 0,
+            likedComment: '',
+            dislikedComment: ''
           });
           
         } catch (error) {
@@ -315,8 +321,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // This prevents "view not in window hierarchy" errors
       console.log("Waiting for picker dismissal before navigation...");
       setTimeout(() => {
-        // Navigate to Crop screen with the selected photo and location data
-        navigation.navigate('Crop', {
+        // Navigate directly to RatingScreen2 with the selected photo and location data
+        navigation.navigate('RatingScreen2', {
           photo: {
             uri: photoAsset.uri,
             width: photoAsset.width,
@@ -329,6 +335,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           exifData: photoAsset.exifData,
           photoSource: 'gallery',
           _navigationKey: navigationKey,
+          rating: 0,
+          likedComment: '',
+          dislikedComment: ''
         });
       }, 600); // 600ms delay to ensure picker animation completes
       
@@ -469,13 +478,18 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
               ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000'
               : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000';
             
-            navigation.navigate('EditPhoto', {
+            // Navigate through the proper flow: RatingScreen2 -> Crop -> EditPhoto -> Results
+            navigation.navigate('RatingScreen2', {
               photo: {
                 uri: mockImageUri,
                 width: 800,
                 height: 600
               },
               location: location,
+              photoSource: 'sample',
+              rating: 0,
+              likedComment: '',
+              dislikedComment: ''
             });
           }}
         >

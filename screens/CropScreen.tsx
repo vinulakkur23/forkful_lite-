@@ -168,17 +168,68 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         height: croppedImage.height,
       };
       
-      // Both camera and gallery photos now go to RatingScreen2 for unified flow
-      console.log('Navigating to RatingScreen2 with edits (unified flow)');
-      navigation.navigate('RatingScreen2', {
-        photo: photoData,
-        location: locationToUse,
+      // Navigate directly to Results with cropped image and meal data
+      console.log('Navigating directly to Results with cropped image');
+      
+      // First, let's safely extract and validate all the data
+      const safeMealData = route.params?.mealData ? {
+        rating: route.params.mealData.rating || 0,
+        restaurant: route.params.mealData.restaurant || '',
+        meal: route.params.mealData.meal || '',
+        mealType: route.params.mealData.mealType || 'Restaurant',
+        thoughts: route.params.mealData.thoughts || '',
+        likedComment: route.params.mealData.likedComment || '',
+        dislikedComment: route.params.mealData.dislikedComment || ''
+      } : {
         rating: 0,
+        restaurant: '',
+        meal: '',
+        mealType: 'Restaurant',
+        thoughts: '',
         likedComment: '',
-        dislikedComment: '',
-        suggestionData: cachedSuggestions || undefined,
-        _uniqueKey: `rating_screen2_${timestamp}`,
-      });
+        dislikedComment: ''
+      };
+      
+      const safeLocation = locationToUse ? {
+        latitude: Number(locationToUse.latitude),
+        longitude: Number(locationToUse.longitude),
+        source: String(locationToUse.source || 'unknown')
+      } : null;
+      
+      try {
+        const resultParams = {
+          photo: photoData,
+          location: safeLocation,
+          // Pass meal data for Results screen
+          rating: safeMealData.rating,
+          restaurant: safeMealData.restaurant,
+          meal: safeMealData.meal,
+          mealType: safeMealData.mealType,
+          thoughts: safeMealData.thoughts,
+          likedComment: safeMealData.likedComment,
+          dislikedComment: safeMealData.dislikedComment,
+          // Pass criteria data
+          dishCriteria: route.params?.dishCriteria || null,
+          quickCriteriaResult: route.params?.quickCriteriaResult || null,
+          combinedResult: route.params?.combinedResult || null,
+          suggestionData: cachedSuggestions ? {
+            restaurants: Array.isArray(cachedSuggestions.restaurants) ? cachedSuggestions.restaurants : []
+          } : null,
+          _uniqueKey: `result_${timestamp}`,
+        };
+        
+        console.log('CropScreen navigation to Results params preview:', {
+          hasPhoto: !!resultParams.photo,
+          hasLocation: !!resultParams.location,
+          hasMealData: !!resultParams.rating,
+          uniqueKey: resultParams._uniqueKey
+        });
+        
+        navigation.navigate('Result', resultParams);
+      } catch (navError) {
+        console.error('CropScreen navigation error:', navError);
+        Alert.alert('Navigation Error', 'Failed to proceed to results. Please try again.');
+      }
       
       console.log('Passing location data to RatingScreen:', 
         locationToUse ? `${locationToUse.latitude}, ${locationToUse.longitude} (source: ${locationToUse.source})` : 'No location');

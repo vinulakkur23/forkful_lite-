@@ -293,8 +293,8 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         const timestamp = new Date().getTime();
         const navigationKey = `gallery_photo_${timestamp}`;
         
-        // Navigate to Crop screen with the selected photo and location data
-        navigation.navigate('Crop', {
+        // Navigate directly to RatingScreen2 with the selected photo and location data
+        navigation.navigate('RatingScreen2', {
           photo: {
             uri: photoAsset.uri,
             width: photoAsset.width,
@@ -306,6 +306,10 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
           location: photoAsset.location || null,
           exifData: photoAsset.exifData,
           _navigationKey: navigationKey,
+          photoSource: 'gallery',
+          rating: 0,
+          likedComment: '',
+          dislikedComment: ''
         });
       } catch (error: any) {
         console.error('Error selecting photo from gallery:', error);

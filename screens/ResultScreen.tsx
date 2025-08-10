@@ -88,6 +88,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [enhancedFactsLoading, setEnhancedFactsLoading] = useState(false);
   // Track if we're waiting to navigate to EditMeal
   const [navigateToEditAfterSave, setNavigateToEditAfterSave] = useState(false);
+  // Quick criteria state - can be from props or loaded from background API call
+  const [currentQuickCriteriaResult, setCurrentQuickCriteriaResult] = useState(quickCriteriaResult);
+  const [loadingBackgroundApiCall, setLoadingBackgroundApiCall] = useState(false);
   // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
@@ -141,14 +144,50 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log("ResultScreen with key unmounting:", instanceKey);
     };
   }, [instanceKey]); // Only depend on instanceKey for initialization
+
+  // Check for background API call from RatingScreen2
+  useEffect(() => {
+    // If we don't have quickCriteriaResult but there's a global promise, wait for it
+    if (!currentQuickCriteriaResult && (global as any).quickCriteriaExtractionPromise) {
+      console.log("Found background quick criteria extraction, waiting for completion...");
+      setLoadingBackgroundApiCall(true);
+      
+      const checkBackgroundApiCall = async () => {
+        try {
+          const startTime = (global as any).quickCriteriaStartTime || Date.now();
+          const elapsedTime = Date.now() - startTime;
+          console.log(`Background API call has been running for ${elapsedTime}ms`);
+          
+          // Wait for the promise to complete
+          const result = await (global as any).quickCriteriaExtractionPromise;
+          console.log("Background quick criteria extraction completed:", result);
+          
+          // Update our state with the result
+          setCurrentQuickCriteriaResult(result);
+          
+          // Clear the global promise
+          (global as any).quickCriteriaExtractionPromise = null;
+          (global as any).quickCriteriaStartTime = null;
+          
+        } catch (error) {
+          console.error("Background quick criteria extraction failed:", error);
+          // Continue without criteria data
+        } finally {
+          setLoadingBackgroundApiCall(false);
+        }
+      };
+      
+      checkBackgroundApiCall();
+    }
+  }, []); // Run only once on mount
   
   // Enhanced facts loading effect - separate from initialization
   useEffect(() => {
     // Load enhanced metadata facts if we have quick criteria data
-    if (quickCriteriaResult && !enhancedFacts && !enhancedFactsLoading) {
+    if (currentQuickCriteriaResult && !enhancedFacts && !enhancedFactsLoading) {
       loadEnhancedMetadataFacts();
     }
-  }, [quickCriteriaResult, enhancedFacts, enhancedFactsLoading]);
+  }, [currentQuickCriteriaResult, enhancedFacts, enhancedFactsLoading]);
 
   // Navigate to EditMeal after save when requested
   useEffect(() => {
@@ -163,8 +202,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           rating: rating,
           mealType: mealType,
           thoughts: thoughts,
-          dishCriteria: quickCriteriaResult?.dish_criteria ? {
-            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+          dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
+            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
               title: criterion.name || criterion.title || 'Quality Aspect',
               description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
             }))
@@ -179,7 +218,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Load enhanced metadata facts for detailed information
   const loadEnhancedMetadataFacts = async () => {
-    if (!quickCriteriaResult || !photo?.uri) {
+    if (!currentQuickCriteriaResult || !photo?.uri) {
       console.log("Cannot load enhanced facts - missing quick criteria or photo");
       return;
     }
@@ -201,9 +240,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       
       const result = await extractEnhancedMetadataFacts(
         photo.uri,
-        quickCriteriaResult.dish_specific,
-        quickCriteriaResult.dish_general,
-        quickCriteriaResult.cuisine_type,
+        currentQuickCriteriaResult.dish_specific,
+        currentQuickCriteriaResult.dish_general,
+        currentQuickCriteriaResult.cuisine_type,
         meal,
         restaurant,
         city
@@ -787,8 +826,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           // Add enhanced metadata if available (legacy)
           metadata_enriched: enhancedMetadata || null,
           // Add dish criteria if available - use converted format from quick service if available
-          dish_criteria: quickCriteriaResult?.dish_criteria ? {
-            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+          dish_criteria: currentQuickCriteriaResult?.dish_criteria ? {
+            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
               title: criterion.name || criterion.title || 'Quality Aspect',
               description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
             }))
@@ -796,7 +835,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           // Add combined result for backward compatibility
           combined_result: combinedResult || null,
           // NEW: Add quick criteria result from fast service
-          quick_criteria_result: quickCriteriaResult || null,
+          quick_criteria_result: currentQuickCriteriaResult || null,
           // NEW: Add enhanced metadata facts (will be updated when loaded)
           enhanced_metadata_facts: enhancedFacts || null
         };
@@ -1028,8 +1067,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           rating: rating,
           mealType: mealType,
           thoughts: thoughts,
-          dishCriteria: quickCriteriaResult?.dish_criteria ? {
-            criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
+          dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
+            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
               title: criterion.name || criterion.title || 'Quality Aspect',
               description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
             }))
@@ -1090,31 +1129,39 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         {/* Dish History Section - from quick criteria service */}
-        {quickCriteriaResult && quickCriteriaResult.dish_history && (
+        {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_history && (
           <View style={styles.dishHistoryCard}>
             <Text style={styles.dishHistoryTitle}>About This Dish</Text>
-            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
+            {renderTextWithBold(currentQuickCriteriaResult.dish_history || '', styles.dishHistoryText)}
+          </View>
+        )}
+
+        {/* Loading state for background API call */}
+        {loadingBackgroundApiCall && (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="small" color="#ff6b6b" />
+            <Text style={styles.loadingText}>Analyzing your dish...</Text>
           </View>
         )}
 
         {/* Dish Criteria Section - from quick criteria service */}
-        {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
+        {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_criteria && currentQuickCriteriaResult.dish_criteria.length > 0 && (
           <View style={styles.dishCriteriaCard}>
             <View style={styles.dishCriteriaTitleContainer}>
               <Text style={styles.dishCriteriaTitle}>What to Look For</Text>
               {/* LLM Provider Badge */}
-              {quickCriteriaResult.llm_provider && (
+              {currentQuickCriteriaResult.llm_provider && (
                 <View style={[
                   styles.llmProviderBadge,
-                  quickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
+                  currentQuickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
                 ]}>
                   <Text style={styles.llmProviderText}>
-                    {quickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
+                    {currentQuickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
                   </Text>
                 </View>
               )}
             </View>
-            {quickCriteriaResult.dish_criteria.map((criterion, index) => {
+            {currentQuickCriteriaResult.dish_criteria.map((criterion, index) => {
               // Ensure criterion is an object with string properties
               if (!criterion || typeof criterion !== 'object') return null;
               
@@ -1596,6 +1643,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     color: '#1a2b49',
+  },
+  loadingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1a2b49',
+    marginLeft: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

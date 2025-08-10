@@ -537,17 +537,49 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
             console.log('Passing EXIF data to Rating screen');
           }
 
-          // Use navigate with a unique key to force a new instance
-          navigation.navigate('Rating', {
+          // Navigate to Results screen with edited photo and meal data
+          // Clean the parameters to avoid circular references
+          const cleanParams = {
             photo: freshImageSource,
-            location: location,
-            // Pass the prefetched suggestion data if available
-            suggestionData: useSuggestionData,
-            // Pass the EXIF data if available
-            exifData: exifData,
-            _navigationKey: sessionId, // This helps React Navigation identify this as a new navigation
-            _uniqueKey: `rating_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` // Special key for RatingScreen2
-          });
+            location: location ? {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              source: location.source
+            } : null,
+            // Pass through all meal data from RatingScreen2
+            rating: route.params.mealData?.rating || 0,
+            restaurant: route.params.mealData?.restaurant || '',
+            meal: route.params.mealData?.meal || '',
+            mealType: route.params.mealData?.mealType || "Restaurant",
+            thoughts: route.params.mealData?.thoughts || '',
+            likedComment: route.params.mealData?.likedComment || '',
+            dislikedComment: route.params.mealData?.dislikedComment || '',
+            // Pass basic dish criteria data only (avoid deep objects)
+            dishCriteria: route.params.dishCriteria || null,
+            quickCriteriaResult: route.params.quickCriteriaResult || null,
+            combinedResult: route.params.combinedResult || null,
+            // Clean suggestion data to avoid potential issues
+            suggestionData: useSuggestionData ? {
+              restaurants: useSuggestionData.restaurants || []
+            } : null,
+            // Include exifData if available
+            exifData: exifData || null,
+            _uniqueKey: sessionId
+          };
+          
+          try {
+            console.log('EditPhoto navigating to Results with clean params', {
+              hasPhoto: !!cleanParams.photo,
+              hasLocation: !!cleanParams.location,
+              hasMealData: !!cleanParams.rating,
+              uniqueKey: cleanParams._uniqueKey
+            });
+            navigation.navigate('Result', cleanParams);
+          } catch (navError) {
+            console.error('Navigation error in EditPhoto:', navError);
+            console.error('Failed params:', JSON.stringify(cleanParams, null, 2));
+            Alert.alert('Navigation Error', 'Failed to navigate to results. Please try again.');
+          }
         } catch (error) {
           console.error('Error preparing image for Rating screen:', error);
           Alert.alert('Error', 'Failed to prepare image for rating. Please try again.');
