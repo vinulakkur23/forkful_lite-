@@ -1146,6 +1146,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                   }, 200);
                 }}
                 placeholder="Enter meal name"
+                autoCapitalize="words"
               />
               
               {/* Single button that changes state based on meal suggestions */}
@@ -1231,7 +1232,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             {isProcessing ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text style={styles.saveButtonText}>Save Rating</Text>
+              <Text style={styles.saveButtonText}>Crop and Edit</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1404,7 +1405,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 300, // Increased height from 200 to 300
+    height: 400, // Increased height from 300 to 400 to make photo bigger
     borderRadius: 12, // Matching card radius from HomeScreen
     overflow: 'hidden',
     backgroundColor: '#FAF3E0', // Card background color from HomeScreen

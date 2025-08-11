@@ -816,7 +816,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             style={styles.headerButtonIcon}
           />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Meal</Text>
+        <Text style={styles.headerTitle}>Rate and Edit</Text>
         <View style={styles.headerRightButton} />
       </View>
 
@@ -897,19 +897,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               />
             </View>
           )}
-          
-          {/* Debug info - remove after testing */}
-          {__DEV__ && (
-            <View style={{ padding: 10, backgroundColor: '#f0f0f0', margin: 10 }}>
-              <Text style={{ fontSize: 12, color: '#666' }}>
-                DEBUG: dishCriteria.length = {dishCriteria.length}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666' }}>
-                Has criteria: {dishCriteria.length > 0 ? 'YES' : 'NO'}
-              </Text>
-            </View>
-          )}
-
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.sectionTitle}>Dish it out! Let's hear your thoughts.</Text>

@@ -243,26 +243,30 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     if (navigateToEditAfterSave && mealId && saved) {
       setNavigateToEditAfterSave(false); // Reset flag
-      navigation.navigate('EditMeal', {
-        mealId: mealId,
-        meal: {
-          id: mealId,
-          meal: meal,
-          restaurant: restaurant,
-          rating: rating,
-          mealType: mealType,
-          thoughts: thoughts,
-          dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
-            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
-              title: criterion.name || criterion.title || 'Quality Aspect',
-              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-            }))
-          } : null,
-          dishSpecific: quickCriteriaResult?.dish_specific || '',
-          dishGeneral: quickCriteriaResult?.dish_general || '',
-          cuisineType: quickCriteriaResult?.cuisine_type || '',
-        }
-      });
+      const currentUser = auth().currentUser;
+      if (currentUser) {
+        navigation.navigate('EditMeal', {
+          mealId: mealId,
+          meal: {
+            id: mealId,
+            userId: currentUser.uid, // Add the userId to authorize editing
+            meal: meal,
+            restaurant: restaurant,
+            rating: rating,
+            mealType: mealType,
+            thoughts: thoughts,
+            dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
+              criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
+                title: criterion.name || criterion.title || 'Quality Aspect',
+                description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+              }))
+            } : null,
+            dishSpecific: quickCriteriaResult?.dish_specific || '',
+            dishGeneral: quickCriteriaResult?.dish_general || '',
+            cuisineType: quickCriteriaResult?.cuisine_type || '',
+          }
+        });
+      }
     }
   }, [mealId, saved, navigateToEditAfterSave]);
 
@@ -1157,6 +1161,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         mealId: mealId,
         meal: {
           id: mealId,
+          userId: user.uid, // Add the userId to authorize editing
           meal: meal,
           restaurant: restaurant,
           rating: rating,
@@ -1215,14 +1220,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Restore the saving overlay to see if dish criteria loads */}
-        {saving && (
-          <View style={styles.savingOverlay}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.savingText}>Preparing your rating...</Text>
+        {/* Loading screen when criteria aren't loaded yet */}
+        {(!currentQuickCriteriaResult && !loadingBackgroundApiCall) && (
+          <View style={styles.criteriaLoadingContainer}>
+            <ActivityIndicator size="large" color="#2C5530" />
+            <Text style={styles.criteriaLoadingText}>Stick Around to Learn What to Look For in Your Meal!</Text>
           </View>
         )}
-
 
         {/* Dish History Section - from quick criteria service */}
         {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_history && (
@@ -1401,6 +1405,20 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: 10,
     fontSize: 16,
+  },
+  criteriaLoadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    marginBottom: 20,
+  },
+  criteriaLoadingText: {
+    color: '#2C5530',
+    marginTop: 20,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   detailsCard: {
     backgroundColor: '#FAF3E0',

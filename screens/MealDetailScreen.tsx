@@ -799,16 +799,39 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* AI Metadata Tags Section */}
-        {meal.aiMetadata && (
+        {/* Enhanced Metadata Tags Section */}
+        {(meal.enhanced_metadata_facts?.metadata || meal.quick_criteria_result || meal.aiMetadata) && (
           <View style={styles.metadataSection}>
             <View style={styles.metadataTagsContainer}>
-              {meal.aiMetadata.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown' && (
+              {/* Dish Specific */}
+              {meal.quick_criteria_result?.dish_specific && meal.quick_criteria_result.dish_specific !== 'Unknown' && (
                 <View style={styles.metadataTag}>
-                  <Text style={styles.metadataTagText}>{meal.aiMetadata.cuisineType}</Text>
+                  <Text style={styles.metadataTagText}>{meal.quick_criteria_result.dish_specific}</Text>
                 </View>
               )}
-              {meal.aiMetadata.foodType && meal.aiMetadata.foodType.length > 0 && 
+
+              {/* Cuisine Type - prioritize enhanced metadata, fallback to quick criteria or old AI metadata */}
+              {((meal.enhanced_metadata_facts?.metadata?.cuisine_type && meal.enhanced_metadata_facts.metadata.cuisine_type !== 'Unknown') || 
+                (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type !== 'Unknown') ||
+                (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown')) && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>
+                    {meal.enhanced_metadata_facts?.metadata?.cuisine_type || 
+                     meal.quick_criteria_result?.cuisine_type || 
+                     meal.aiMetadata?.cuisineType}
+                  </Text>
+                </View>
+              )}
+
+              {/* Dish General - from quick criteria */}
+              {meal.quick_criteria_result?.dish_general && meal.quick_criteria_result.dish_general !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.quick_criteria_result.dish_general}</Text>
+                </View>
+              )}
+
+              {/* Food Type - from old AI metadata if available */}
+              {meal.aiMetadata?.foodType && meal.aiMetadata.foodType.length > 0 && 
                !meal.aiMetadata.foodType.includes('Unknown') && (
                 <>
                   {Array.isArray(meal.aiMetadata.foodType) ? (
@@ -818,28 +841,85 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                       </View>
                     ))
                   ) : (
-                    // Handle old data that might still be a string
                     <View style={styles.metadataTag}>
                       <Text style={styles.metadataTagText}>{meal.aiMetadata.foodType}</Text>
                     </View>
                   )}
                 </>
               )}
-              {meal.aiMetadata.mealType && meal.aiMetadata.mealType !== 'Unknown' && (
+              
+              {/* Meal Type - prioritize enhanced metadata, fallback to old AI metadata */}
+              {((meal.enhanced_metadata_facts?.metadata?.meal_type && meal.enhanced_metadata_facts.metadata.meal_type !== 'Unknown') ||
+                (meal.aiMetadata?.mealType && meal.aiMetadata.mealType !== 'Unknown')) && (
                 <View style={styles.metadataTag}>
-                  <Text style={styles.metadataTagText}>{meal.aiMetadata.mealType}</Text>
+                  <Text style={styles.metadataTagText}>
+                    {meal.enhanced_metadata_facts?.metadata?.meal_type || meal.aiMetadata?.mealType}
+                  </Text>
                 </View>
               )}
-              {meal.aiMetadata.primaryProtein && meal.aiMetadata.primaryProtein !== 'Unknown' && (
+              
+              {/* Cooking Method */}
+              {meal.enhanced_metadata_facts?.metadata?.cooking_method && meal.enhanced_metadata_facts.metadata.cooking_method !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.enhanced_metadata_facts.metadata.cooking_method}</Text>
+                </View>
+              )}
+              
+              {/* Presentation Style */}
+              {meal.enhanced_metadata_facts?.metadata?.presentation_style && meal.enhanced_metadata_facts.metadata.presentation_style !== 'Unknown' && (
+                <View style={styles.metadataTag}>
+                  <Text style={styles.metadataTagText}>{meal.enhanced_metadata_facts.metadata.presentation_style}</Text>
+                </View>
+              )}
+
+              {/* Primary Protein - from old AI metadata */}
+              {meal.aiMetadata?.primaryProtein && meal.aiMetadata.primaryProtein !== 'Unknown' && (
                 <View style={styles.metadataTag}>
                   <Text style={styles.metadataTagText}>{meal.aiMetadata.primaryProtein}</Text>
                 </View>
               )}
-              {meal.aiMetadata.dietType && meal.aiMetadata.dietType !== 'Unknown' && (
+
+              {/* Diet Type - from old AI metadata */}
+              {meal.aiMetadata?.dietType && meal.aiMetadata.dietType !== 'Unknown' && (
                 <View style={styles.metadataTag}>
                   <Text style={styles.metadataTagText}>{meal.aiMetadata.dietType}</Text>
                 </View>
               )}
+              
+              {/* Key Ingredients */}
+              {meal.enhanced_metadata_facts?.metadata?.key_ingredients && Array.isArray(meal.enhanced_metadata_facts.metadata.key_ingredients) && 
+                meal.enhanced_metadata_facts.metadata.key_ingredients.map((ingredient, index) => (
+                  <View key={`ingredient-${index}`} style={styles.metadataTag}>
+                    <Text style={styles.metadataTagText}>{ingredient}</Text>
+                  </View>
+                ))
+              }
+              
+              {/* Flavor Profile */}
+              {meal.enhanced_metadata_facts?.metadata?.flavor_profile && Array.isArray(meal.enhanced_metadata_facts.metadata.flavor_profile) && 
+                meal.enhanced_metadata_facts.metadata.flavor_profile.map((flavor, index) => (
+                  <View key={`flavor-${index}`} style={styles.metadataTag}>
+                    <Text style={styles.metadataTagText}>{flavor}</Text>
+                  </View>
+                ))
+              }
+              
+              {/* Dietary Info */}
+              {meal.enhanced_metadata_facts?.metadata?.dietary_info && Array.isArray(meal.enhanced_metadata_facts.metadata.dietary_info) && 
+                meal.enhanced_metadata_facts.metadata.dietary_info.map((diet, index) => (
+                  <View key={`diet-${index}`} style={styles.metadataTag}>
+                    <Text style={styles.metadataTagText}>{diet}</Text>
+                  </View>
+                ))
+              }
+              
+              {/* Special/Interesting Ingredient - highlighted */}
+              {meal.enhanced_metadata_facts?.metadata?.interesting_ingredient && meal.enhanced_metadata_facts.metadata.interesting_ingredient !== 'Unknown' && (
+                <View style={[styles.metadataTag, styles.specialIngredientTag]}>
+                  <Text style={styles.metadataTagText}>⭐ {meal.enhanced_metadata_facts.metadata.interesting_ingredient}</Text>
+                </View>
+              )}
+
               {/* City tag */}
               {(meal.location?.city || meal.city) && (
                 <View style={[styles.metadataTag, styles.cityTag]}>
@@ -1684,6 +1764,9 @@ const styles = StyleSheet.create({
   },
   cityTag: {
     backgroundColor: '#1a2b49', // Navy blue to match app theme
+  },
+  specialIngredientTag: {
+    backgroundColor: '#ff6b6b', // Red/orange to highlight special ingredients
   },
   metadataTagText: {
     color: '#fff',

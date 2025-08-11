@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import GlobalAchievementListener from './components/GlobalAchievementListener';
 import GlobalChallengeListener from './components/GlobalChallengeListener';
 import OnboardingOverlay from './components/OnboardingOverlay';
+import { warmupQuickCriteriaService } from './services/quickCriteriaService';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -505,7 +506,7 @@ function TabNavigator() {
         component={RatingScreen2}
         options={{
           title: 'Meal Details',
-          headerShown: true,
+          headerShown: false, // Hide the header
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
@@ -578,13 +579,20 @@ const App: React.FC = () => {
     }
   };
 
-  // Configure Google Sign-In
+  // Configure Google Sign-In and warm up backend
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
       iosClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
       offlineAccess: true,
       forceCodeForRefreshToken: true,
+    });
+    
+    // PERFORMANCE: Warm up the backend service to reduce first API call delay
+    warmupQuickCriteriaService().then(success => {
+      console.log(`Backend warmup ${success ? 'completed' : 'failed'}`);
+    }).catch(error => {
+      console.log('Backend warmup error:', error);
     });
   }, []);
   

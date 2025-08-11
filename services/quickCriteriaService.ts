@@ -25,6 +25,12 @@ export interface QuickCriteriaResponse {
   success: boolean;
   data: QuickCriteriaData;
   message: string;
+  provider?: string; // Added: current LLM provider
+  performance?: {    // Added: performance metrics
+    total_time_seconds: number;
+    api_time_seconds: number;
+    read_time_seconds: number;
+  };
 }
 
 /**
@@ -73,8 +79,16 @@ export const extractQuickCriteria = async (
     if (result.success && result.data) {
       console.log('QuickCriteriaService: Successfully extracted quick criteria:', {
         dish: result.data.dish_specific,
-        criteria_count: result.data.dish_criteria?.length || 0
+        criteria_count: result.data.dish_criteria?.length || 0,
+        provider: result.provider,
+        performance: result.performance
       });
+      
+      // Log performance metrics if available
+      if (result.performance) {
+        console.log(`QuickCriteriaService PERFORMANCE: Total: ${result.performance.total_time_seconds}s, API: ${result.performance.api_time_seconds}s, Read: ${result.performance.read_time_seconds}s`);
+      }
+      
       return result.data;
     } else {
       console.error('QuickCriteriaService: API returned success=false');
@@ -84,5 +98,39 @@ export const extractQuickCriteria = async (
   } catch (error) {
     console.error('QuickCriteriaService: Error extracting quick criteria:', error);
     return null;
+  }
+};
+
+/**
+ * Warmup the backend service to reduce cold start delays
+ * Call this when the app starts or when user navigates to camera
+ */
+export const warmupQuickCriteriaService = async (): Promise<boolean> => {
+  try {
+    console.log('QuickCriteriaService: Warming up backend...');
+    
+    const response = await fetch(`${BASE_URL}/warmup`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      console.warn(`QuickCriteriaService: Warmup failed with status ${response.status}`);
+      return false;
+    }
+    
+    const result = await response.json();
+    console.log('QuickCriteriaService: Backend warmed up successfully:', {
+      status: result.status,
+      warmup_time: result.warmup_time_seconds,
+      provider: result.services?.quick_criteria?.provider
+    });
+    
+    return result.status === 'ready';
+  } catch (error) {
+    console.error('QuickCriteriaService: Warmup error:', error);
+    return false;
   }
 };
