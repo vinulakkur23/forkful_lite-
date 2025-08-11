@@ -40,6 +40,8 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService';
 import Geolocation from '@react-native-community/geolocation';
+// Import Firebase for saving meal data
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
 declare module '../App' {
@@ -795,6 +797,67 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
   };
   
+  // Upload image to Firebase Storage
+  const uploadImageToFirebase = async (imageUri: string, userId: string): Promise<string> => {
+    try {
+      console.log('📤 Uploading image to Firebase Storage...');
+      
+      // Check authentication first
+      const currentUser = auth().currentUser;
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Refresh auth token to ensure we have valid credentials
+      try {
+        await currentUser.reload();
+        await currentUser.getIdToken(true); // Force refresh
+        console.log('✅ Auth token refreshed successfully');
+      } catch (authError) {
+        console.error('❌ Auth token refresh failed:', authError);
+        throw new Error('Authentication failed - please log in again');
+      }
+      
+      const timestamp = new Date().getTime();
+      const filename = `meal_${timestamp}.jpg`;
+      const storagePath = `meals/${userId}/${filename}`;
+      const reference = storage().ref(storagePath);
+      
+      console.log('Uploading to path:', storagePath);
+      
+      // Upload the file with metadata
+      const metadata = {
+        customMetadata: {
+          userId: userId,
+          timestamp: timestamp.toString(),
+          uploadSource: 'RatingScreen2'
+        }
+      };
+      
+      await reference.putFile(imageUri, metadata);
+      console.log('✅ File uploaded successfully');
+      
+      // Get download URL
+      const downloadURL = await reference.getDownloadURL();
+      console.log('✅ Image uploaded to Firebase Storage:', downloadURL);
+      
+      return downloadURL;
+    } catch (error) {
+      console.error('❌ Error uploading image to Firebase:', error);
+      
+      // Provide more specific error messages
+      if (error.code === 'storage/unauthorized') {
+        throw new Error('Not authorized to upload images. Please check your login status.');
+      } else if (error.code === 'storage/canceled') {
+        throw new Error('Upload was cancelled');
+      } else if (error.code === 'storage/unknown') {
+        throw new Error('An unknown error occurred during upload');
+      }
+      
+      throw error;
+    }
+  };
+
   // Function to save rating and navigate to result screen
   const saveRating = async () => {
     try {
@@ -830,28 +893,112 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         sessionId: sessionId
       };
       
-      // Start the dish criteria API in background - don't wait for it
-      logWithSession('Starting dish criteria API in background...');
+      // ASYNC (NON-BLOCKING) but SEQUENTIAL: Start dish criteria API and let it run in background
+      logWithSession('Starting dish criteria API asynchronously...');
       let quickCriteriaResult: QuickCriteriaData | null = null;
       
-      // Clear any existing global promises first
-      if ((global as any).quickCriteriaExtractionPromise) {
-        logWithSession('Clearing previous dish criteria promise');
-        (global as any).quickCriteriaExtractionPromise = null;
-        (global as any).quickCriteriaMealData = null;
+      // CLEAN APPROACH: Create basic meal entry first, then update with criteria
+      console.log('🧹 Creating basic meal entry first...');
+      
+      // Get current user
+      const user = auth().currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to save your meal');
+        setIsProcessing(false);
+        return;
       }
       
-      // Start background API call
-      const backgroundPromise = extractQuickCriteria(
+      console.log('User authenticated:', user.uid);
+      
+      // Extract city from restaurant name for location data
+      let cityInfo = '';
+      if (restaurant) {
+        const restaurantParts = restaurant.split(',');
+        if (restaurantParts.length > 1) {
+          cityInfo = restaurantParts[1].trim();
+        }
+      }
+      
+      // IMPORTANT: Don't upload image yet - wait until after editing
+      console.log('Skipping image upload - will upload after editing');
+      
+      // Create basic meal data (without image URL yet)
+      const basicMealData = {
+        userId: user.uid,
+        userName: user.displayName || 'Anonymous User',
+        userPhoto: user.photoURL || null,
+        photoUrl: null, // Will be updated after editing
+        rating: rating,
+        restaurant: restaurant || '',
+        meal: mealName || '',
+        mealType: mealType || 'Restaurant',
+        city: cityInfo,
+        comments: thoughts ? { thoughts: thoughts } : {},
+        location: location ? {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          source: location.source || 'unknown',
+          city: cityInfo
+        } : null,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        sessionId: sessionId,
+        platform: Platform.OS,
+        appVersion: '1.0.0',
+        // Initially null - will be updated by background API call
+        quick_criteria_result: null,
+        dish_criteria: null
+      };
+      
+      // Save basic meal data and get the document ID
+      const docRef = await firestore().collection('mealEntries').add(basicMealData);
+      const mealId = docRef.id;
+      console.log('✅ Basic meal saved with ID:', mealId);
+      logWithSession(`Basic meal saved: ${mealId}`);
+      
+      // Now start the API call to update this specific meal with criteria
+      const quickCriteriaPromise = extractQuickCriteria(
         freshPhoto.uri,
         { mealName, restaurant }
       );
       
-      // Store in global scope for ResultScreen to pick up
-      (global as any).quickCriteriaExtractionPromise = backgroundPromise;
-      (global as any).quickCriteriaMealData = { mealName, restaurant };
+      // Update the specific meal document when criteria are ready
+      quickCriteriaPromise.then(async (result) => {
+        if (result) {
+          console.log('✅ Quick criteria completed in background:', result.dish_specific);
+          logWithSession(`Quick criteria completed: ${result.dish_specific}`);
+          
+          // Update the existing meal document with criteria
+          try {
+            console.log('🔄 Updating meal with criteria in Firestore...');
+            
+            const criteriaUpdate = {
+              quick_criteria_result: result,
+              dish_criteria: result.dish_criteria ? {
+                criteria: result.dish_criteria.map(criterion => ({
+                  title: criterion.name || criterion.title || 'Quality Aspect',
+                  description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+                }))
+              } : null,
+              criteria_updated_at: firestore.FieldValue.serverTimestamp()
+            };
+            
+            await firestore().collection('mealEntries').doc(mealId).update(criteriaUpdate);
+            console.log('🎉 Meal updated with criteria:', mealId);
+            logWithSession(`Meal updated with criteria: ${mealId}`);
+            
+          } catch (firestoreError) {
+            console.error('❌ Error saving to Firestore:', firestoreError);
+            logWithSession(`Firestore save error: ${firestoreError}`);
+          }
+        } else {
+          console.warn('⚠️ Quick criteria returned null - cannot save');
+        }
+      }).catch(error => {
+        console.error('❌ Quick criteria failed:', error);
+        logWithSession(`Quick criteria error: ${error}`);
+      });
       
-      console.log('DEBUG: Dish criteria API started in background');
+      console.log('DEBUG: Dish criteria API running asynchronously');
       logWithSession('Dish criteria API started - continuing with navigation');
       
       /* COMMENTED OUT - Using new quick criteria service instead
@@ -879,8 +1026,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // API call completed synchronously above - no need for background call
       
-      // Navigate to Crop screen with all the meal data
-      // Clean navigation parameters to avoid circular references
+      // CLEAN APPROACH: Navigate with meal ID instead of all meal data
       const cropNavParams = {
         photo: freshPhoto,
         location: location ? {
@@ -889,39 +1035,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           source: location.source
         } : null,
         photoSource: route.params.photoSource || 'unknown',
-        // Pass meal data to be used later in Results
-        mealData: {
-          rating: rating,
-          restaurant: restaurant,
-          meal: mealName,
-          mealType: "Restaurant",
-          thoughts: thoughts,
-          likedComment: likedComment,
-          dislikedComment: dislikedComment
-        },
-        // Pass quick criteria data in simplified format to avoid issues
-        dishCriteria: quickCriteriaResult?.dish_criteria ? {
-          criteria: quickCriteriaResult.dish_criteria.map(criterion => ({
-            title: criterion.name || criterion.title || 'Quality Aspect',
-            description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim(),
-            name: criterion.name,
-            what_to_look_for: criterion.what_to_look_for,
-            insight: criterion.insight,
-            test: criterion.test
-          })),
-          dish_specific: quickCriteriaResult.dish_specific,
-          dish_general: quickCriteriaResult.dish_general,
-          cuisine_type: quickCriteriaResult.cuisine_type
-        } : null,
-        // Pass simplified quick criteria result
-        quickCriteriaResult: quickCriteriaResult ? {
-          dish_specific: quickCriteriaResult.dish_specific,
-          dish_general: quickCriteriaResult.dish_general,
-          cuisine_type: quickCriteriaResult.cuisine_type,
-          dish_criteria: quickCriteriaResult.dish_criteria,
-          dish_history: quickCriteriaResult.dish_history,
-          llm_provider: quickCriteriaResult.llm_provider
-        } : null,
+        // CLEAN: Pass meal ID instead of meal data - screens will load from Firestore
+        mealId: mealId,
         _uniqueKey: sessionId
       };
       

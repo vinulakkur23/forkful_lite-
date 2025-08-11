@@ -49,6 +49,8 @@ declare module '../App' {
       } | null;
       exifData?: any;
       _navigationKey: string;
+      // CLEAN APPROACH: Pass meal ID instead of meal data
+      mealId?: string;
       // New parameters for adding photos to existing meals
       isAddingToExistingMeal?: boolean;
       existingMealId?: string;
@@ -73,7 +75,7 @@ type Props = {
 const { width: screenWidth } = Dimensions.get('window');
 
 const CropScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, location, _navigationKey, isAddingToExistingMeal, existingMealId, returnToEditMeal } = route.params;
+  const { photo, location, _navigationKey, mealId, isAddingToExistingMeal, existingMealId, returnToEditMeal } = route.params;
   const [processing, setProcessing] = useState(false);
   const [prefetchingSuggestions, setPrefetchingSuggestions] = useState(false);
   const [brightnessValue, setBrightnessValue] = useState(1.0);
@@ -169,27 +171,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         height: croppedImage.height,
       };
       
-      // Navigate directly to Results with cropped image and meal data
-      console.log('Navigating directly to Results with cropped image');
-      
-      // First, let's safely extract and validate all the data
-      const safeMealData = route.params?.mealData ? {
-        rating: route.params.mealData.rating || 0,
-        restaurant: route.params.mealData.restaurant || '',
-        meal: route.params.mealData.meal || '',
-        mealType: route.params.mealData.mealType || 'Restaurant',
-        thoughts: route.params.mealData.thoughts || '',
-        likedComment: route.params.mealData.likedComment || '',
-        dislikedComment: route.params.mealData.dislikedComment || ''
-      } : {
-        rating: 0,
-        restaurant: '',
-        meal: '',
-        mealType: 'Restaurant',
-        thoughts: '',
-        likedComment: '',
-        dislikedComment: ''
-      };
+      // CLEAN APPROACH: Navigate to Results with cropped image and meal ID
+      console.log('Navigating to Results with cropped image and meal ID:', mealId);
       
       const safeLocation = locationToUse ? {
         latitude: Number(locationToUse.latitude),
@@ -201,28 +184,15 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         const resultParams = {
           photo: photoData,
           location: safeLocation,
-          // Pass meal data for Results screen
-          rating: safeMealData.rating,
-          restaurant: safeMealData.restaurant,
-          meal: safeMealData.meal,
-          mealType: safeMealData.mealType,
-          thoughts: safeMealData.thoughts,
-          likedComment: safeMealData.likedComment,
-          dislikedComment: safeMealData.dislikedComment,
-          // Pass criteria data
-          dishCriteria: route.params?.dishCriteria || null,
-          quickCriteriaResult: route.params?.quickCriteriaResult || null,
-          combinedResult: route.params?.combinedResult || null,
-          suggestionData: cachedSuggestions ? {
-            restaurants: Array.isArray(cachedSuggestions.restaurants) ? cachedSuggestions.restaurants : []
-          } : null,
+          // CLEAN APPROACH: Pass meal ID to load data from Firestore
+          mealId: mealId,
           _uniqueKey: `result_${timestamp}`,
         };
         
         console.log('CropScreen navigation to Results params preview:', {
           hasPhoto: !!resultParams.photo,
           hasLocation: !!resultParams.location,
-          hasMealData: !!resultParams.rating,
+          mealId: resultParams.mealId,
           uniqueKey: resultParams._uniqueKey
         });
         

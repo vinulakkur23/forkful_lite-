@@ -537,8 +537,7 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
             console.log('Passing EXIF data to Rating screen');
           }
 
-          // Navigate to Results screen with edited photo and meal data
-          // Clean the parameters to avoid circular references
+          // CLEAN APPROACH: Pass meal ID and photo - ResultScreen will load from Firestore
           const cleanParams = {
             photo: freshImageSource,
             location: location ? {
@@ -546,22 +545,8 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
               longitude: location.longitude,
               source: location.source
             } : null,
-            // Pass through all meal data from RatingScreen2
-            rating: route.params.mealData?.rating || 0,
-            restaurant: route.params.mealData?.restaurant || '',
-            meal: route.params.mealData?.meal || '',
-            mealType: route.params.mealData?.mealType || "Restaurant",
-            thoughts: route.params.mealData?.thoughts || '',
-            likedComment: route.params.mealData?.likedComment || '',
-            dislikedComment: route.params.mealData?.dislikedComment || '',
-            // Pass basic dish criteria data only (avoid deep objects)
-            dishCriteria: route.params.dishCriteria || null,
-            quickCriteriaResult: route.params.quickCriteriaResult || null,
-            combinedResult: route.params.combinedResult || null,
-            // Clean suggestion data to avoid potential issues
-            suggestionData: useSuggestionData ? {
-              restaurants: useSuggestionData.restaurants || []
-            } : null,
+            // CLEAN: Pass meal ID instead of meal data - ResultScreen will load from Firestore
+            mealId: route.params.mealId || null,
             // Include exifData if available
             exifData: exifData || null,
             _uniqueKey: sessionId

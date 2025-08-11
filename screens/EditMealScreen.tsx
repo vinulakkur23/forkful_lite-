@@ -112,7 +112,76 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         allFields: Object.keys(freshMealData)
       });
       
+      // IMPORTANT: Set fresh data directly to state to avoid stale data issues
       setMeal(freshMealData);
+      
+      // Set rating
+      setRating(freshMealData.rating || 0);
+      
+      // Set photos from fresh data
+      if (freshMealData.photos && Array.isArray(freshMealData.photos)) {
+        console.log('EditMealScreen - Setting photos from fresh data:', freshMealData.photos.length);
+        setPhotos(freshMealData.photos);
+      } else if (freshMealData.photoUrl) {
+        console.log('EditMealScreen - Converting single photoUrl to photos array');
+        setPhotos([{
+          url: freshMealData.photoUrl,
+          isFlagship: true,
+          order: 0,
+          uploadedAt: freshMealData.createdAt
+        }]);
+      } else {
+        setPhotos([]);
+      }
+      
+      // Load criteria from fresh data
+      let criteriaToUse = null;
+      
+      if (freshMealData.dish_criteria?.criteria && Array.isArray(freshMealData.dish_criteria.criteria)) {
+        console.log('EditMealScreen - Using criteria from fresh dish_criteria');
+        criteriaToUse = freshMealData.dish_criteria.criteria;
+      } else if (freshMealData.combined_result?.dish_criteria?.criteria && Array.isArray(freshMealData.combined_result.dish_criteria.criteria)) {
+        console.log('EditMealScreen - Using criteria from fresh combined_result');
+        criteriaToUse = freshMealData.combined_result.dish_criteria.criteria;
+      } else if (freshMealData.quick_criteria_result?.dish_criteria && Array.isArray(freshMealData.quick_criteria_result.dish_criteria)) {
+        console.log('EditMealScreen - Converting criteria from fresh quick_criteria_result');
+        criteriaToUse = freshMealData.quick_criteria_result.dish_criteria.map(criterion => ({
+          title: criterion.name || 'Quality Aspect',
+          description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
+        }));
+      }
+      
+      if (criteriaToUse) {
+        setDishCriteria(criteriaToUse);
+        
+        if (freshMealData.criteria_ratings) {
+          setCriteriaRatings(freshMealData.criteria_ratings);
+        } else {
+          const defaultRatings: { [key: string]: number } = {};
+          criteriaToUse.forEach((criterion: DishCriterion) => {
+            defaultRatings[criterion.title] = 5;
+          });
+          setCriteriaRatings(defaultRatings);
+        }
+      } else {
+        setDishCriteria([]);
+        setCriteriaRatings({});
+      }
+      
+      // Set thoughts
+      if (freshMealData.comments?.thoughts) {
+        setThoughts(freshMealData.comments.thoughts);
+      } else if (freshMealData.comments?.liked || freshMealData.comments?.disliked) {
+        const liked = freshMealData.comments?.liked || '';
+        const disliked = freshMealData.comments?.disliked || '';
+        if (liked && disliked) {
+          setThoughts(`${liked}\n\n${disliked}`);
+        } else {
+          setThoughts(liked || disliked);
+        }
+      } else {
+        setThoughts('');
+      }
     } catch (error) {
       console.error('EditMealScreen - Error fetching fresh meal data:', error);
       Alert.alert('Error', 'Failed to load meal data');
@@ -184,106 +253,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   }, []);
 
-  // Update state if meal data changes (e.g., if screen is reused)
+  // IMPORTANT: This effect is intentionally minimal to prevent stale data issues
+  // All criteria, photos, and metadata are loaded fresh from Firestore by fetchFreshMealData()
   useEffect(() => {
-    console.log('EditMealScreen - Meal data changed, updating state');
-    setRating(meal.rating || 0);
-    
-    // Update photos from meal data
-    if (meal.photos && Array.isArray(meal.photos)) {
-      // New format - meal has photos array
-      console.log('EditMealScreen - Loading photos from meal.photos:', meal.photos);
-      setPhotos(meal.photos);
-    } else if (meal.photoUrl) {
-      // Legacy format - convert single photo to array
-      console.log('EditMealScreen - Converting single photoUrl to photos array:', meal.photoUrl);
-      setPhotos([{
-        url: meal.photoUrl,
-        isFlagship: true,
-        order: 0,
-        uploadedAt: meal.createdAt
-      }]);
-    } else {
-      console.log('EditMealScreen - No photos found in meal data');
-      setPhotos([]);
-    }
-    
-    // Load dish criteria and ratings from combined service (preferred) or fallback to separate service
-    console.log('EditMealScreen - Checking for dish criteria in meal:', {
-      hasCombinedResult: !!meal.combined_result,
-      hasCombinedCriteria: !!meal.combined_result?.dish_criteria?.criteria,
-      combinedCriteriaLength: meal.combined_result?.dish_criteria?.criteria?.length || 0,
-      hasSeparateCriteria: !!meal.dish_criteria?.criteria,
-      separateCriteriaLength: meal.dish_criteria?.criteria?.length || 0
-    });
-    
-    // Try to find criteria in the following priority order:
-    // 1. Converted criteria from quick service (saved by ResultScreen)
-    // 2. Combined service criteria (legacy)
-    // 3. Quick criteria result (raw format, needs conversion)
-    let criteriaToUse = null;
-    
-    // First check for converted criteria saved by ResultScreen
-    if (meal.dish_criteria?.criteria && Array.isArray(meal.dish_criteria.criteria)) {
-      console.log('EditMealScreen - Using converted criteria from dish_criteria:', meal.dish_criteria.criteria);
-      criteriaToUse = meal.dish_criteria.criteria;
-    } 
-    // Fallback to combined service format
-    else if (meal.combined_result?.dish_criteria?.criteria && Array.isArray(meal.combined_result.dish_criteria.criteria)) {
-      console.log('EditMealScreen - Using criteria from combined service:', meal.combined_result.dish_criteria.criteria);
-      criteriaToUse = meal.combined_result.dish_criteria.criteria;
-    }
-    // If we have raw quick criteria result, convert it
-    else if (meal.quick_criteria_result?.dish_criteria && Array.isArray(meal.quick_criteria_result.dish_criteria)) {
-      console.log('EditMealScreen - Converting raw quick criteria result:', meal.quick_criteria_result.dish_criteria);
-      criteriaToUse = meal.quick_criteria_result.dish_criteria.map(criterion => ({
-        title: criterion.name || 'Quality Aspect',
-        description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-      }));
-    }
-    
-    if (criteriaToUse) {
-      setDishCriteria(criteriaToUse);
-      
-      // Load existing criteria ratings if available
-      if (meal.criteria_ratings) {
-        console.log('EditMealScreen - Loading existing criteria ratings:', meal.criteria_ratings);
-        setCriteriaRatings(meal.criteria_ratings);
-      } else {
-        // Initialize with default ratings if no previous ratings exist
-        const defaultRatings: { [key: string]: number } = {};
-        criteriaToUse.forEach((criterion: DishCriterion) => {
-          defaultRatings[criterion.title] = 5; // Default to 5/10
-        });
-        console.log('EditMealScreen - Created default ratings:', defaultRatings);
-        setCriteriaRatings(defaultRatings);
-      }
-    } else {
-      console.log('EditMealScreen - No dish criteria found in meal data');
-      setDishCriteria([]);
-      setCriteriaRatings({});
-    }
-    
-    // Handle both new thoughts format and legacy liked/disliked format
-    if (meal.comments?.thoughts) {
-      // New format - use thoughts directly
-      setThoughts(meal.comments.thoughts);
-    } else {
-      // Legacy format - combine liked and disliked comments
-      const liked = meal.comments?.liked || '';
-      const disliked = meal.comments?.disliked || '';
-      
-      if (liked && disliked) {
-        setThoughts(`${liked}\n\n${disliked}`);
-      } else if (liked) {
-        setThoughts(liked);
-      } else if (disliked) {
-        setThoughts(disliked);
-      } else {
-        setThoughts('');
-      }
-    }
-  }, [meal.id, meal.rating, meal.photoUrl, meal.photos, meal.dish_criteria, meal.criteria_ratings, meal.comments?.thoughts, meal.comments?.liked, meal.comments?.disliked]);
+    console.log('EditMealScreen - Meal prop received, all data will be loaded fresh from Firestore');
+    // DO NOT load criteria, photos, or metadata from props here - they will be stale
+    // fetchFreshMealData() handles all data loading properly
+  }, [meal.id]); // Only depend on meal ID
   
   // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);

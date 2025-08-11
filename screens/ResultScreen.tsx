@@ -64,43 +64,110 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const {
     photo,
     location,
-    rating,
-    restaurant,
-    meal,
-    mealType = "Restaurant",
-    thoughts = '',
-    // Keep for backward compatibility
-    likedComment = '',
-    dislikedComment = '',
-    // New: Enhanced metadata and dish criteria
-    enhancedMetadata,
-    dishCriteria,
-    // Combined result for backward compatibility
-    combinedResult,
-    // NEW: Quick criteria result from fast service
-    quickCriteriaResult
+    // CLEAN APPROACH: Get meal ID to load data from Firestore
+    mealId: routeMealId
   } = route.params;
+  
+  // State for meal data loaded from Firestore
+  const [mealData, setMealData] = useState<any>(null);
+  const [loadingMealData, setLoadingMealData] = useState(true);
+  
+  // Extract meal data from loaded state (with fallbacks for compatibility)
+  const rating = mealData?.rating || 0;
+  const restaurant = mealData?.restaurant || '';
+  const meal = mealData?.meal || '';
+  const mealType = mealData?.mealType || "Restaurant";
+  const thoughts = mealData?.comments?.thoughts || '';
+  const likedComment = mealData?.comments?.liked || '';
+  const dislikedComment = mealData?.comments?.disliked || '';
+  const quickCriteriaResult = mealData?.quick_criteria_result || null;
+  const dishCriteria = mealData?.dish_criteria || null;
+  const enhancedMetadata = mealData?.metadata_enriched || null;
+  const combinedResult = mealData?.combined_result || null;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
-  const [mealId, setMealId] = useState<string | null>(null);
-  // Enhanced metadata facts state
-  const [enhancedFacts, setEnhancedFacts] = useState<EnhancedFactsData | null>(null);
-  const [enhancedFactsLoading, setEnhancedFactsLoading] = useState(false);
+  const [savedMealId, setSavedMealId] = useState<string | null>(null);
   // Track if we're waiting to navigate to EditMeal
   const [navigateToEditAfterSave, setNavigateToEditAfterSave] = useState(false);
-  // Quick criteria state - can be from props or loaded from background API call
-  const [currentQuickCriteriaResult, setCurrentQuickCriteriaResult] = useState(quickCriteriaResult);
-  const [loadingBackgroundApiCall, setLoadingBackgroundApiCall] = useState(false);
+  // SIMPLIFIED STATE: No more contamination-prone state variables for criteria or enhanced facts
   // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
-  const instanceKey = `${photo?.uri || ''}`;
+  const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
+
+  // Load meal data from Firestore with real-time listener
+  const loadMealFromFirestore = async () => {
+    if (!routeMealId) {
+      console.error("No meal ID provided to ResultScreen");
+      Alert.alert("Error", "No meal data available");
+      navigation.goBack();
+      return;
+    }
+
+    try {
+      console.log("🔄 Setting up Firestore listener for meal ID:", routeMealId);
+      setLoadingMealData(true);
+
+      // Use onSnapshot for real-time updates
+      const unsubscribe = firestore()
+        .collection('mealEntries')
+        .doc(routeMealId)
+        .onSnapshot(
+          (mealDoc) => {
+            if (!mealDoc.exists) {
+              console.error("Meal not found in Firestore:", routeMealId);
+              Alert.alert("Error", "Meal not found");
+              navigation.goBack();
+              return;
+            }
+
+            const loadedMealData = { id: mealDoc.id, ...mealDoc.data() };
+            console.log("✅ Meal data updated from Firestore:", {
+              id: loadedMealData.id,
+              meal: loadedMealData.meal,
+              restaurant: loadedMealData.restaurant,
+              hasCriteria: !!loadedMealData.quick_criteria_result,
+              hasEnhancedFacts: !!loadedMealData.enhanced_metadata_facts,
+              criteriaTimestamp: loadedMealData.criteria_updated_at ? new Date(loadedMealData.criteria_updated_at.seconds * 1000).toLocaleTimeString() : 'None'
+            });
+
+            setMealData(loadedMealData);
+            setSavedMealId(loadedMealData.id);
+            setSaved(true);
+            setLoadingMealData(false);
+          },
+          (error) => {
+            console.error("Error in Firestore listener:", error);
+            Alert.alert("Error", "Failed to load meal data");
+            navigation.goBack();
+          }
+        );
+
+      // Return the unsubscribe function to clean up the listener
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error setting up Firestore listener:", error);
+      Alert.alert("Error", "Failed to load meal data");
+      navigation.goBack();
+      setLoadingMealData(false);
+    }
+  };
 
   // Initialization effect - runs only once per instance
   useEffect(() => {
-    console.log("ResultScreen mounted with key:", instanceKey);
+    console.log("ResultScreen mounted with key:", instanceKey, "mealId:", routeMealId);
+    
+    let unsubscribe: (() => void) | null = null;
+    
+    // Load meal data from Firestore with real-time listener
+    const setupListener = async () => {
+      const unsubscribeFunc = await loadMealFromFirestore();
+      unsubscribe = unsubscribeFunc || null;
+    };
+    
+    setupListener();
 
     // Validate the photo object
     if (!photo || !photo.uri) {
@@ -131,136 +198,102 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaving(false);
     setSaved(false);
     setPhotoUrl(null);
-    setCurrentQuickCriteriaResult(null); // Clear any old criteria data
-    setEnhancedFacts(null); // Clear any old enhanced facts
+    // CLEAN APPROACH: Meal is already saved, no need to save again
     
-    // If user is logged in, save data automatically (only once per instance)
-    const user = auth().currentUser;
-    if (user) {
-      // Small delay to ensure component renders first
-      setTimeout(async () => {
-        console.log("Triggering save to Firebase with token refresh");
-        
-        // Refresh token before automatic save to prevent auth issues
-        try {
-          await user.reload();
-          await user.getIdToken(true);
-          console.log("Token refreshed successfully before automatic save");
-        } catch (tokenError) {
-          console.error("Failed to refresh token before automatic save:", tokenError);
-          // Continue anyway - the existing token might still work
-        }
-        
-        saveToFirebase();
-      }, 100);
-    }
+    // Enhanced metadata processing will be handled in a separate useEffect after meal data loads
     
     return () => {
       console.log("ResultScreen with key unmounting:", instanceKey);
+      // Clean up the Firestore listener
+      if (unsubscribe) {
+        console.log("Cleaning up Firestore listener");
+        unsubscribe();
+      }
     };
   }, [instanceKey]); // Only depend on instanceKey for initialization
 
-  // Handle background API from RatingScreen2 with validation
+  // CLEAN APPROACH: Clear global state only - display uses props, processing is background
   useEffect(() => {
-    console.log("ResultScreen criteria check:", {
-      currentMeal: meal,
-      currentRestaurant: restaurant,
-      hasCurrentResult: !!currentQuickCriteriaResult,
-      currentResultMeal: currentQuickCriteriaResult?.dish_specific,
-      hasPropResult: !!quickCriteriaResult,
-      propResultMeal: quickCriteriaResult?.dish_specific
-    });
+    console.log("ResultScreen CLEAN approach - clearing global state only");
     
-    // First, try to use data passed directly in props
-    if (quickCriteriaResult) {
-      console.log("Using quick criteria data passed directly from RatingScreen2");
-      setCurrentQuickCriteriaResult(quickCriteriaResult);
-      return;
-    }
-    
-    // If no direct data, check for background API call
-    if ((global as any).quickCriteriaExtractionPromise) {
-      console.log("Found background quick criteria extraction, checking if it matches current meal");
-      
-      const globalMealData = (global as any).quickCriteriaMealData;
-      
-      // Validate the background API matches current meal
-      console.log('DEBUG: Validating background API data:', {
-        hasGlobalMealData: !!globalMealData,
-        globalPhotoUri: globalMealData?.photoUri,
-        currentPhotoUri: photo?.uri,
-        photoMatch: globalMealData?.photoUri === photo?.uri,
-        globalMealName: globalMealData?.mealName,
-        currentMeal: meal,
-        mealMatch: globalMealData?.mealName === meal,
-        globalRestaurant: globalMealData?.restaurant,
-        currentRestaurant: restaurant,
-        restaurantMatch: globalMealData?.restaurant === restaurant
-      });
-      
-      const isValidForCurrentMeal = 
-        globalMealData &&
-        globalMealData.mealName === meal &&
-        globalMealData.restaurant === restaurant;
-      
-      if (isValidForCurrentMeal) {
-        console.log("Background API matches current meal - waiting for completion");
-        
-        const handleBackgroundAPI = async () => {
-          try {
-            const result = await (global as any).quickCriteriaExtractionPromise;
-            console.log("Background quick criteria extraction completed:", result);
-            setCurrentQuickCriteriaResult(result);
-          } catch (error) {
-            console.error("Background quick criteria extraction failed:", error);
-          } finally {
-            // Clear global data after use
-            (global as any).quickCriteriaExtractionPromise = null;
-            (global as any).quickCriteriaStartTime = null;
-            (global as any).quickCriteriaMealData = null;
+    // Clear any stale global state
+    (global as any).quickCriteriaExtractionPromise = null;
+    (global as any).quickCriteriaStartTime = null;
+    (global as any).quickCriteriaMealData = null;
+  }, [instanceKey]);
+
+  // Process image upload and enhanced metadata after meal data is loaded
+  useEffect(() => {
+    if (mealData && !loadingMealData && photo?.uri) {
+      const processImageAndMetadata = async () => {
+        try {
+          // First, check if image needs to be uploaded (this is the EDITED image from crop/edit flow)
+          if (!mealData.photoUrl) {
+            console.log("🖼️ Uploading edited image to Firebase Storage...");
+            console.log("Image source:", photo.uri);
+            
+            const user = auth().currentUser;
+            if (!user) {
+              console.error("No authenticated user for image upload");
+              return;
+            }
+            
+            const imageUrl = await uploadImageToFirebase();
+            console.log("✅ Edited image uploaded successfully:", imageUrl);
+            
+            // Update Firestore with image URL
+            await firestore().collection('mealEntries').doc(mealData.id).update({
+              photoUrl: imageUrl,
+              photoUploadedAt: firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Update local state
+            setPhotoUrl(imageUrl);
+            setMealData({
+              ...mealData,
+              photoUrl: imageUrl
+            });
+          } else {
+            console.log("✅ Image already exists for meal:", mealData.id, "URL:", mealData.photoUrl);
+            setPhotoUrl(mealData.photoUrl);
           }
-        };
-        
-        handleBackgroundAPI();
-      } else {
-        console.warn("Background API doesn't match current meal - clearing stale data");
-        (global as any).quickCriteriaExtractionPromise = null;
-        (global as any).quickCriteriaStartTime = null;
-        (global as any).quickCriteriaMealData = null;
-      }
+          
+          // Then check if enhanced metadata is needed
+          if (!mealData.enhanced_metadata_facts) {
+            console.log("Starting enhanced metadata processing for meal:", mealData.id);
+            processMetadataForMeal(mealData.id, photo.uri, mealData.meal, mealData.restaurant, mealData.location);
+          } else {
+            console.log("✅ Enhanced metadata already exists for meal:", mealData.id);
+          }
+        } catch (error) {
+          console.error("Error processing image/metadata:", error);
+          Alert.alert("Upload Error", "Failed to upload the edited image. Please try again.");
+        }
+      };
+      
+      processImageAndMetadata();
     }
-  }, [instanceKey]); // Only run once per instance
+  }, [mealData, loadingMealData, photo]);
   
-  // Enhanced facts loading effect - separate from initialization
-  useEffect(() => {
-    // Load enhanced metadata facts if we have quick criteria data
-    if (currentQuickCriteriaResult && !enhancedFacts && !enhancedFactsLoading) {
-      loadEnhancedMetadataFacts();
-    }
-  }, [currentQuickCriteriaResult, enhancedFacts, enhancedFactsLoading]);
+  // REMOVED: Old enhanced facts loading effect - now handled by processMetadataForMeal
 
   // Navigate to EditMeal after save when requested
   useEffect(() => {
-    if (navigateToEditAfterSave && mealId && saved) {
+    if (navigateToEditAfterSave && savedMealId && saved) {
       setNavigateToEditAfterSave(false); // Reset flag
       const currentUser = auth().currentUser;
       if (currentUser) {
         navigation.navigate('EditMeal', {
-          mealId: mealId,
+          mealId: savedMealId,
           meal: {
-            id: mealId,
+            id: savedMealId,
             userId: currentUser.uid, // Add the userId to authorize editing
             meal: meal,
             restaurant: restaurant,
             rating: rating,
             mealType: mealType,
             thoughts: thoughts,
-            dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
-              criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
-                title: criterion.name || criterion.title || 'Quality Aspect',
-                description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-              }))
-            } : null,
+            dishCriteria: null, // Will be loaded fresh from API and saved to Firestore
             dishSpecific: quickCriteriaResult?.dish_specific || '',
             dishGeneral: quickCriteriaResult?.dish_general || '',
             cuisineType: quickCriteriaResult?.cuisine_type || '',
@@ -268,71 +301,69 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         });
       }
     }
-  }, [mealId, saved, navigateToEditAfterSave]);
+  }, [savedMealId, saved, navigateToEditAfterSave]);
 
-  // Load enhanced metadata facts for detailed information
-  const loadEnhancedMetadataFacts = async () => {
-    if (!currentQuickCriteriaResult || !photo?.uri) {
-      console.log("Cannot load enhanced facts - missing quick criteria or photo");
-      return;
-    }
-    
-    console.log("Loading enhanced metadata and facts...");
-    setEnhancedFactsLoading(true);
-    
+  // CLEAN APPROACH: Process only enhanced metadata (criteria already done in RatingScreen2)
+  const processMetadataForMeal = async (mealId: string, photoUri: string, mealName: string, restaurantName: string, mealLocation: any) => {
     try {
+      console.log("🔄 Processing enhanced metadata for meal:", mealId, "dish:", mealName, "restaurant:", restaurantName);
+      
+      // First, get the existing criteria from the meal (should already exist from RatingScreen2)
+      const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+      const existingMealData = mealDoc.data();
+      const existingCriteria = existingMealData?.quick_criteria_result;
+      
+      if (!existingCriteria) {
+        console.warn("⚠️ No existing criteria found - enhanced metadata needs criteria");
+        return;
+      }
+      
+      console.log("✅ Using existing criteria:", existingCriteria.dish_specific);
+      
       // Extract city from location or restaurant
       let city = '';
-      if (location && location.city) {
-        city = location.city;
-      } else if (restaurant) {
-        const restaurantParts = restaurant.split(',');
+      if (mealLocation && mealLocation.city) {
+        city = mealLocation.city;
+      } else if (restaurantName) {
+        const restaurantParts = restaurantName.split(',');
         if (restaurantParts.length > 1) {
           city = restaurantParts[1].trim();
         }
       }
       
-      const result = await extractEnhancedMetadataFacts(
-        photo.uri,
-        currentQuickCriteriaResult.dish_specific,
-        currentQuickCriteriaResult.dish_general,
-        currentQuickCriteriaResult.cuisine_type,
-        meal,
-        restaurant,
+      // Extract enhanced metadata using existing criteria
+      console.log("Extracting enhanced metadata facts...");
+      const freshEnhancedFacts = await extractEnhancedMetadataFacts(
+        photoUri,
+        existingCriteria.dish_specific,
+        existingCriteria.dish_general,
+        existingCriteria.cuisine_type,
+        mealName,
+        restaurantName,
         city
       );
       
-      if (result) {
-        console.log("Enhanced metadata and facts loaded successfully");
-        setEnhancedFacts(result);
+      if (freshEnhancedFacts) {
+        console.log("✅ Enhanced facts extracted for meal:", mealName);
         
-        // Update Firebase with enhanced facts if we have a meal ID
-        if (mealId && saved) {
-          updateMealWithEnhancedFacts(mealId, result);
-        }
+        // Update Firestore with enhanced facts only
+        await firestore().collection('mealEntries').doc(mealId).update({
+          enhanced_metadata_facts: freshEnhancedFacts,
+          enhanced_facts_updated_at: firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log("🎉 Enhanced metadata processing completed for meal:", mealId);
       } else {
-        console.log("Failed to load enhanced metadata and facts");
+        console.warn("⚠️ Enhanced facts extraction failed for meal:", mealId);
       }
     } catch (error) {
-      console.error("Error loading enhanced metadata and facts:", error);
-    } finally {
-      setEnhancedFactsLoading(false);
+      console.error("❌ Error processing enhanced metadata for meal:", mealId, error);
     }
   };
 
-  // Update Firebase meal with enhanced metadata facts
-  const updateMealWithEnhancedFacts = async (mealId: string, facts: EnhancedFactsData) => {
-    try {
-      console.log("Updating meal with enhanced metadata and facts...");
-      await firestore().collection('mealEntries').doc(mealId).update({
-        enhanced_metadata_facts: facts,
-        enhanced_facts_updated_at: firestore.FieldValue.serverTimestamp()
-      });
-      console.log("Successfully updated meal with enhanced facts");
-    } catch (error) {
-      console.error("Error updating meal with enhanced facts:", error);
-    }
-  };
+  // OLD FUNCTION REMOVED - replaced by processMetadataForMeal
+
+  // OLD FUNCTION REMOVED - now handled within processMetadataForMeal
 
   // Removed loadMealEnhancement function - no longer using meal enhancement service
 
@@ -654,7 +685,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const saveToFirebase = async (): Promise<void> => {
+  // REMOVED: saveToFirebase function - meals are now saved in RatingScreen2
+  const REMOVED_saveToFirebase = async (): Promise<void> => {
     // Get current user from the imported auth function
     const user = auth().currentUser;
 
@@ -835,7 +867,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Use default photo score since we're no longer using photo enhancement
         const finalPhotoScore = 5; // Default photo score
         
-        // Save meal data to Firestore, ensuring location data is preserved
+        // Save BASIC meal data to Firestore first (no criteria or enhanced metadata to avoid contamination)
         const mealData = {
           userId: user.uid,
           // Add user name and photo from the authenticated user
@@ -877,21 +909,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           platform: Platform.OS,
           appVersion: '1.0.0', // Add app version for debugging
           photoScore: finalPhotoScore, // Always save the photo quality score
-          // Add enhanced metadata if available (legacy)
-          metadata_enriched: enhancedMetadata || null,
-          // Add dish criteria if available - use converted format from quick service if available
-          dish_criteria: currentQuickCriteriaResult?.dish_criteria ? {
-            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
-              title: criterion.name || criterion.title || 'Quality Aspect',
-              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-            }))
-          } : dishCriteria || null,
-          // Add combined result for backward compatibility
-          combined_result: combinedResult || null,
-          // NEW: Add quick criteria result from fast service
-          quick_criteria_result: currentQuickCriteriaResult || null,
-          // NEW: Add enhanced metadata facts (will be updated when loaded)
-          enhanced_metadata_facts: enhancedFacts || null
+          // CLEAN APPROACH: No criteria or enhanced metadata in initial save to prevent contamination
+          metadata_enriched: null,
+          dish_criteria: null,
+          combined_result: null,
+          quick_criteria_result: null,
+          enhanced_metadata_facts: null
         };
         
         // Final log of what's being saved to database
@@ -913,11 +936,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // Store the meal ID so we can use it for achievement checking
         setMealId(docRef.id);
 
-        // Process both regular and enhanced metadata in parallel
-        console.log("Starting metadata processing and achievement check flow...");
+        // CLEAN SEQUENTIAL PROCESSING: Make fresh API calls tied to this specific meal ID
+        console.log("🧹 CLEAN APPROACH: Starting fresh API calls for meal ID:", docRef.id);
+
+        // Start background processing that will update this specific meal document
+        processMetadataForMeal(docRef.id, photo.uri, meal, restaurant, location);
         
-        // Enhanced metadata extraction is now handled by combined service in RatingScreen2
-        // This separate extraction is no longer needed since we pass combinedResult from RatingScreen2
+        console.log("Background metadata processing started for meal:", docRef.id);
         
         /* COMMENTED OUT - Using combined service instead
         extractEnhancedMetadata(photo.uri, meal, restaurant, undefined)
@@ -1154,35 +1179,31 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
     
-    // Check if meal is already saved
-    if (saved && mealId) {
-      // If already saved, navigate directly to EditMeal
+    // CLEAN APPROACH: Meal is already saved in Firestore, just navigate
+    if (savedMealId && mealData) {
+      console.log("Navigating to EditMeal with meal ID:", savedMealId);
       navigation.navigate('EditMeal', {
-        mealId: mealId,
+        mealId: savedMealId,
         meal: {
-          id: mealId,
-          userId: user.uid, // Add the userId to authorize editing
+          id: savedMealId,
+          userId: user.uid,
           meal: meal,
           restaurant: restaurant,
           rating: rating,
           mealType: mealType,
           thoughts: thoughts,
-          dishCriteria: currentQuickCriteriaResult?.dish_criteria ? {
-            criteria: currentQuickCriteriaResult.dish_criteria.map(criterion => ({
-              title: criterion.name || criterion.title || 'Quality Aspect',
-              description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-            }))
-          } : null,
+          dishCriteria: dishCriteria,
           dishSpecific: quickCriteriaResult?.dish_specific || '',
           dishGeneral: quickCriteriaResult?.dish_general || '',
           cuisineType: quickCriteriaResult?.cuisine_type || '',
         }
       });
     } else {
-      // Set flag to navigate after save
-      setNavigateToEditAfterSave(true);
-      // Save the meal
-      await saveToFirebase();
+      console.error("No meal ID or meal data available for editing", {
+        hasSavedMealId: !!savedMealId,
+        hasMealData: !!mealData
+      });
+      Alert.alert('Error', 'Unable to edit meal - meal data not ready yet. Please wait a moment and try again.');
     }
   };
 
@@ -1217,11 +1238,34 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setImageError(true);
   };
 
+  // Show loading screen while meal data is being fetched
+  if (loadingMealData) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.criteriaLoadingContainer}>
+          <ActivityIndicator size="large" color="#2C5530" />
+          <Text style={styles.criteriaLoadingText}>Loading your meal data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error if no meal data
+  if (!mealData) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.criteriaLoadingContainer}>
+          <Text style={styles.criteriaLoadingText}>Unable to load meal data</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Loading screen when criteria aren't loaded yet */}
-        {(!currentQuickCriteriaResult && !loadingBackgroundApiCall) && (
+        {!quickCriteriaResult && (
           <View style={styles.criteriaLoadingContainer}>
             <ActivityIndicator size="large" color="#2C5530" />
             <Text style={styles.criteriaLoadingText}>Stick Around to Learn What to Look For in Your Meal!</Text>
@@ -1229,39 +1273,33 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         {/* Dish History Section - from quick criteria service */}
-        {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_history && (
+        {quickCriteriaResult && quickCriteriaResult.dish_history && (
           <View style={styles.dishHistoryCard}>
             <Text style={styles.dishHistoryTitle}>About This Dish</Text>
-            {renderTextWithBold(currentQuickCriteriaResult.dish_history || '', styles.dishHistoryText)}
+            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
           </View>
         )}
 
-        {/* Loading state for background API call */}
-        {loadingBackgroundApiCall && (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator size="small" color="#ff6b6b" />
-            <Text style={styles.loadingText}>Analyzing your dish...</Text>
-          </View>
-        )}
+        {/* REMOVED: Loading state - processing now happens in background after save */}
 
         {/* Dish Criteria Section - from quick criteria service */}
-        {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_criteria && currentQuickCriteriaResult.dish_criteria.length > 0 && (
+        {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
           <View style={styles.dishCriteriaCard}>
             <View style={styles.dishCriteriaTitleContainer}>
               <Text style={styles.dishCriteriaTitle}>What to Look For</Text>
               {/* LLM Provider Badge */}
-              {currentQuickCriteriaResult.llm_provider && (
+              {quickCriteriaResult.llm_provider && (
                 <View style={[
                   styles.llmProviderBadge,
-                  currentQuickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
+                  quickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
                 ]}>
                   <Text style={styles.llmProviderText}>
-                    {currentQuickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
+                    {quickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
                   </Text>
                 </View>
               )}
             </View>
-            {currentQuickCriteriaResult.dish_criteria.map((criterion, index) => {
+            {quickCriteriaResult.dish_criteria.map((criterion, index) => {
               // Ensure criterion is an object with string properties
               if (!criterion || typeof criterion !== 'object') return null;
               
