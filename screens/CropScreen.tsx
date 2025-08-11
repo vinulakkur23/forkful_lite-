@@ -81,6 +81,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const [saturationValue, setSaturationValue] = useState(1.0);
   const [croppedImage, setCroppedImage] = useState<{uri: string, width: number, height: number} | null>(null);
   const [hasEdits, setHasEdits] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
   // Use refs to track component mounted state
   const isMounted = useRef(true);
@@ -253,11 +254,19 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       const isNewPhoto = photo?.uri && photo.uri !== prevPhotoUri.current;
       
       if (isNewPhoto) {
-        console.log('New photo detected, resetting suggestion fetch state and clearing cache');
+        console.log('New photo detected, resetting all state and clearing cache');
         // Store the current URI as previous for next comparison
         prevPhotoUri.current = photo.uri;
         // Reset the suggestion fetched state to ensure we fetch again
         suggestionsFetched.current = false;
+        
+        // Reset all editing values to defaults for new photo
+        setBrightnessValue(1.0);
+        setContrastValue(1.0);
+        setSaturationValue(1.0);
+        setCroppedImage(null);
+        setHasEdits(false);
+        setImageLoaded(false);
         
         // IMMEDIATELY clear any previous prefetched suggestions to prevent using stale data
         if ((global as any).prefetchedSuggestions) {
@@ -815,10 +824,16 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           >
             <Image
               source={{ uri: croppedImage.uri }}
-              style={styles.editPreviewImage}
+              style={[styles.editPreviewImage, !imageLoaded && { opacity: 0 }]}
               resizeMode="contain"
+              onLoadEnd={() => setImageLoaded(true)}
             />
           </ColorMatrix>
+          {!imageLoaded && (
+            <View style={StyleSheet.absoluteFillObject}>
+              <ActivityIndicator size="large" color="#ff6b6b" style={{ flex: 1 }} />
+            </View>
+          )}
         </ViewShot>
       </View>
       

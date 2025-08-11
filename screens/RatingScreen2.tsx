@@ -97,18 +97,20 @@ interface LocationData {
 }
 
 const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
-  const { photo, rating, thoughts, likedComment, dislikedComment } = route.params;
+  // Don't destructure photo to avoid stale closures
+  const { rating, thoughts, likedComment, dislikedComment } = route.params;
+  const photo = route.params.photo; // Always get fresh photo from route params
   
   // Create a session ID to track this specific photo instance
   const photoSessionRef = useRef<string>(`photo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
-  const photoUriRef = useRef<string>(photo.uri);
+  const photoUriRef = useRef<string>(route.params.photo.uri);
   // Track the last photo URI that we fetched restaurants for
   const trackedPhotoUri = useRef<string>('');
   
-  // Restaurant and meal state - initialize with existing data if editing
+  // Restaurant and meal state - only initialize with existing data if editing an existing meal
   const [location, setLocation] = useState<LocationData | null>(null);
-  const [restaurant, setRestaurant] = useState(route.params.restaurant || "");
-  const [mealName, setMealName] = useState(route.params.meal || "");
+  const [restaurant, setRestaurant] = useState(route.params.isEditingExisting ? (route.params.restaurant || "") : "");
+  const [mealName, setMealName] = useState(route.params.isEditingExisting ? (route.params.meal || "") : "");
   // Meal type is always "Restaurant" - toggle removed
   const mealType = "Restaurant";
   const [suggestedRestaurants, setSuggestedRestaurants] = useState<Restaurant[]>([]);
@@ -303,21 +305,18 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                                       (global as any).prefetchedPhotoUri === currentPhotoUri;
       
       let restaurants: Restaurant[] = [];
-      let prefetchedMenuItems: string[] = [];
-      let prefetchedMealSuggestions: string[] = [];
+      // MENU SUGGESTIONS DISABLED FOR PERFORMANCE - removing menu-related variables
+      // let prefetchedMenuItems: string[] = [];
+      // let prefetchedMealSuggestions: string[] = [];
       
       if (hasPrefetchedSuggestions) {
         logWithSession("Using prefetched restaurant suggestions from CropScreen");
         restaurants = (global as any).prefetchedSuggestions.restaurants || [];
-        prefetchedMenuItems = (global as any).prefetchedSuggestions.menu_items || [];
-        prefetchedMealSuggestions = (global as any).prefetchedSuggestions.suggested_meals || [];
+        // MENU SUGGESTIONS DISABLED - not loading menu items or meal suggestions
+        // prefetchedMenuItems = (global as any).prefetchedSuggestions.menu_items || [];
+        // prefetchedMealSuggestions = (global as any).prefetchedSuggestions.suggested_meals || [];
         
-        if (prefetchedMealSuggestions.length === 0 && (global as any).prefetchedSuggestions.suggested_meal) {
-          // For backward compatibility with older prefetched data
-          prefetchedMealSuggestions = [(global as any).prefetchedSuggestions.suggested_meal];
-        }
-        
-        logWithSession(`Found ${restaurants.length} prefetched restaurants, ${prefetchedMenuItems.length} menu items, and ${prefetchedMealSuggestions.length} meal suggestions`);
+        logWithSession(`Found ${restaurants.length} prefetched restaurants (menu suggestions disabled for performance)`);
       } else {
         // If no prefetched data, make a direct API call
         logWithSession("No prefetched data, calling Places API directly");
@@ -355,23 +354,26 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             setLocation(restaurantLocation);
           }
           
+          // MENU SUGGESTIONS DISABLED FOR PERFORMANCE
           // Set prefetched menu items if available
-          if (prefetchedMenuItems.length > 0) {
-            logWithSession(`Setting ${prefetchedMenuItems.length} prefetched menu items`);
-            setMenuItems(prefetchedMenuItems);
-          }
+          // if (prefetchedMenuItems.length > 0) {
+          //   logWithSession(`Setting ${prefetchedMenuItems.length} prefetched menu items`);
+          //   setMenuItems(prefetchedMenuItems);
+          // }
           
           // Set prefetched meal suggestions if available
-          if (prefetchedMealSuggestions.length > 0) {
-            logWithSession(`Setting ${prefetchedMealSuggestions.length} prefetched meal suggestions`);
-            setSuggestedMeals(prefetchedMealSuggestions);
-            setIsLoadingMealSuggestions(false);
-          } else {
-            // If we don't have prefetched meal suggestions but we do have a restaurant, 
-            // fetch them now (as a fallback)
-            logWithSession("No prefetched meal suggestions, will try to fetch them now");
-            // Menu suggestions removed for performance
-          }
+          // if (prefetchedMealSuggestions.length > 0) {
+          //   logWithSession(`Setting ${prefetchedMealSuggestions.length} prefetched meal suggestions`);
+          //   setSuggestedMeals(prefetchedMealSuggestions);
+          //   setIsLoadingMealSuggestions(false);
+          // } else {
+          //   // If we don't have prefetched meal suggestions but we do have a restaurant, 
+          //   // fetch them now (as a fallback)
+          //   logWithSession("No prefetched meal suggestions, will try to fetch them now");
+          //   // Menu suggestions removed for performance
+          // }
+          
+          logWithSession("Menu and meal suggestions disabled for performance - user will enter meal name manually");
           
           // Don't auto-populate the meal field anymore
           // Instead we'll just rely on the suggestions button to show options
@@ -562,28 +564,28 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // Check if the current photo URI matches the prefetched photo URI
     // This helps detect when we're handling a completely new photo vs the same photo
     const isSamePhotoAsPrefetched = 
-      (global as any).prefetchedPhotoUri === photo.uri || 
-      (global as any).currentPhotoUri === photo.uri;
+      (global as any).prefetchedPhotoUri === route.params.photo.uri || 
+      (global as any).currentPhotoUri === route.params.photo.uri;
     
     // We're NO LONGER clearing prefetched suggestions here
     // They should already be cleared in CropScreen when a new photo is detected
     // and we want to preserve the original phasset location data from CropScreen
     if (isSamePhotoAsPrefetched) {
-      console.log(`Using existing prefetched suggestions for photo: ${photo.uri}`);
+      console.log(`Using existing prefetched suggestions for photo: ${route.params.photo.uri}`);
       if ((global as any).prefetchedLocation) {
         console.log(`Preserved original location data: ${(global as any).prefetchedLocation.latitude}, ${(global as any).prefetchedLocation.longitude} (source: ${(global as any).prefetchedLocation.source})`);
       }
     } else {
-      console.log(`No matching prefetched data for photo: ${photo.uri}`);
-      console.log(`Expected: ${(global as any).prefetchedPhotoUri || 'none'}, Current: ${photo.uri}`);
+      console.log(`No matching prefetched data for photo: ${route.params.photo.uri}`);
+      console.log(`Expected: ${(global as any).prefetchedPhotoUri || 'none'}, Current: ${route.params.photo.uri}`);
     }
     
     // Always update the currentPhotoUri to track the current photo being processed
-    (global as any).currentPhotoUri = photo.uri;
+    (global as any).currentPhotoUri = route.params.photo.uri;
     
     // Update session references
     photoSessionRef.current = newSessionId;
-    photoUriRef.current = photo.uri;
+    photoUriRef.current = route.params.photo.uri;
     // Reset the tracked photo URI so we'll fetch again for this new photo
     trackedPhotoUri.current = '';
     
@@ -615,7 +617,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     // Check for any prefetched meal suggestions
     if ((global as any).prefetchedSuggestions && 
-        (global as any).prefetchedPhotoUri === photo.uri) {
+        (global as any).prefetchedPhotoUri === route.params.photo.uri) {
       // We have prefetched suggestions for this photo
       const prefetchedSuggestions = (global as any).prefetchedSuggestions;
       logWithSession("Found prefetched suggestion data during reset:");
@@ -633,8 +635,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // Always fetch device location as fallback
     getCurrentLocation();
     
-    console.log(`========= RESET COMPLETE for photo: ${photo.uri} with session: ${newSessionId} =========`);
-    logWithSession(`State reset complete for photo: ${photo.uri}`);
+    console.log(`========= RESET COMPLETE for photo: ${route.params.photo.uri} with session: ${newSessionId} =========`);
+    logWithSession(`State reset complete for photo: ${route.params.photo.uri}`);
   };
   
   // Track if this is the first render
@@ -643,8 +645,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // Initialize on component mount or when route params change
   useEffect(() => {
     // Check for valid photo
-    if (!photo || !photo.uri) {
-      console.error("Invalid photo object in RatingScreen2:", photo);
+    if (!route.params.photo || !route.params.photo.uri) {
+      console.error("Invalid photo object in RatingScreen2:", route.params.photo);
       Alert.alert(
         "Error",
         "Invalid photo data received. Please try again.",
@@ -657,12 +659,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     if (isFirstRender.current) {
       console.log(`============= INITIALIZING RATING SCREEN =============`);
       console.log(`Initial _uniqueKey: ${route.params._uniqueKey}`);
-      console.log(`Initial photo URI: ${photo.uri}`);
+      console.log(`Initial photo URI: ${route.params.photo.uri}`);
       isFirstRender.current = false;
     } else {
       console.log(`============= ROUTE PARAMS CHANGED =============`);
       console.log(`New _uniqueKey: ${route.params._uniqueKey}`);
-      console.log(`New photo URI: ${photo.uri}`);
+      console.log(`New photo URI: ${route.params.photo.uri}`);
     }
     
     // Force a complete reset of state for this photo
@@ -672,8 +674,15 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     return () => {
       console.log(`============= CLEANING UP RATING SCREEN =============`);
       logWithSession("Component unmounting, cleaning up");
+      
+      // Clear any in-progress API calls to prevent them from affecting next session
+      if ((global as any).quickCriteriaExtractionPromise) {
+        console.log("Clearing in-progress quick criteria extraction promise");
+        (global as any).quickCriteriaExtractionPromise = null;
+        (global as any).quickCriteriaStartTime = null;
+      }
     };
-  }, [route.params]); // Re-run when ANY route parameter changes
+  }, [route.params._uniqueKey, route.params.photo.uri]); // Re-run when unique key or photo URI changes
   
   // Effect to fetch restaurant suggestions when location is available
   useEffect(() => {
@@ -691,7 +700,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     if (bestLocation && suggestedRestaurants.length === 0 && !isLoadingSuggestions) {
       logWithSession(`Using location for restaurant suggestions: ${bestLocation.source} (priority: ${bestLocation.priority})`);
-      logWithSession(`Photo URI: ${photo.uri}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
+      logWithSession(`Photo URI: ${route.params.photo.uri}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
       
       // Check once more that we're using location data that belongs to this photo
       // by comparing with the global trackers
@@ -810,36 +819,40 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       logWithSession(`Creating clean image for Result screen at: ${newFilePath}`);
       
       // Copy the current image file to new location
-      await RNFS.copyFile(photo.uri, newFilePath);
+      await RNFS.copyFile(route.params.photo.uri, newFilePath);
       logWithSession('File copied successfully for Result screen');
       
       // Create a fresh photo object
       const freshPhoto = {
         uri: newFilePath,
-        width: photo.width,
-        height: photo.height,
+        width: route.params.photo.width,
+        height: route.params.photo.height,
         sessionId: sessionId
       };
       
-      // Extract quick criteria for immediate display - optimized for speed
-      logWithSession('Extracting quick dish criteria...');
+      // Start the dish criteria API in background - don't wait for it
+      logWithSession('Starting dish criteria API in background...');
       let quickCriteriaResult: QuickCriteriaData | null = null;
-      try {
-        quickCriteriaResult = await extractQuickCriteria(
-          freshPhoto.uri,
-          mealName,
-          restaurant // Always pass restaurant since meal type is always "Restaurant"
-        );
-        logWithSession('✅ Quick criteria extraction completed successfully');
-        console.log('Quick criteria result preview:', {
-          dish_specific: quickCriteriaResult?.dish_specific,
-          criteria_count: quickCriteriaResult?.dish_criteria?.length,
-          has_history: !!quickCriteriaResult?.dish_history
-        });
-      } catch (quickCriteriaError) {
-        logWithSession(`❌ Error in quick criteria extraction: ${quickCriteriaError}`);
-        // Continue without quick criteria - the meal can still be saved with basic info
+      
+      // Clear any existing global promises first
+      if ((global as any).quickCriteriaExtractionPromise) {
+        logWithSession('Clearing previous dish criteria promise');
+        (global as any).quickCriteriaExtractionPromise = null;
+        (global as any).quickCriteriaMealData = null;
       }
+      
+      // Start background API call
+      const backgroundPromise = extractQuickCriteria(
+        freshPhoto.uri,
+        { mealName, restaurant }
+      );
+      
+      // Store in global scope for ResultScreen to pick up
+      (global as any).quickCriteriaExtractionPromise = backgroundPromise;
+      (global as any).quickCriteriaMealData = { mealName, restaurant };
+      
+      console.log('DEBUG: Dish criteria API started in background');
+      logWithSession('Dish criteria API started - continuing with navigation');
       
       /* COMMENTED OUT - Using new quick criteria service instead
       // Extract combined metadata and criteria using single service call
@@ -864,9 +877,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
       */
       
-      // Start the API call for quick criteria and navigate to Crop screen
-      // The API call will run in background while user edits photo
-      startQuickCriteriaExtraction(freshPhoto, restaurant, mealName);
+      // API call completed synchronously above - no need for background call
       
       // Navigate to Crop screen with all the meal data
       // Clean navigation parameters to avoid circular references
@@ -925,26 +936,42 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   };
 
   // Function to start quick criteria extraction in background
-  const startQuickCriteriaExtraction = async (photo: any, restaurant: string, mealName: string) => {
-    try {
-      logWithSession(`Starting background quick criteria extraction for: ${mealName} at ${restaurant}`);
-      
-      // Store the request in global scope so other screens can access it
-      // This allows Results screen to wait for completion
-      const extractionPromise = extractQuickCriteria(
-        photo.uri, 
-        { mealName, restaurant }
-      );
-      
-      // Store in global for later retrieval
-      (global as any).quickCriteriaExtractionPromise = extractionPromise;
-      (global as any).quickCriteriaStartTime = Date.now();
-      
-      logWithSession('Quick criteria extraction started in background');
-    } catch (error) {
-      logWithSession(`Error starting quick criteria extraction: ${error}`);
-      // Don't throw - this is a background operation
+  const startQuickCriteriaExtraction = (photo: any, restaurant: string, mealName: string) => {
+    const currentSessionId = photoSessionRef.current;
+    
+    // Clear any existing promise first to prevent stale data
+    if ((global as any).quickCriteriaExtractionPromise) {
+      logWithSession('Clearing previous quick criteria extraction promise before starting new one');
+      (global as any).quickCriteriaExtractionPromise = null;
+      (global as any).quickCriteriaStartTime = null;
+      (global as any).quickCriteriaSessionId = null;
     }
+    
+    // Use setTimeout to ensure this runs completely asynchronously and doesn't block navigation
+    setTimeout(() => {
+      try {
+        logWithSession(`Starting background quick criteria extraction for: ${mealName} at ${restaurant} (session: ${currentSessionId})`);
+        
+        // Store the request in global scope so other screens can access it
+        // This allows Results screen to wait for completion
+        const extractionPromise = extractQuickCriteria(
+          photo.uri, 
+          { mealName, restaurant }
+        );
+        
+        // Store in global for later retrieval WITH SESSION TRACKING
+        (global as any).quickCriteriaExtractionPromise = extractionPromise;
+        (global as any).quickCriteriaStartTime = Date.now();
+        (global as any).quickCriteriaSessionId = currentSessionId; // Track which session this belongs to
+        (global as any).quickCriteriaPhotoUri = photo.uri; // Track which photo this is for
+        (global as any).quickCriteriaMealData = { mealName, restaurant }; // Track meal data
+        
+        logWithSession(`Quick criteria extraction started in background for session: ${currentSessionId}`);
+      } catch (error) {
+        logWithSession(`Error starting quick criteria extraction: ${error}`);
+        // Don't throw - this is a background operation
+      }
+    }, 0); // Run on next tick to ensure navigation happens first
   };
   
   // Handle image load error
@@ -1169,9 +1196,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           
           {/* Image Container */}
           <View style={styles.imageContainer}>
-            {!imageError && photo && photo.uri ? (
+            {!imageError && route.params.photo && route.params.photo.uri ? (
               <Image
-                source={{ uri: photo.uri }}
+                source={{ uri: route.params.photo.uri }}
                 style={styles.image}
                 resizeMode="contain"
                 onError={handleImageError}

@@ -150,6 +150,36 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
 
           setIsTakingPicture(true);
           console.log("Taking photo...");
+          
+          // Clear any previously cached data before taking a new photo
+          if ((global as any).prefetchedSuggestions) {
+            console.log('!!! CLEARING PREVIOUS PREFETCHED SUGGESTIONS BEFORE NEW PHOTO !!!');
+            (global as any).prefetchedSuggestions = null;
+            delete (global as any).prefetchedSuggestions;
+          }
+          if ((global as any).prefetchedPhotoUri) {
+            console.log('!!! CLEARING PREVIOUS PREFETCHED PHOTO URI !!!');
+            (global as any).prefetchedPhotoUri = null;
+            delete (global as any).prefetchedPhotoUri;
+          }
+          if ((global as any).currentPhotoUri) {
+            (global as any).currentPhotoUri = null;
+            delete (global as any).currentPhotoUri;
+          }
+          // Clear ALL dish criteria related data
+          if ((global as any).quickCriteriaExtractionPromise) {
+            console.log('!!! CLEARING DISH CRITERIA DATA !!!');
+            (global as any).quickCriteriaExtractionPromise = null;
+            delete (global as any).quickCriteriaExtractionPromise;
+          }
+          if ((global as any).quickCriteriaMealData) {
+            (global as any).quickCriteriaMealData = null;
+            delete (global as any).quickCriteriaMealData;
+          }
+          if ((global as any).quickCriteriaStartTime) {
+            (global as any).quickCriteriaStartTime = null;
+            delete (global as any).quickCriteriaStartTime;
+          }
 
           const photo = await camera.current.takePhoto({
             qualityPrioritization: 'quality',
@@ -234,7 +264,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 location: exifLocation,
                 exifData: exifData, // Pass the full EXIF data for potential future use
                 photoSource: 'camera',
-                _navigationKey: navigationKey,
+                _uniqueKey: navigationKey,
                 rating: 0,
                 likedComment: '',
                 dislikedComment: ''
@@ -274,7 +304,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             },
             location: location, // Use the device location as fallback
             photoSource: 'camera',
-            _navigationKey: navigationKey, // Add navigation key for component refresh
+            _uniqueKey: navigationKey, // Add unique key for component refresh
             rating: 0,
             likedComment: '',
             dislikedComment: ''
@@ -300,6 +330,37 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const selectFromGallery = async () => {
     try {
       console.log("Opening gallery with PhotoGPSModule...");
+      
+      // Clear any previously cached data before selecting a new photo
+      if ((global as any).prefetchedSuggestions) {
+        console.log('!!! CLEARING PREVIOUS PREFETCHED SUGGESTIONS BEFORE NEW GALLERY SELECTION !!!');
+        (global as any).prefetchedSuggestions = null;
+        delete (global as any).prefetchedSuggestions;
+      }
+      if ((global as any).prefetchedPhotoUri) {
+        console.log('!!! CLEARING PREVIOUS PREFETCHED PHOTO URI !!!');
+        (global as any).prefetchedPhotoUri = null;
+        delete (global as any).prefetchedPhotoUri;
+      }
+      if ((global as any).currentPhotoUri) {
+        (global as any).currentPhotoUri = null;
+        delete (global as any).currentPhotoUri;
+      }
+      // Clear ALL dish criteria related data
+      if ((global as any).quickCriteriaExtractionPromise) {
+        console.log('!!! CLEARING DISH CRITERIA DATA !!!');
+        (global as any).quickCriteriaExtractionPromise = null;
+        delete (global as any).quickCriteriaExtractionPromise;
+      }
+      if ((global as any).quickCriteriaMealData) {
+        (global as any).quickCriteriaMealData = null;
+        delete (global as any).quickCriteriaMealData;
+      }
+      if ((global as any).quickCriteriaStartTime) {
+        (global as any).quickCriteriaStartTime = null;
+        delete (global as any).quickCriteriaStartTime;
+      }
+      
       const photoAsset = await getPhotoWithMetadata();
       
       if (!photoAsset) {
@@ -334,7 +395,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           location: photoAsset.location || location, // Use photo location or fallback to device location
           exifData: photoAsset.exifData,
           photoSource: 'gallery',
-          _navigationKey: navigationKey,
+          _uniqueKey: navigationKey,
           rating: 0,
           likedComment: '',
           dislikedComment: ''
@@ -478,7 +539,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
               ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000'
               : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000';
             
-            // Navigate through the proper flow: RatingScreen2 -> Crop -> EditPhoto -> Results
+            // Navigate through the proper flow: RatingScreen2 -> Crop -> Results
             navigation.navigate('RatingScreen2', {
               photo: {
                 uri: mockImageUri,
@@ -487,6 +548,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
               },
               location: location,
               photoSource: 'sample',
+              _uniqueKey: `sample_${Date.now()}`,
               rating: 0,
               likedComment: '',
               dislikedComment: ''

@@ -275,6 +275,22 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
       try {
         console.log("Opening gallery from tab bar using PhotoGPSModule");
         
+        // Clear any previously cached data before selecting a new photo
+        if ((global as any).prefetchedSuggestions) {
+          console.log('!!! CLEARING PREVIOUS PREFETCHED SUGGESTIONS BEFORE NEW GALLERY SELECTION !!!');
+          (global as any).prefetchedSuggestions = null;
+          delete (global as any).prefetchedSuggestions;
+        }
+        if ((global as any).prefetchedPhotoUri) {
+          console.log('!!! CLEARING PREVIOUS PREFETCHED PHOTO URI !!!');
+          (global as any).prefetchedPhotoUri = null;
+          delete (global as any).prefetchedPhotoUri;
+        }
+        if ((global as any).currentPhotoUri) {
+          (global as any).currentPhotoUri = null;
+          delete (global as any).currentPhotoUri;
+        }
+        
         // Use our enhanced photo library service that gets GPS metadata
         const photoAsset = await getPhotoWithMetadata();
         
@@ -305,7 +321,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
           },
           location: photoAsset.location || null,
           exifData: photoAsset.exifData,
-          _navigationKey: navigationKey,
+          _uniqueKey: navigationKey,
           photoSource: 'gallery',
           rating: 0,
           likedComment: '',

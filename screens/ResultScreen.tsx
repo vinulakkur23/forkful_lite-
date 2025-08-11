@@ -22,6 +22,8 @@ import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
 // Import enhanced metadata facts service
 import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
+// Import quick criteria service for fresh API calls when background data is stale
+import { extractQuickCriteria } from '../services/quickCriteriaService';
 // Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
@@ -129,13 +131,26 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaving(false);
     setSaved(false);
     setPhotoUrl(null);
+    setCurrentQuickCriteriaResult(null); // Clear any old criteria data
+    setEnhancedFacts(null); // Clear any old enhanced facts
     
     // If user is logged in, save data automatically (only once per instance)
     const user = auth().currentUser;
     if (user) {
       // Small delay to ensure component renders first
-      setTimeout(() => {
-        console.log("Triggering save to Firebase");
+      setTimeout(async () => {
+        console.log("Triggering save to Firebase with token refresh");
+        
+        // Refresh token before automatic save to prevent auth issues
+        try {
+          await user.reload();
+          await user.getIdToken(true);
+          console.log("Token refreshed successfully before automatic save");
+        } catch (tokenError) {
+          console.error("Failed to refresh token before automatic save:", tokenError);
+          // Continue anyway - the existing token might still work
+        }
+        
         saveToFirebase();
       }, 100);
     }
@@ -145,41 +160,76 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     };
   }, [instanceKey]); // Only depend on instanceKey for initialization
 
-  // Check for background API call from RatingScreen2
+  // Handle background API from RatingScreen2 with validation
   useEffect(() => {
-    // If we don't have quickCriteriaResult but there's a global promise, wait for it
-    if (!currentQuickCriteriaResult && (global as any).quickCriteriaExtractionPromise) {
-      console.log("Found background quick criteria extraction, waiting for completion...");
-      setLoadingBackgroundApiCall(true);
-      
-      const checkBackgroundApiCall = async () => {
-        try {
-          const startTime = (global as any).quickCriteriaStartTime || Date.now();
-          const elapsedTime = Date.now() - startTime;
-          console.log(`Background API call has been running for ${elapsedTime}ms`);
-          
-          // Wait for the promise to complete
-          const result = await (global as any).quickCriteriaExtractionPromise;
-          console.log("Background quick criteria extraction completed:", result);
-          
-          // Update our state with the result
-          setCurrentQuickCriteriaResult(result);
-          
-          // Clear the global promise
-          (global as any).quickCriteriaExtractionPromise = null;
-          (global as any).quickCriteriaStartTime = null;
-          
-        } catch (error) {
-          console.error("Background quick criteria extraction failed:", error);
-          // Continue without criteria data
-        } finally {
-          setLoadingBackgroundApiCall(false);
-        }
-      };
-      
-      checkBackgroundApiCall();
+    console.log("ResultScreen criteria check:", {
+      currentMeal: meal,
+      currentRestaurant: restaurant,
+      hasCurrentResult: !!currentQuickCriteriaResult,
+      currentResultMeal: currentQuickCriteriaResult?.dish_specific,
+      hasPropResult: !!quickCriteriaResult,
+      propResultMeal: quickCriteriaResult?.dish_specific
+    });
+    
+    // First, try to use data passed directly in props
+    if (quickCriteriaResult) {
+      console.log("Using quick criteria data passed directly from RatingScreen2");
+      setCurrentQuickCriteriaResult(quickCriteriaResult);
+      return;
     }
-  }, []); // Run only once on mount
+    
+    // If no direct data, check for background API call
+    if ((global as any).quickCriteriaExtractionPromise) {
+      console.log("Found background quick criteria extraction, checking if it matches current meal");
+      
+      const globalMealData = (global as any).quickCriteriaMealData;
+      
+      // Validate the background API matches current meal
+      console.log('DEBUG: Validating background API data:', {
+        hasGlobalMealData: !!globalMealData,
+        globalPhotoUri: globalMealData?.photoUri,
+        currentPhotoUri: photo?.uri,
+        photoMatch: globalMealData?.photoUri === photo?.uri,
+        globalMealName: globalMealData?.mealName,
+        currentMeal: meal,
+        mealMatch: globalMealData?.mealName === meal,
+        globalRestaurant: globalMealData?.restaurant,
+        currentRestaurant: restaurant,
+        restaurantMatch: globalMealData?.restaurant === restaurant
+      });
+      
+      const isValidForCurrentMeal = 
+        globalMealData &&
+        globalMealData.mealName === meal &&
+        globalMealData.restaurant === restaurant;
+      
+      if (isValidForCurrentMeal) {
+        console.log("Background API matches current meal - waiting for completion");
+        
+        const handleBackgroundAPI = async () => {
+          try {
+            const result = await (global as any).quickCriteriaExtractionPromise;
+            console.log("Background quick criteria extraction completed:", result);
+            setCurrentQuickCriteriaResult(result);
+          } catch (error) {
+            console.error("Background quick criteria extraction failed:", error);
+          } finally {
+            // Clear global data after use
+            (global as any).quickCriteriaExtractionPromise = null;
+            (global as any).quickCriteriaStartTime = null;
+            (global as any).quickCriteriaMealData = null;
+          }
+        };
+        
+        handleBackgroundAPI();
+      } else {
+        console.warn("Background API doesn't match current meal - clearing stale data");
+        (global as any).quickCriteriaExtractionPromise = null;
+        (global as any).quickCriteriaStartTime = null;
+        (global as any).quickCriteriaMealData = null;
+      }
+    }
+  }, [instanceKey]); // Only run once per instance
   
   // Enhanced facts loading effect - separate from initialization
   useEffect(() => {
@@ -904,15 +954,16 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         */
         
-        // Process regular metadata
-        processImageMetadata(docRef.id, imageUrl, {
+        // Process regular metadata - TEMPORARILY DISABLED to debug duplicate API calls
+        /* processImageMetadata(docRef.id, imageUrl, {
           mealName: meal || undefined,
           restaurantName: restaurant || undefined,
           thoughts: thoughts || undefined,
           // Keep for backward compatibility
           likedComments: likedComment || undefined,
           dislikedComments: dislikedComment || undefined
-        })
+        }) */
+        Promise.resolve(null)
           .then(metadata => {
             console.log("AI metadata processed successfully:", metadata);
             
@@ -1055,6 +1106,50 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleRateNow = async (): Promise<void> => {
+    const user = auth().currentUser;
+    
+    // Check authentication first
+    if (!user) {
+      console.log("No authenticated user found in handleRateNow");
+      Alert.alert(
+        'Not Logged In',
+        'You need to be logged in to rate and post meals. Would you like to log in now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In', onPress: () => navigation.navigate('Login') }
+        ]
+      );
+      return;
+    }
+
+    // Force token refresh to ensure we have valid credentials
+    try {
+      console.log("Refreshing authentication token before rating/posting");
+      await user.reload();
+      await user.getIdToken(true); // Force refresh
+      console.log("Authentication token refreshed successfully");
+    } catch (tokenError) {
+      console.error("Failed to refresh token in handleRateNow:", tokenError);
+      Alert.alert(
+        "Authentication Error",
+        "There was a problem with your authentication. Please try logging out and back in.",
+        [
+          { text: "Try Anyway", style: "cancel" },
+          { 
+            text: "Sign Out & Sign In", 
+            onPress: async () => {
+              await auth().signOut();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
     // Check if meal is already saved
     if (saved && mealId) {
       // If already saved, navigate directly to EditMeal
@@ -1120,13 +1215,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Photo and saving overlay removed per user request */}
+        {/* Restore the saving overlay to see if dish criteria loads */}
         {saving && (
           <View style={styles.savingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
             <Text style={styles.savingText}>Preparing your rating...</Text>
           </View>
         )}
+
 
         {/* Dish History Section - from quick criteria service */}
         {currentQuickCriteriaResult && currentQuickCriteriaResult.dish_history && (
