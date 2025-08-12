@@ -6,14 +6,18 @@
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
 
 export interface QuickCriteriaData {
-  dish_specific: string;
-  dish_general: string;
-  cuisine_type: string;
+  dish_specific: string; // Now provided as placeholder by Claude
+  dish_general: string; // Now provided as placeholder by Claude  
+  cuisine_type: string; // Now provided as placeholder by Claude
   dish_criteria: Array<{
-    title: string;
-    description: string;
+    name?: string; // Claude uses "name" instead of "title"
+    title?: string; // Keep for backward compatibility
+    what_to_look_for?: string; // Claude's detailed format
+    insight?: string; // Claude's detailed format  
+    test?: string; // Claude's detailed format
+    description?: string; // Keep for backward compatibility
   }>;
-  dish_history: string;
+  dish_history?: string;
   extraction_timestamp: string;
   extraction_version: string;
   dish_key: string;
@@ -76,12 +80,16 @@ export const extractQuickCriteria = async (
     
     const result: QuickCriteriaResponse = await response.json();
     
+    // Log the raw response to debug
+    console.log('🔍 QuickCriteriaService RAW response:', JSON.stringify(result, null, 2));
+    
     if (result.success && result.data) {
       console.log('QuickCriteriaService: Successfully extracted quick criteria:', {
         dish: result.data.dish_specific,
         criteria_count: result.data.dish_criteria?.length || 0,
         provider: result.provider,
-        performance: result.performance
+        performance: result.performance,
+        first_criterion: result.data.dish_criteria?.[0]?.name
       });
       
       // Log performance metrics if available

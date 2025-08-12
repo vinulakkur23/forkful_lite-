@@ -4,36 +4,27 @@ import { Platform } from 'react-native';
 import RNFetchBlob from 'rn-fetch-blob';
 
 /**
- * Enhanced metadata types with two-tier structure
+ * Enhanced metadata types from simple enhanced metadata service
  */
 export interface EnhancedMetadata {
-  // Two-tier categorization
-  dish_specific: string;  // e.g., "Spaghetti alla Carbonara"
-  dish_general: string;   // e.g., "Pasta"
+  // Dish identification
+  dish_specific: string;  // e.g., "Pad Thai with Shrimp"
+  dish_general: string;   // e.g., "Noodles"
+  cuisine_type: string;   // e.g., "Thai"
   
   // Core metadata
-  cuisine_type: string;
   key_ingredients: string[];
-  interesting_ingredient: string; // Most unique/noteworthy ingredient
+  interesting_ingredient: string; // Most unique ingredient that defines this dish
   cooking_method: string;
   flavor_profile: string[];
   dietary_info: string[];
-  presentation_style: string;
-  meal_type: string;
-  
-  // Normalization info
-  dish_specific_normalized?: string;
-  matched_to_existing?: boolean;
   confidence_score: number;
-  alternate_names?: string[];
   
   // Metadata about extraction
   extraction_timestamp: string;
   extraction_version: string;
-  similar_dishes?: Array<{
-    canonical_name: string;
-    similarity: number;
-  }>;
+  extraction_method?: string;
+  extraction_error?: boolean;
 }
 
 /**
@@ -54,30 +45,16 @@ export const extractEnhancedMetadata = async (
   try {
     console.log('Extracting enhanced metadata for photo:', photoUri);
     
-    // Download the image to a temp file
-    const tempFilePath = `${RNFetchBlob.fs.dirs.CacheDir}/temp_enhanced_${Date.now()}.jpg`;
-    
-    // Handle file:// prefix properly
-    let sourceUri = photoUri;
-    if (Platform.OS === 'ios' && !photoUri.startsWith('file://')) {
-      sourceUri = `file://${photoUri}`;
-    }
-    
-    // Download using RNFetchBlob
-    await RNFetchBlob.config({
-      fileCache: true,
-      path: tempFilePath
-    }).fetch('GET', sourceUri);
-    
-    console.log(`Image downloaded for enhanced metadata: ${tempFilePath}`);
+    // Use the image file directly (no extra download needed)
+    console.log(`Using image directly for enhanced metadata: ${photoUri}`);
     
     // Prepare form data
     const formData = new FormData();
     
-    // Add the image file
+    // Add the image file directly
     const fileUri = Platform.OS === 'ios' 
-      ? tempFilePath.replace('file://', '') 
-      : tempFilePath;
+      ? photoUri.replace('file://', '') 
+      : photoUri;
       
     formData.append('image', {
       uri: fileUri,
@@ -107,8 +84,7 @@ export const extractEnhancedMetadata = async (
       body: formData,
     });
     
-    // Clean up temp file
-    await RNFetchBlob.fs.unlink(tempFilePath);
+    // No temp file to clean up
     
     if (!response.ok) {
       const errorText = await response.text();

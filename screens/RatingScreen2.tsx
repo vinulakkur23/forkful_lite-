@@ -34,11 +34,14 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
+import ImageResizer from 'react-native-image-resizer';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // TEMPORARILY DISABLED FOR PERFORMANCE
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService';
+import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
+import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 import Geolocation from '@react-native-community/geolocation';
 // Import Firebase for saving meal data
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
@@ -868,7 +871,34 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       const sessionId = route.params._uniqueKey || Math.random().toString(36).substring(2, 15);
       logWithSession(`Continuing session ${sessionId} to ResultScreen`);
       
-      // Create a clean copy of the image
+      // CRITICAL: Resize image BEFORE API calls to prevent memory overload
+      // Calculate dimensions to maintain aspect ratio with 800 minimum on shortest side
+      const originalWidth = route.params.photo.width || 1000;
+      const originalHeight = route.params.photo.height || 1000;
+      const isPortrait = originalHeight > originalWidth;
+      
+      // Set 800 on the shortest side, scale the other proportionally
+      const targetWidth = isPortrait ? 800 : Math.round(800 * (originalWidth / originalHeight));
+      const targetHeight = isPortrait ? Math.round(800 * (originalHeight / originalWidth)) : 800;
+      
+      console.log(`Resizing image from ${originalWidth}x${originalHeight} to ${targetWidth}x${targetHeight} for API calls...`);
+      const resizedImage = await ImageResizer.createResizedImage(
+        route.params.photo.uri,
+        targetWidth,  // Proportional width
+        targetHeight, // Proportional height
+        'JPEG',
+        85,   // Quality - matches CropScreen compression
+        0,    // Rotation
+        undefined,  // Output path (let it generate)
+        false,  // Keep metadata
+        {
+          mode: 'cover',  // Changed to 'cover' to maintain aspect ratio without letterboxing
+          onlyScaleDown: true,
+        }
+      );
+      logWithSession(`Image resized maintaining aspect ratio for subsequent cropping`);
+      
+      // Create a clean copy of the RESIZED image
       const timestamp = new Date().getTime();
       const fileExt = 'jpg';
       const newFilename = `result_image_${timestamp}.${fileExt}`;
@@ -879,17 +909,17 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         : `${RNFS.CachesDirectoryPath}/`;
       
       const newFilePath = `${dirPath}${newFilename}`;
-      logWithSession(`Creating clean image for Result screen at: ${newFilePath}`);
+      logWithSession(`Creating clean resized image for Result screen at: ${newFilePath}`);
       
-      // Copy the current image file to new location
-      await RNFS.copyFile(route.params.photo.uri, newFilePath);
-      logWithSession('File copied successfully for Result screen');
+      // Copy the RESIZED image file to new location
+      await RNFS.copyFile(resizedImage.uri, newFilePath);
+      logWithSession('Resized file copied successfully for Result screen');
       
-      // Create a fresh photo object
+      // Create a fresh photo object with RESIZED dimensions
       const freshPhoto = {
         uri: newFilePath,
-        width: route.params.photo.width,
-        height: route.params.photo.height,
+        width: resizedImage.width,
+        height: resizedImage.height,
         sessionId: sessionId
       };
       
@@ -955,22 +985,27 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       console.log('✅ Basic meal saved with ID:', mealId);
       logWithSession(`Basic meal saved: ${mealId}`);
       
-      // Now start the API call to update this specific meal with criteria
-      const quickCriteriaPromise = extractQuickCriteria(
-        freshPhoto.uri,
-        { mealName, restaurant }
-      );
+      // Start with quick criteria first, then enhanced metadata sequentially
+      console.log('🔄 Starting quick criteria extraction...');
+      logWithSession('Starting sequential API calls - quick criteria first');
       
-      // Update the specific meal document when criteria are ready
-      quickCriteriaPromise.then(async (result) => {
+      extractQuickCriteria(
+        freshPhoto.uri,
+        mealName,
+        restaurant
+      ).then(async (result) => {
         if (result) {
-          console.log('✅ Quick criteria completed in background:', result.dish_specific);
-          logWithSession(`Quick criteria completed: ${result.dish_specific}`);
+          console.log('✅ Quick criteria completed:', result.dish_criteria?.length || 0, 'criteria');
+          console.log('📊 Full criteria result:', JSON.stringify(result, null, 2));
+          logWithSession(`Quick criteria completed with ${result.dish_criteria?.length || 0} criteria`);
           
-          // Update the existing meal document with criteria
+          // Log if this looks like fallback data
+          if (result.dish_criteria && result.dish_criteria[0]?.name === 'Visual Appeal') {
+            console.warn('⚠️ WARNING: This looks like fallback/default criteria!');
+          }
+          
+          // Update the meal document with criteria
           try {
-            console.log('🔄 Updating meal with criteria in Firestore...');
-            
             const criteriaUpdate = {
               quick_criteria_result: result,
               dish_criteria: result.dish_criteria ? {
@@ -983,19 +1018,82 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             };
             
             await firestore().collection('mealEntries').doc(mealId).update(criteriaUpdate);
-            console.log('🎉 Meal updated with criteria:', mealId);
-            logWithSession(`Meal updated with criteria: ${mealId}`);
+            console.log('🎉 Meal updated with criteria, starting enhanced metadata...');
+            logWithSession(`Criteria saved, starting enhanced metadata extraction`);
+            
+            // NOW start enhanced metadata extraction
+            return extractEnhancedMetadata(freshPhoto.uri, mealName, restaurant);
             
           } catch (firestoreError) {
-            console.error('❌ Error saving to Firestore:', firestoreError);
-            logWithSession(`Firestore save error: ${firestoreError}`);
+            console.error('❌ Error saving criteria to Firestore:', firestoreError);
+            logWithSession(`Criteria save error: ${firestoreError}`);
+            throw firestoreError;
           }
         } else {
-          console.warn('⚠️ Quick criteria returned null - cannot save');
+          console.warn('⚠️ Quick criteria returned null');
+          logWithSession('Quick criteria failed - skipping enhanced metadata');
+          return null;
+        }
+      }).then(async (metadata) => {
+        if (metadata) {
+          console.log('✅ Enhanced metadata completed:', metadata.dish_specific);
+          logWithSession(`Enhanced metadata completed: ${metadata.dish_specific}`);
+          
+          // Update the meal document with enhanced metadata
+          try {
+            const metadataUpdate = {
+              metadata_enriched: metadata,
+              metadata_updated_at: firestore.FieldValue.serverTimestamp()
+            };
+            
+            await firestore().collection('mealEntries').doc(mealId).update(metadataUpdate);
+            console.log('🎉 Enhanced metadata saved, starting facts extraction...');
+            logWithSession(`Enhanced metadata saved: ${metadata.dish_specific}`);
+            
+            // NOW start enhanced metadata facts extraction using enhanced metadata dish info
+            return extractEnhancedMetadataFacts(
+              freshPhoto.uri,
+              metadata.dish_specific,
+              metadata.dish_general, 
+              metadata.cuisine_type,
+              mealName,
+              restaurant
+            );
+            
+          } catch (firestoreError) {
+            console.error('❌ Error saving enhanced metadata:', firestoreError);
+            logWithSession(`Enhanced metadata save error: ${firestoreError}`);
+            throw firestoreError;
+          }
+        } else {
+          console.warn('⚠️ Enhanced metadata returned null');
+          logWithSession('Enhanced metadata failed - skipping facts extraction');
+          return null;
+        }
+      }).then(async (factsData) => {
+        if (factsData) {
+          console.log('✅ Enhanced metadata facts completed');
+          logWithSession(`Enhanced metadata facts completed`);
+          
+          // Update the meal document with facts data
+          try {
+            const factsUpdate = {
+              enhanced_facts: factsData,
+              facts_updated_at: firestore.FieldValue.serverTimestamp()
+            };
+            
+            await firestore().collection('mealEntries').doc(mealId).update(factsUpdate);
+            console.log('🎉 All sequential API calls completed successfully');
+            logWithSession(`All metadata and facts extraction completed`);
+            
+          } catch (firestoreError) {
+            console.error('❌ Error saving enhanced facts:', firestoreError);
+            logWithSession(`Enhanced facts save error: ${firestoreError}`);
+          }
         }
       }).catch(error => {
-        console.error('❌ Quick criteria failed:', error);
-        logWithSession(`Quick criteria error: ${error}`);
+        console.error('❌ Sequential API call failed:', error);
+        logWithSession(`Sequential API error: ${error}`);
       });
       
       console.log('DEBUG: Dish criteria API running asynchronously');

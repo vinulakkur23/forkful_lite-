@@ -20,8 +20,8 @@ import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaSer
 // Import achievement service
 import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
-// Import enhanced metadata facts service
-import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
+// Enhanced metadata facts service now handled in RatingScreen2
+// import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Import quick criteria service for fresh API calls when background data is stale
 import { extractQuickCriteria } from '../services/quickCriteriaService';
 // Removed meal enhancement service - no longer used
@@ -258,13 +258,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             setPhotoUrl(mealData.photoUrl);
           }
           
-          // Then check if enhanced metadata is needed
-          if (!mealData.enhanced_metadata_facts) {
-            console.log("Starting enhanced metadata processing for meal:", mealData.id);
-            processMetadataForMeal(mealData.id, photo.uri, mealData.meal, mealData.restaurant, mealData.location);
-          } else {
-            console.log("✅ Enhanced metadata already exists for meal:", mealData.id);
-          }
+          // Enhanced metadata facts processing now handled in RatingScreen2
+          console.log("✅ Enhanced metadata facts handled in RatingScreen2");
         } catch (error) {
           console.error("Error processing image/metadata:", error);
           Alert.alert("Upload Error", "Failed to upload the edited image. Please try again.");
@@ -303,63 +298,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [savedMealId, saved, navigateToEditAfterSave]);
 
-  // CLEAN APPROACH: Process only enhanced metadata (criteria already done in RatingScreen2)
-  const processMetadataForMeal = async (mealId: string, photoUri: string, mealName: string, restaurantName: string, mealLocation: any) => {
-    try {
-      console.log("🔄 Processing enhanced metadata for meal:", mealId, "dish:", mealName, "restaurant:", restaurantName);
-      
-      // First, get the existing criteria from the meal (should already exist from RatingScreen2)
-      const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
-      const existingMealData = mealDoc.data();
-      const existingCriteria = existingMealData?.quick_criteria_result;
-      
-      if (!existingCriteria) {
-        console.warn("⚠️ No existing criteria found - enhanced metadata needs criteria");
-        return;
-      }
-      
-      console.log("✅ Using existing criteria:", existingCriteria.dish_specific);
-      
-      // Extract city from location or restaurant
-      let city = '';
-      if (mealLocation && mealLocation.city) {
-        city = mealLocation.city;
-      } else if (restaurantName) {
-        const restaurantParts = restaurantName.split(',');
-        if (restaurantParts.length > 1) {
-          city = restaurantParts[1].trim();
-        }
-      }
-      
-      // Extract enhanced metadata using existing criteria
-      console.log("Extracting enhanced metadata facts...");
-      const freshEnhancedFacts = await extractEnhancedMetadataFacts(
-        photoUri,
-        existingCriteria.dish_specific,
-        existingCriteria.dish_general,
-        existingCriteria.cuisine_type,
-        mealName,
-        restaurantName,
-        city
-      );
-      
-      if (freshEnhancedFacts) {
-        console.log("✅ Enhanced facts extracted for meal:", mealName);
-        
-        // Update Firestore with enhanced facts only
-        await firestore().collection('mealEntries').doc(mealId).update({
-          enhanced_metadata_facts: freshEnhancedFacts,
-          enhanced_facts_updated_at: firestore.FieldValue.serverTimestamp()
-        });
-        
-        console.log("🎉 Enhanced metadata processing completed for meal:", mealId);
-      } else {
-        console.warn("⚠️ Enhanced facts extraction failed for meal:", mealId);
-      }
-    } catch (error) {
-      console.error("❌ Error processing enhanced metadata for meal:", mealId, error);
-    }
-  };
+  // REMOVED: Enhanced metadata facts processing - now handled in RatingScreen2 sequentially
 
   // OLD FUNCTION REMOVED - replaced by processMetadataForMeal
 
@@ -939,10 +878,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // CLEAN SEQUENTIAL PROCESSING: Make fresh API calls tied to this specific meal ID
         console.log("🧹 CLEAN APPROACH: Starting fresh API calls for meal ID:", docRef.id);
 
-        // Start background processing that will update this specific meal document
-        processMetadataForMeal(docRef.id, photo.uri, meal, restaurant, location);
-        
-        console.log("Background metadata processing started for meal:", docRef.id);
+        // Enhanced metadata and facts processing handled in RatingScreen2 sequentially
+        console.log("Enhanced metadata and facts processing handled in RatingScreen2 for meal:", docRef.id);
         
         /* COMMENTED OUT - Using combined service instead
         extractEnhancedMetadata(photo.uri, meal, restaurant, undefined)
@@ -1265,10 +1202,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Loading screen when criteria aren't loaded yet */}
-        {!quickCriteriaResult && (
+        {(!quickCriteriaResult || !quickCriteriaResult.dish_criteria) && (
           <View style={styles.criteriaLoadingContainer}>
             <ActivityIndicator size="large" color="#2C5530" />
-            <Text style={styles.criteriaLoadingText}>Stick Around to Learn What to Look For in Your Meal!</Text>
+            <Text style={styles.criteriaLoadingText}>Analyzing your dish...</Text>
+            <Text style={styles.criteriaLoadingSubtext}>Stick around to learn what makes it special!</Text>
           </View>
         )}
 
@@ -1291,10 +1229,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               {quickCriteriaResult.llm_provider && (
                 <View style={[
                   styles.llmProviderBadge,
-                  quickCriteriaResult.llm_provider === 'openai' ? styles.llmProviderOpenAI : styles.llmProviderGemini
+                  quickCriteriaResult.llm_provider === 'openai' 
+                    ? styles.llmProviderOpenAI 
+                    : quickCriteriaResult.llm_provider === 'claude'
+                    ? styles.llmProviderClaude
+                    : styles.llmProviderGemini
                 ]}>
                   <Text style={styles.llmProviderText}>
-                    {quickCriteriaResult.llm_provider === 'openai' ? 'ChatGPT' : 'Gemini'}
+                    {quickCriteriaResult.llm_provider === 'openai' 
+                      ? 'ChatGPT' 
+                      : quickCriteriaResult.llm_provider === 'claude'
+                      ? 'Claude'
+                      : 'Gemini'}
                   </Text>
                 </View>
               )}
@@ -1457,6 +1403,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  criteriaLoadingSubtext: {
+    color: '#666',
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
   },
   detailsCard: {
     backgroundColor: '#FAF3E0',
@@ -1789,6 +1741,10 @@ const styles = StyleSheet.create({
   llmProviderOpenAI: {
     backgroundColor: '#e6f4ea',
     borderColor: '#10a37f',
+  },
+  llmProviderClaude: {
+    backgroundColor: '#fef3e2',
+    borderColor: '#f59e0b',
   },
   llmProviderText: {
     fontSize: 11,

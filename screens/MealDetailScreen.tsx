@@ -930,8 +930,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Enhanced Metadata Section - COMMENTED OUT, using combined metadata instead */}
-        {/* 
+        {/* Enhanced Metadata Section */}
         {meal.metadata_enriched && (
           <View style={[styles.metadataSection, styles.enhancedMetadataSection]}>
             <Text style={styles.enhancedMetadataTitle}>Enhanced Metadata (Testing)</Text>
@@ -948,7 +947,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             {/* Cuisine and confidence */}
-            {/*
             <View style={styles.metadataRow}>
               <Text style={styles.metadataLabel}>Cuisine:</Text>
               <Text style={styles.metadataValue}>
@@ -959,7 +957,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             {/* Interesting ingredient - highlighted */}
-            {/*
             {meal.metadata_enriched.interesting_ingredient && meal.metadata_enriched.interesting_ingredient !== 'Unknown' && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Star Ingredient:</Text>
@@ -970,7 +967,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Key ingredients */}
-            {/*
             {meal.metadata_enriched.key_ingredients && meal.metadata_enriched.key_ingredients.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Ingredients:</Text>
@@ -981,7 +977,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Flavor profile */}
-            {/*
             {meal.metadata_enriched.flavor_profile && meal.metadata_enriched.flavor_profile.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Flavors:</Text>
@@ -992,7 +987,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
             
             {/* Dietary info */}
-            {/*
             {meal.metadata_enriched.dietary_info && meal.metadata_enriched.dietary_info.length > 0 && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Dietary:</Text>
@@ -1002,15 +996,15 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             )}
             
-            {/* Cooking method and presentation */}
-            {/*
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Cooking Method:</Text>
-              <Text style={styles.metadataValue}>{meal.metadata_enriched.cooking_method}</Text>
-            </View>
+            {/* Cooking method */}
+            {meal.metadata_enriched.cooking_method && meal.metadata_enriched.cooking_method !== 'Unknown' && (
+              <View style={styles.metadataRow}>
+                <Text style={styles.metadataLabel}>Cooking Method:</Text>
+                <Text style={styles.metadataValue}>{meal.metadata_enriched.cooking_method}</Text>
+              </View>
+            )}
             
             {/* Normalization info */}
-            {/*
             {meal.metadata_enriched.matched_to_existing && (
               <View style={styles.metadataRow}>
                 <Text style={styles.metadataLabel}>Normalized to:</Text>
@@ -1021,7 +1015,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
           </View>
         )}
-        */}
 
 
         {/* AI Analysis Results - Updated for new service structure */}
@@ -1035,15 +1028,15 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Text style={styles.combinedTestSubtitle}>Dish Information:</Text>
                 <View style={styles.metadataRow}>
                   <Text style={styles.metadataLabel}>Dish Specific:</Text>
-                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.dish_specific}</Text>
+                  <Text style={styles.metadataValue}>{meal.metadata_enriched?.dish_specific || meal.quick_criteria_result?.dish_specific || 'Unknown'}</Text>
                 </View>
                 <View style={styles.metadataRow}>
                   <Text style={styles.metadataLabel}>Dish General:</Text>
-                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.dish_general}</Text>
+                  <Text style={styles.metadataValue}>{meal.metadata_enriched?.dish_general || meal.quick_criteria_result?.dish_general || 'Unknown'}</Text>
                 </View>
                 <View style={styles.metadataRow}>
                   <Text style={styles.metadataLabel}>Cuisine:</Text>
-                  <Text style={styles.metadataValue}>{meal.quick_criteria_result.cuisine_type}</Text>
+                  <Text style={styles.metadataValue}>{meal.metadata_enriched?.cuisine_type || meal.quick_criteria_result?.cuisine_type || 'Unknown'}</Text>
                 </View>
               </>
             )}
