@@ -1253,7 +1253,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               const name = typeof criterion.name === 'string' ? criterion.name : 
                           (typeof criterion.title === 'string' ? criterion.title : '');
               
-              // Get all fields
+              // Get all fields - handle both old and new format
+              const criteria = typeof criterion.criteria === 'string' ? criterion.criteria : '';
               const whatToLookFor = typeof criterion.what_to_look_for === 'string' ? criterion.what_to_look_for : '';
               const insight = typeof criterion.insight === 'string' ? criterion.insight : '';
               const test = typeof criterion.test === 'string' ? criterion.test : '';
@@ -1262,20 +1263,27 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                 <View key={index} style={styles.criterionItem}>
                   <Text style={styles.criterionTitle}>{name}</Text>
                   
-                  {/* Combined What to Look For and Insight section */}
-                  <View style={styles.criterionSubSection}>
-                    {/* What to Look For paragraph */}
-                    {whatToLookFor && renderTextWithBold(whatToLookFor, styles.criterionDescription)}
-                    
-                    {/* Insight paragraph with full line spacing */}
-                    {insight && (
-                      <View style={{ marginTop: 16 }}>
-                        {renderTextWithBold(insight, styles.criterionInsight)}
-                      </View>
-                    )}
-                  </View>
+                  {/* NEW FORMAT: Display combined criteria if available */}
+                  {criteria ? (
+                    <View style={styles.criterionSubSection}>
+                      {renderTextWithBold(criteria, styles.criterionDescription)}
+                    </View>
+                  ) : (
+                    /* OLD FORMAT: Display separate fields */
+                    <View style={styles.criterionSubSection}>
+                      {/* What to Look For paragraph */}
+                      {whatToLookFor && renderTextWithBold(whatToLookFor, styles.criterionDescription)}
+                      
+                      {/* Insight paragraph with full line spacing */}
+                      {insight && (
+                        <View style={{ marginTop: 16 }}>
+                          {renderTextWithBold(insight, styles.criterionInsight)}
+                        </View>
+                      )}
+                    </View>
+                  )}
                   
-                  {/* Test section */}
+                  {/* Test section - only for old format */}
                   {test && (
                     <View style={[styles.criterionSubSection, { marginTop: 16 }]}>
                       {renderTextWithBold(`**Try it out!** ${test}`, styles.criterionTest)}
@@ -1284,6 +1292,21 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
               );
             })}
+          </View>
+        )}
+
+        {/* Rating Statements Section - NEW */}
+        {quickCriteriaResult && quickCriteriaResult.rating_statements && quickCriteriaResult.rating_statements.length > 0 && (
+          <View style={styles.ratingStatementsCard}>
+            <Text style={styles.ratingStatementsTitle}>Quick Rating Guide</Text>
+            {quickCriteriaResult.rating_statements.map((statement, index) => (
+              <View key={index} style={styles.ratingStatementItem}>
+                <Text style={styles.ratingStatementBullet}>•</Text>
+                <View style={{ flex: 1 }}>
+                  {renderTextWithBold(statement, styles.ratingStatementText)}
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
@@ -1637,6 +1660,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  // Rating statements styles - NEW
+  ratingStatementsCard: {
+    backgroundColor: '#f5f9ff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  ratingStatementsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a2b49',
+    marginBottom: 12,
+  },
+  ratingStatementItem: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    paddingLeft: 8,
+  },
+  ratingStatementBullet: {
+    color: '#4a5568',
+    marginRight: 8,
+    fontSize: 14,
+  },
+  ratingStatementText: {
+    flex: 1,
+    color: '#4a5568',
+    fontSize: 14,
+    lineHeight: 20,
   },
   dishCriteriaTitleContainer: {
     flexDirection: 'row',

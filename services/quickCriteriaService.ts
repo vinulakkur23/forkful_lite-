@@ -10,13 +10,15 @@ export interface QuickCriteriaData {
   dish_general: string; // Now provided as placeholder by Claude  
   cuisine_type: string; // Now provided as placeholder by Claude
   dish_criteria: Array<{
-    name?: string; // Claude uses "name" instead of "title"
+    name?: string; // Name of the criteria
     title?: string; // Keep for backward compatibility
-    what_to_look_for?: string; // Claude's detailed format
-    insight?: string; // Claude's detailed format  
-    test?: string; // Claude's detailed format
+    criteria?: string; // NEW: Combined criteria with insight (Claude's new format)
+    what_to_look_for?: string; // OLD: Claude's previous detailed format
+    insight?: string; // OLD: Claude's previous detailed format  
+    test?: string; // OLD: Claude's previous detailed format
     description?: string; // Keep for backward compatibility
   }>;
+  rating_statements?: string[]; // NEW: 8 quick rating statements
   dish_history?: string;
   extraction_timestamp: string;
   extraction_version: string;
