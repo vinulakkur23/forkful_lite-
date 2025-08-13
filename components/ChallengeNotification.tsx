@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'ios' ? 60 : 40,
     left: 0,
     right: 0,
-    backgroundColor: '#f0f8ff', // Light blue background like challenge cards
+    backgroundColor: '#ffffff', // White background
     borderRadius: 12,
     marginHorizontal: 16,
     marginTop: 10,

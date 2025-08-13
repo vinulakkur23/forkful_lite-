@@ -157,6 +157,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       } else {
         setThoughts('');
       }
+
+      // Reset overlay state when loading fresh meal data
+      setCurrentStatementIndex(0);
+      setShowQuickRatingsOverlay(false);
+      setQuickRatings({});
     } catch (error) {
       console.error('EditMealScreen - Error fetching fresh meal data:', error);
       Alert.alert('Error', 'Failed to load meal data');

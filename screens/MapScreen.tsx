@@ -826,9 +826,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   if (filteredMeals.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        {!showWishlist && <Icon name="place" size={64} color="#ddd" />}
         {activeFilters && activeFilters.length > 0 ? (
           <>
+            <Icon name="place" size={64} color="#ddd" />
             <Text style={styles.emptyText}>No meals match your filters</Text>
             <Text style={styles.emptySubtext}>
               Try different filters or clear your search
@@ -842,10 +842,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
               </>
             ) : (
               <>
-                <Text style={styles.emptyText}>No meals with location data</Text>
-                <Text style={styles.emptySubtext}>
-                  Add meals with location information to see them on the map
-                </Text>
+                <Text style={styles.emptyText}>Add meals to see your automatically generated, sharable map!</Text>
               </>
             )}
           </>
@@ -1119,12 +1116,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    paddingTop: 0,
+    paddingBottom: 50,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: 'normal',
     color: '#555',
     marginTop: 15,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 14,

@@ -71,6 +71,27 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
+  // Function to render text with bold formatting (double asterisks)
+  const renderTextWithBold = (text: string) => {
+    if (!text) return null;
+    
+    // Split by double asterisks
+    const parts = text.split(/\*\*(.*?)\*\*/g);
+    
+    return (
+      <Text style={styles.detailDescription}>
+        {parts.map((part, index) => {
+          // Even indices are regular text, odd indices are bold
+          if (index % 2 === 0) {
+            return <Text key={index}>{part}</Text>;
+          } else {
+            return <Text key={index} style={{ fontWeight: 'bold' }}>{part}</Text>;
+          }
+        })}
+      </Text>
+    );
+  };
+
   useEffect(() => {
     loadAchievements();
     loadTopRatedPhotos();
@@ -471,33 +492,18 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
         </View>
       ) : (
         <>
-          {/* Stamps Section */}
-          <Text style={styles.sectionTitle}>Stamps</Text>
-          
-          <FlatList
-            data={achievementItems.filter(item => item.earned)}
-            renderItem={renderAchievementItem}
-            keyExtractor={item => item.id}
-            numColumns={3}
-            contentContainerStyle={styles.stampsList}
-            scrollEnabled={false}
-          />
-          
-          {/* Empty state */}
-          {achievementItems.filter(item => item.earned).length === 0 && (
+          {/* Empty state - when no challenges, cities, or photos */}
+          {!challengesLoading && !citiesLoading && !photosLoading && 
+           activeChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Icon name="emoji-events" size={64} color="#ddd" />
-              <Text style={styles.emptyText}>No stamps collected yet</Text>
-              <Text style={styles.emptySubtext}>
-                Keep using the app to earn stamps!
-              </Text>
+              <Text style={styles.emptyText}>Add meals to get and win challenges!</Text>
             </View>
-          )}
-
-          {/* Active Challenges Section */}
-          {!challengesLoading && activeChallenges.length > 0 && (
+          ) : (
             <>
-              <Text style={styles.sectionTitle}>What to Eat Next</Text>
+              {/* Active Challenges Section */}
+              {!challengesLoading && activeChallenges.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Challenge: What to Eat Next</Text>
               <FlatList
                 data={activeChallenges}
                 renderItem={renderChallengeItem}
@@ -556,7 +562,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             <Text style={styles.debugButtonText}>🧹 Clear ALL Data</Text>
           </TouchableOpacity>
           
-
+            </>
+          )}
         </>
       )}
     </ScrollView>
@@ -713,10 +720,10 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                     {selectedChallenge.recommended_dish_name}
                   </Text>
                   
-                  <Text style={styles.detailDescription}>
-                    {selectedChallenge.challenge_description || 
-                     `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()}
-                  </Text>
+                  {renderTextWithBold(
+                    selectedChallenge.challenge_description || 
+                    `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()
+                  )}
                 </>
               )}
             </View>
@@ -791,7 +798,7 @@ const styles = StyleSheet.create({
   stampIconContainer: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 0,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
@@ -834,13 +841,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    padding: 20,
+    paddingTop: 200,
+    paddingBottom: 50,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a2b49',
+    fontWeight: 'normal',
+    color: '#555',
     marginTop: 15,
+    textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   emptySubtext: {
@@ -897,9 +907,9 @@ const styles = StyleSheet.create({
   },
   // New zoomed stamp styles
   zoomedStampContainer: {
-    width: 60 * 2, // Reduced from 3x to 2x (120px)
-    height: 60 * 2, // Reduced from 3x to 2x (120px)
-    borderRadius: 60, // Circular like the original (half of width/height)
+    width: 150, // Full size of the image
+    height: 150, // Full size of the image
+    borderRadius: 0, // No border radius to show full square image
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1098,7 +1108,7 @@ const styles = StyleSheet.create({
   challengeItem: {
     width: 150,
     marginRight: 12,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',

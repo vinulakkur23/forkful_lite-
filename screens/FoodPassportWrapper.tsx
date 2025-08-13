@@ -106,19 +106,19 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     },
     { 
       key: 'saved', 
-      title: 'Saved', 
+      title: 'Wishlist', 
       activeIcon: require('../assets/icons/passport_tabs/wishlist-active.png'),
       inactiveIcon: require('../assets/icons/passport_tabs/wishlist-inactive.png')
     },
     { 
       key: 'map', 
-      title: 'Map', 
+      title: 'My Map', 
       activeIcon: require('../assets/icons/passport_tabs/map-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/map-inactive.png')
     },
     { 
       key: 'stamps', 
-      title: 'Stamps', 
+      title: 'Accolades', 
       activeIcon: require('../assets/icons/passport_tabs/stamps-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/stamps-inactive.png')
     },
@@ -280,7 +280,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffc008" />
+        <ActivityIndicator size="large" color="#1a2b49" />
         <Text style={styles.loadingText}>Loading Food Passport...</Text>
       </View>
     );
@@ -364,6 +364,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               style={styles.tabIcon}
               resizeMode="contain"
             />
+            <Text style={[
+              styles.tabLabel,
+              { color: tabIndex === i ? '#E63946' : '#888' }
+            ]}>
+              {route.title}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -473,8 +479,11 @@ const styles = StyleSheet.create({
     height: 28,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
+    marginTop: 2,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   contentContainer: {
     flex: 1,
