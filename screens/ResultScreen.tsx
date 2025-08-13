@@ -1119,6 +1119,57 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // CLEAN APPROACH: Meal is already saved in Firestore, just navigate
     if (savedMealId && mealData) {
       console.log("Navigating to EditMeal with meal ID:", savedMealId);
+      
+      // Start challenge generation in background BEFORE navigating to EditMeal
+      // Use the actual meal name from user input and criteria from Firestore
+      const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
+      const actualCriteria = quickCriteriaResult?.dish_criteria || mealData?.quick_criteria_result?.dish_criteria;
+      
+      console.log("🍽️ Checking challenge generation data:", {
+        mealName: actualMealName,
+        criteriaLength: actualCriteria?.length,
+        firstCriteria: actualCriteria?.[0]
+      });
+      
+      if (actualMealName && actualCriteria && actualCriteria.length > 0) {
+        console.log("🍽️ Starting background challenge generation for:", actualMealName);
+        import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+          // Map criteria to expected format
+          const criteria = actualCriteria.map(c => ({
+            title: c.name || c.title || 'Unknown Criteria',
+            description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+          }));
+          
+          // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
+          const dishGeneral = quickCriteriaResult?.cuisine_type || mealData?.cuisine_type || "Dish";
+          
+          // Store the promise so EditMealScreen can wait for it if needed
+          const challengePromise = generateNextDishChallenge(
+            actualMealName,  // Use actual meal name
+            dishGeneral,     // Use cuisine type or fallback
+            criteria,
+            mealData.location?.city || mealData.city,
+            [] // Previous challenges - can be loaded if needed
+          );
+          
+          // Store the promise immediately
+          (global as any).pendingChallengePromise = challengePromise;
+          
+          // Also store the result when it completes
+          challengePromise.then(challenge => {
+            if (challenge) {
+              console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
+              // Store the completed challenge
+              (global as any).pendingChallenge = challenge;
+            }
+          }).catch(error => {
+            console.error("🍽️ Background challenge generation failed:", error);
+            // Clear the promise on error
+            (global as any).pendingChallengePromise = null;
+          });
+        });
+      }
+      
       navigation.navigate('EditMeal', {
         mealId: savedMealId,
         meal: {
@@ -1162,6 +1213,56 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const goToFoodPassport = (): void => {
+    // Start challenge generation in background BEFORE navigating to FoodPassport
+    // Use the actual meal name from user input and criteria from Firestore
+    const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
+    const actualCriteria = quickCriteriaResult?.dish_criteria || mealData?.quick_criteria_result?.dish_criteria;
+    
+    console.log("🍽️ Checking challenge generation data (FoodPassport):", {
+      mealName: actualMealName,
+      criteriaLength: actualCriteria?.length,
+      firstCriteria: actualCriteria?.[0]
+    });
+    
+    if (actualMealName && actualCriteria && actualCriteria.length > 0) {
+      console.log("🍽️ Starting background challenge generation for:", actualMealName);
+      import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+        // Map criteria to expected format
+        const criteria = actualCriteria.map(c => ({
+          title: c.name || c.title || 'Unknown Criteria',
+          description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+        }));
+        
+        // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
+        const dishGeneral = quickCriteriaResult?.cuisine_type || mealData?.cuisine_type || "Dish";
+        
+        // Store the promise so EditMealScreen can wait for it if needed
+        const challengePromise = generateNextDishChallenge(
+          actualMealName,  // Use actual meal name
+          dishGeneral,     // Use cuisine type or fallback
+          criteria,
+          mealData.location?.city || mealData.city,
+          [] // Previous challenges - can be loaded if needed
+        );
+        
+        // Store the promise immediately
+        (global as any).pendingChallengePromise = challengePromise;
+        
+        // Also store the result when it completes
+        challengePromise.then(challenge => {
+          if (challenge) {
+            console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
+            // Store the completed challenge
+            (global as any).pendingChallenge = challenge;
+          }
+        }).catch(error => {
+          console.error("🍽️ Background challenge generation failed:", error);
+          // Clear the promise on error
+          (global as any).pendingChallengePromise = null;
+        });
+      });
+    }
+    
     // Navigate to the FoodPassport tab
     navigation.reset({
       index: 0,

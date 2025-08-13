@@ -29,6 +29,8 @@ export interface DishChallenge {
   image_data?: string; // Base64 encoded image data
   image_url?: string; // Original image URL from DALL-E
   image_cached?: boolean; // Whether the image was loaded from cache
+  image_status?: 'pending' | 'generating' | 'ready' | 'error'; // Track image generation status
+  generation_service?: string; // Which AI service generated this
   // Legacy fields for backward compatibility
   why_this_dish?: string;
   what_to_notice?: string;
@@ -49,6 +51,7 @@ export interface ChallengeCompletionResponse {
 
 /**
  * Generate a new dish challenge based on user's recent meal experience
+ * Uses the original combined service (text + image generation)
  */
 export const generateNextDishChallenge = async (
   dishSpecific: string,
@@ -107,6 +110,7 @@ export const generateNextDishChallenge = async (
     return null;
   }
 };
+
 
 /**
  * Check if a new meal completes an existing challenge

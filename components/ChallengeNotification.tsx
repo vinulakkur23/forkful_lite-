@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { UserChallenge } from '../services/userChallengesService';
@@ -92,6 +93,17 @@ const ChallengeNotification: React.FC<ChallengeNotificationProps> = ({
             style={styles.challengeEmojiImage} 
             resizeMode="contain" 
           />
+        ) : challenge.image_status === 'pending' || challenge.image_status === 'generating' ? (
+          <View style={styles.imageLoadingContainer}>
+            <Icon name="restaurant" size={40} color="#ff6b6b" />
+            {challenge.image_status === 'generating' && (
+              <ActivityIndicator 
+                style={styles.imageLoadingIndicator} 
+                size="small" 
+                color="#ff6b6b" 
+              />
+            )}
+          </View>
         ) : (
           <Icon name="restaurant" size={40} color="#ff6b6b" />
         )}
@@ -190,6 +202,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  imageLoadingContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageLoadingIndicator: {
+    position: 'absolute',
+    bottom: -5,
   },
 });
 

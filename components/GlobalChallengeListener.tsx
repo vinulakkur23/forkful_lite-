@@ -14,9 +14,26 @@ const GlobalChallengeListener: React.FC = () => {
       console.log('🍽️ GlobalChallengeListener received challenge:', challenge.recommended_dish_name);
       setChallengeQueue(prev => [...prev, challenge]);
     });
+    
+    // Subscribe to image updates
+    const unsubscribeImageUpdate = challengeNotificationService.onChallengeImageUpdated((updatedChallenge) => {
+      console.log('🎨 GlobalChallengeListener received image update:', updatedChallenge.recommended_dish_name);
+      // Update current challenge if it matches
+      setCurrentChallenge(current => {
+        if (current && current.challenge_id === updatedChallenge.challenge_id) {
+          return updatedChallenge;
+        }
+        return current;
+      });
+      // Update any challenges in queue
+      setChallengeQueue(queue => 
+        queue.map(c => c.challenge_id === updatedChallenge.challenge_id ? updatedChallenge : c)
+      );
+    });
 
     return () => {
       unsubscribe();
+      unsubscribeImageUpdate();
     };
   }, []);
 

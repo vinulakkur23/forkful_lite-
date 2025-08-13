@@ -80,6 +80,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number }>({});
   const [currentStatementIndex, setCurrentStatementIndex] = useState<number>(0);
   const [pressedEmojiId, setPressedEmojiId] = useState<number | null>(null);
+  const [showIngredientHistory, setShowIngredientHistory] = useState<boolean>(false);
+  const [showRestaurantHistory, setShowRestaurantHistory] = useState<boolean>(false);
   
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -322,13 +324,19 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Reset press feedback
       setPressedEmojiId(null);
       
-      // Move to next statement or close overlay
+      // Move to next statement or show ingredient history
       if (currentStatementIndex < statements.length - 1) {
         setCurrentStatementIndex(currentStatementIndex + 1);
       } else {
-        // All statements rated, close overlay
-        setShowQuickRatingsOverlay(false);
-        setCurrentStatementIndex(0);
+        // All statements rated, show ingredient history if available
+        if (meal.enhanced_facts?.food_facts?.ingredient_history) {
+          setShowQuickRatingsOverlay(false);
+          setShowIngredientHistory(true);
+        } else {
+          // No ingredient history, just close
+          setShowQuickRatingsOverlay(false);
+          setCurrentStatementIndex(0);
+        }
       }
     }, 150); // 150ms delay for visual feedback
   };
@@ -336,6 +344,26 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleCloseQuickRatings = (): void => {
     setShowQuickRatingsOverlay(false);
     setCurrentStatementIndex(0);
+  };
+
+  const handleCloseIngredientHistory = (): void => {
+    setShowIngredientHistory(false);
+    setCurrentStatementIndex(0);
+  };
+
+  const handleCloseRestaurantHistory = (): void => {
+    setShowRestaurantHistory(false);
+    // Navigate to meal detail after closing restaurant history
+    navigation.navigate('MealDetail', { 
+      mealId: mealId,
+      justEdited: true,
+      // Pass through navigation context
+      previousScreen: route.params?.previousScreen,
+      previousTabIndex: route.params?.previousTabIndex,
+      passportUserId: route.params?.passportUserId,
+      passportUserName: route.params?.passportUserName,
+      passportUserPhoto: route.params?.passportUserPhoto
+    });
   };
 
   // Helper function to render text with bold formatting
@@ -559,6 +587,17 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Generate a challenge for the user based on their meal experience
   const generateChallengeForMeal = async (mealData: any) => {
     try {
+      console.log('EditMealScreen: generateChallengeForMeal called with data:', {
+        hasQuickCriteriaResult: !!mealData.quick_criteria_result,
+        quickCriteriaKeys: mealData.quick_criteria_result ? Object.keys(mealData.quick_criteria_result) : [],
+        dishSpecific: mealData.quick_criteria_result?.dish_specific,
+        dishGeneral: mealData.quick_criteria_result?.dish_general,
+        dishCriteriaLength: mealData.quick_criteria_result?.dish_criteria?.length,
+        firstCriteria: mealData.quick_criteria_result?.dish_criteria?.[0],
+        hasCombinedResult: !!mealData.combined_result,
+        allKeys: Object.keys(mealData)
+      });
+      
       // Check if we have the necessary data for challenge generation
       const hasQuickCriteria = mealData.quick_criteria_result?.dish_criteria;
       const hasCombinedCriteria = mealData.combined_result?.dish_criteria?.criteria;
@@ -575,12 +614,31 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         // Use new service data
         dishSpecific = mealData.quick_criteria_result.dish_specific;
         dishGeneral = mealData.quick_criteria_result.dish_general;
-        criteria = mealData.quick_criteria_result.dish_criteria;
+        // Map the dish_criteria to the expected format for challenge generation
+        criteria = mealData.quick_criteria_result.dish_criteria.map(c => ({
+          title: c.name || c.title || 'Unknown Criteria',
+          description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+        }));
+        console.log('EditMealScreen: Mapped quick criteria for challenge:', criteria);
       } else if (hasCombinedCriteria) {
         // Use old combined service data
         dishSpecific = mealData.combined_result.dish_specific || mealData.meal || 'Unknown Dish';
         dishGeneral = mealData.combined_result.dish_general || 'Food';
-        criteria = mealData.combined_result.dish_criteria.criteria;
+        // Map the old format to the expected format
+        criteria = mealData.combined_result.dish_criteria.criteria.map(c => ({
+          title: c.title || 'Unknown Criteria',
+          description: c.description || 'No description available'
+        }));
+      }
+
+      // Validate we have the required data
+      if (!dishSpecific || !dishGeneral || !criteria || criteria.length === 0) {
+        console.error('EditMealScreen: Missing required data for challenge generation:', {
+          dishSpecific,
+          dishGeneral,
+          criteriaLength: criteria?.length || 0
+        });
+        return;
       }
 
       // Check if user already has an active challenge for this dish
@@ -609,7 +667,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         previousChallengesCount: previousChallenges.length
       });
 
-      // Generate the challenge
+      // Generate the challenge (fallback mode)
       const challenge = await generateNextDishChallenge(
         dishSpecific,
         dishGeneral,
@@ -619,11 +677,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       );
 
       if (challenge) {
-        // Save the challenge to Firebase
+        // Save the challenge to Firebase (initially without image)
         const success = await saveUserChallenge(challenge);
         if (success) {
           console.log('EditMealScreen: Challenge generated and saved:', challenge.recommended_dish_name);
-          // Show challenge notification
+          // Show challenge notification immediately (with placeholder image)
           challengeNotificationService.showChallenge(challenge);
         } else {
           console.error('EditMealScreen: Failed to save challenge to Firebase');
@@ -759,31 +817,91 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         photosArray: verifyData?.photos
       });
 
-      // Generate a challenge based on this meal experience (background operation)
-      if (verifyData) {
-        generateChallengeForMeal(verifyData).catch(error => {
-          console.error('EditMealScreen: Background challenge generation failed:', error);
-        });
+      // Check if there's a pending challenge from ResultScreen
+      const pendingChallenge = (global as any).pendingChallenge;
+      const pendingChallengePromise = (global as any).pendingChallengePromise;
+      
+      if (pendingChallenge) {
+        // Challenge is already ready, award it immediately
+        console.log('EditMealScreen: Found ready challenge, awarding it:', pendingChallenge.recommended_dish_name);
+        
+        // Import services
+        const { saveUserChallenge } = await import('../services/userChallengesService');
+        const challengeNotificationService = (await import('../services/challengeNotificationService')).default;
+        
+        // Save the challenge to Firebase
+        const success = await saveUserChallenge(pendingChallenge);
+        if (success) {
+          console.log('EditMealScreen: Challenge saved and awarded:', pendingChallenge.recommended_dish_name);
+          // Show challenge notification
+          challengeNotificationService.showChallenge(pendingChallenge);
+        } else {
+          console.error('EditMealScreen: Failed to save challenge to Firebase');
+        }
+        
+        // Clear the pending challenge
+        (global as any).pendingChallenge = null;
+        (global as any).pendingChallengePromise = null;
+      } else if (pendingChallengePromise) {
+        // Challenge is still generating, wait for it
+        console.log('EditMealScreen: Challenge still generating, waiting for completion...');
+        
+        try {
+          // Wait for the challenge to complete (with timeout)
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Challenge generation timeout')), 30000)
+          );
+          
+          const challenge = await Promise.race([pendingChallengePromise, timeoutPromise]);
+          
+          if (challenge) {
+            console.log('EditMealScreen: Challenge completed while waiting:', challenge.recommended_dish_name);
+            
+            // Import services
+            const { saveUserChallenge } = await import('../services/userChallengesService');
+            const challengeNotificationService = (await import('../services/challengeNotificationService')).default;
+            
+            // Save and show the challenge
+            const success = await saveUserChallenge(challenge);
+            if (success) {
+              console.log('EditMealScreen: Late challenge saved and awarded:', challenge.recommended_dish_name);
+              challengeNotificationService.showChallenge(challenge);
+            }
+          }
+        } catch (error) {
+          console.error('EditMealScreen: Error waiting for challenge:', error);
+          // Don't block the save operation, just log the error
+        } finally {
+          // Clear the pending challenge promise
+          (global as any).pendingChallenge = null;
+          (global as any).pendingChallengePromise = null;
+        }
+      } else {
+        console.log('EditMealScreen: No pending challenge found, checking if we should generate one...');
+        // Fallback: Generate a challenge if none was pre-generated (backward compatibility)
+        if (verifyData) {
+          generateChallengeForMeal(verifyData).catch(error => {
+            console.error('EditMealScreen: Fallback challenge generation failed:', error);
+          });
+        }
       }
 
-      // Success notification
-      Alert.alert(
-        "Success",
-        "Your meal rating has been updated.",
-        [{ 
-          text: "OK", 
-          onPress: () => navigation.navigate('MealDetail', { 
-            mealId: mealId,
-            justEdited: true,
-            // Pass through navigation context
-            previousScreen: route.params?.previousScreen,
-            previousTabIndex: route.params?.previousTabIndex,
-            passportUserId: route.params?.passportUserId,
-            passportUserName: route.params?.passportUserName,
-            passportUserPhoto: route.params?.passportUserPhoto
-          }) 
-        }]
-      );
+      // Show restaurant history overlay or go to meal detail
+      if (meal.enhanced_facts?.food_facts?.restaurant_history) {
+        setShowRestaurantHistory(true);
+      } else {
+        // No restaurant history, go straight to meal detail
+        navigation.navigate('MealDetail', { 
+          mealId: mealId,
+          justEdited: true,
+          // Pass through navigation context
+          previousScreen: route.params?.previousScreen,
+          previousTabIndex: route.params?.previousTabIndex,
+          passportUserId: route.params?.passportUserId,
+          passportUserName: route.params?.passportUserName,
+          passportUserPhoto: route.params?.passportUserPhoto
+        });
+      }
     } catch (error) {
       console.error('Error updating meal:', error);
       Alert.alert("Error", "Failed to update meal. Please try again.");
@@ -907,6 +1025,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
           )}
+          {/* Dish City History */}
+          {meal.enhanced_facts?.food_facts?.dish_city_history && (
+            <View style={styles.cityHistorySection}>
+              <Text style={styles.cityHistoryText}>
+                {renderTextWithBold(meal.enhanced_facts.food_facts.dish_city_history)}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Action buttons */}
@@ -973,6 +1099,47 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.overlayProgress}>
               <Text style={styles.progressText}>
                 {currentStatementIndex + 1} of {meal.quick_criteria_result.rating_statements.length}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Ingredient History Overlay */}
+      {showIngredientHistory && meal.enhanced_facts?.food_facts?.ingredient_history && (
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayContent}>
+            <View style={styles.overlayHeader}>
+              <TouchableOpacity onPress={handleCloseIngredientHistory} style={styles.overlayCloseButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.factContainer}>
+              <Text style={styles.factTitle}>🌿 Ingredient History</Text>
+              <Text style={styles.factText}>
+                {renderTextWithBold(meal.enhanced_facts.food_facts.ingredient_history)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Restaurant History Success Overlay */}
+      {showRestaurantHistory && meal.enhanced_facts?.food_facts?.restaurant_history && (
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayContent}>
+            <View style={styles.overlayHeader}>
+              <TouchableOpacity onPress={handleCloseRestaurantHistory} style={styles.overlayCloseButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.factContainer}>
+              <Text style={styles.successTitle}>✅ Your Meal has been Saved!</Text>
+              <Text style={styles.factTitle}>🏮 Restaurant History</Text>
+              <Text style={styles.factText}>
+                {renderTextWithBold(meal.enhanced_facts.food_facts.restaurant_history)}
               </Text>
             </View>
           </View>
@@ -1321,6 +1488,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // City History Styles
+  cityHistorySection: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 15,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFC008',
+  },
+  cityHistoryText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    lineHeight: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontStyle: 'italic',
+  },
+  // Fact Overlay Styles
+  factContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  factTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  factText: {
+    fontSize: 15,
+    color: '#1a2b49',
+    textAlign: 'center',
+    lineHeight: 22,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
+    marginBottom: 20,
   },
 });
 

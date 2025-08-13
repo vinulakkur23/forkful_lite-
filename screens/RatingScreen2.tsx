@@ -1063,7 +1063,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               metadata.dish_general, 
               metadata.cuisine_type,
               mealName,
-              restaurant
+              restaurant,
+              location?.city // Pass the city from location data
             );
             
           } catch (firestoreError) {
