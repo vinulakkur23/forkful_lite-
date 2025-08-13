@@ -1421,7 +1421,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               <Image
                 source={{ uri: route.params.photo.uri }}
                 style={styles.image}
-                resizeMode="contain"
+                resizeMode="cover"
                 onError={handleImageError}
               />
             ) : (
@@ -1625,7 +1625,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 400, // Increased height from 300 to 400 to make photo bigger
+    height: 450, // Increased height from 400 to 450 for bigger image
     borderRadius: 12, // Matching card radius from HomeScreen
     overflow: 'hidden',
     backgroundColor: '#FAF3E0', // Card background color from HomeScreen

@@ -515,7 +515,7 @@ function TabNavigator() {
         component={ResultScreen}
         options={{
           title: 'Rating Result',
-          headerShown: true, // ResultScreen expects a header
+          headerShown: false, // Remove header as requested
           tabBarButton: () => null, // Hide from tab bar
         }}
       />

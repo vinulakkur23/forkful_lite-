@@ -781,6 +781,36 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </Text>
         </TouchableOpacity>
         
+        {/* Comments section - handle both new thoughts format and legacy liked/disliked format */}
+        {(meal.comments?.thoughts || meal.comments?.liked || meal.comments?.disliked) && (
+          <View style={styles.feedbackSection}>
+            {meal.comments?.thoughts ? (
+              // New thoughts format
+              <View style={[styles.feedbackItem, {marginBottom: 0}]}>
+                <Text style={styles.feedbackLabel}>How was the Meal?</Text>
+                <Text style={styles.feedbackText}>{meal.comments.thoughts}</Text>
+              </View>
+            ) : (
+              // Legacy format - keep for backward compatibility
+              <>
+                {meal.comments?.liked && (
+                  <View style={[styles.feedbackItem, !meal.comments?.disliked && {marginBottom: 0}]}>
+                    <Text style={styles.feedbackLabel}>What was Good:</Text>
+                    <Text style={styles.feedbackText}>{meal.comments.liked}</Text>
+                  </View>
+                )}
+                
+                {meal.comments?.disliked && (
+                  <View style={[styles.feedbackItem, {marginBottom: 0}]}>
+                    <Text style={styles.feedbackLabel}>What could be Better:</Text>
+                    <Text style={styles.feedbackText}>{meal.comments.disliked}</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Quick Ratings Section - only show rated statements */}
         {quickRatings && meal.quick_criteria_result?.rating_statements && (
           <View style={styles.quickRatingsSection}>
@@ -809,36 +839,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
               ))
             }
-          </View>
-        )}
-
-        {/* Comments section - handle both new thoughts format and legacy liked/disliked format */}
-        {(meal.comments?.thoughts || meal.comments?.liked || meal.comments?.disliked) && (
-          <View style={styles.feedbackSection}>
-            {meal.comments?.thoughts ? (
-              // New thoughts format
-              <View style={[styles.feedbackItem, {marginBottom: 0}]}>
-                <Text style={styles.feedbackLabel}>How was the Meal?</Text>
-                <Text style={styles.feedbackText}>{meal.comments.thoughts}</Text>
-              </View>
-            ) : (
-              // Legacy format - keep for backward compatibility
-              <>
-                {meal.comments?.liked && (
-                  <View style={[styles.feedbackItem, !meal.comments?.disliked && {marginBottom: 0}]}>
-                    <Text style={styles.feedbackLabel}>What was Good:</Text>
-                    <Text style={styles.feedbackText}>{meal.comments.liked}</Text>
-                  </View>
-                )}
-                
-                {meal.comments?.disliked && (
-                  <View style={[styles.feedbackItem, {marginBottom: 0}]}>
-                    <Text style={styles.feedbackLabel}>What could be Better:</Text>
-                    <Text style={styles.feedbackText}>{meal.comments.disliked}</Text>
-                  </View>
-                )}
-              </>
-            )}
           </View>
         )}
 

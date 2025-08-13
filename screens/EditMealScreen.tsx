@@ -1030,6 +1030,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           {/* Dish City History */}
           {meal.enhanced_facts?.food_facts?.dish_city_history && (
             <View style={styles.cityHistorySection}>
+              <Text style={styles.cityHistoryTitle}>Fun Fact!</Text>
               <Text style={styles.cityHistoryText}>
                 {renderTextWithBold(meal.enhanced_facts.food_facts.dish_city_history)}
               </Text>
@@ -1118,7 +1119,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             <View style={styles.factContainer}>
-              <Text style={styles.factTitle}>🌿 Ingredient History</Text>
+              <Text style={styles.factTitle}>Fun Fact!</Text>
               <Text style={styles.factText}>
                 {renderTextWithBold(meal.enhanced_facts.food_facts.ingredient_history)}
               </Text>
@@ -1138,8 +1139,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
             
             <View style={styles.factContainer}>
-              <Text style={styles.successTitle}>✅ Your Meal has been Saved!</Text>
-              <Text style={styles.factTitle}>🏮 Restaurant History</Text>
+              <Text style={styles.successTitle}>Your Meal has been Saved!</Text>
+              <Text style={styles.factTitle}>Fun Fact!</Text>
               <Text style={styles.factText}>
                 {renderTextWithBold(meal.enhanced_facts.food_facts.restaurant_history)}
               </Text>
@@ -1430,8 +1431,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 24,
-    marginHorizontal: 20,
-    maxWidth: '90%',
+    marginHorizontal: 12,
+    maxWidth: '95%',
     minWidth: '80%',
   },
   overlayHeader: {
@@ -1496,11 +1497,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
     padding: 16,
-    marginHorizontal: 20,
+    marginHorizontal: 8,
     marginTop: 15,
     marginBottom: 10,
     borderLeftWidth: 4,
     borderLeftColor: '#FFC008',
+  },
+  cityHistoryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   cityHistoryText: {
     fontSize: 14,
@@ -1512,7 +1520,7 @@ const styles = StyleSheet.create({
   // Fact Overlay Styles
   factContainer: {
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
   },
   factTitle: {
     fontSize: 18,
@@ -1532,7 +1540,7 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
     marginBottom: 20,

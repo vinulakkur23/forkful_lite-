@@ -1314,7 +1314,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Dish History Section - from quick criteria service */}
         {quickCriteriaResult && quickCriteriaResult.dish_history && (
           <View style={styles.dishHistoryCard}>
-            <Text style={styles.dishHistoryTitle}>About This Dish</Text>
+            <Text style={styles.dishHistoryTitle}>About {meal || 'This Dish'}</Text>
             {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
           </View>
         )}
@@ -1325,26 +1325,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
           <View style={styles.dishCriteriaCard}>
             <View style={styles.dishCriteriaTitleContainer}>
-              <Text style={styles.dishCriteriaTitle}>What to Look For</Text>
-              {/* LLM Provider Badge */}
-              {quickCriteriaResult.llm_provider && (
-                <View style={[
-                  styles.llmProviderBadge,
-                  quickCriteriaResult.llm_provider === 'openai' 
-                    ? styles.llmProviderOpenAI 
-                    : quickCriteriaResult.llm_provider === 'claude'
-                    ? styles.llmProviderClaude
-                    : styles.llmProviderGemini
-                ]}>
-                  <Text style={styles.llmProviderText}>
-                    {quickCriteriaResult.llm_provider === 'openai' 
-                      ? 'ChatGPT' 
-                      : quickCriteriaResult.llm_provider === 'claude'
-                      ? 'Claude'
-                      : 'Gemini'}
-                  </Text>
-                </View>
-              )}
+              <Text style={styles.dishCriteriaTitle}>What Makes a Good {meal || 'Dish'}</Text>
             </View>
             {quickCriteriaResult.dish_criteria.map((criterion, index) => {
               // Ensure criterion is an object with string properties
@@ -1399,7 +1380,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Rating Statements Section - NEW */}
         {quickCriteriaResult && quickCriteriaResult.rating_statements && quickCriteriaResult.rating_statements.length > 0 && (
           <View style={styles.ratingStatementsCard}>
-            <Text style={styles.ratingStatementsTitle}>Quick Rating Guide</Text>
+            <Text style={styles.ratingStatementsTitle}>Look for These!</Text>
             {quickCriteriaResult.rating_statements.map((statement, index) => (
               <View key={index} style={styles.ratingStatementItem}>
                 <Text style={styles.ratingStatementBullet}>•</Text>
@@ -1529,7 +1510,7 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criteriaLoadingSubtext: {
-    color: '#666',
+    color: '#1a2b49',
     marginTop: 8,
     fontSize: 14,
     textAlign: 'center',
@@ -1621,7 +1602,7 @@ const styles = StyleSheet.create({
   },
   additionalRestaurantName: {
     fontSize: 12,
-    color: '#666',
+    color: '#1a2b49',
     marginTop: 2,
   },
   locationRow: {
@@ -1655,7 +1636,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   feedbackCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
@@ -1752,7 +1733,7 @@ const styles = StyleSheet.create({
   },
   // Dish criteria section styles
   dishCriteriaCard: {
-    backgroundColor: '#f0f8f0',
+    backgroundColor: '#FAF9F6',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1764,7 +1745,7 @@ const styles = StyleSheet.create({
   },
   // Rating statements styles - NEW
   ratingStatementsCard: {
-    backgroundColor: '#f5f9ff',
+    backgroundColor: '#FAF3E0',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1779,6 +1760,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a2b49',
     marginBottom: 12,
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   ratingStatementItem: {
     flexDirection: 'row',
@@ -1786,13 +1769,13 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   ratingStatementBullet: {
-    color: '#4a5568',
+    color: '#1a2b49',
     marginRight: 8,
     fontSize: 14,
   },
   ratingStatementText: {
     flex: 1,
-    color: '#4a5568',
+    color: '#1a2b49',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1806,28 +1789,30 @@ const styles = StyleSheet.create({
   dishCriteriaTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2d5016',
+    color: '#1a2b49',
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    flexWrap: 'wrap',
+    flex: 1,
   },
   criterionItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: '#ffc008',
   },
   criterionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2d5016',
+    color: '#1a2b49',
     marginBottom: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criterionDescription: {
     fontSize: 13,
-    color: '#4a5d4a',
+    color: '#1a2b49',
     lineHeight: 18,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
@@ -1838,29 +1823,29 @@ const styles = StyleSheet.create({
   criterionSubTitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b8e6b',
+    color: '#1a2b49',
     marginBottom: 3,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criterionInsight: {
     fontSize: 13,
-    color: '#5a6d5a',
+    color: '#1a2b49',
     lineHeight: 18,
     fontStyle: 'italic',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   criterionTest: {
     fontSize: 13,
-    color: '#3a4d3a',
+    color: '#1a2b49',
     lineHeight: 18,
-    backgroundColor: '#f0f4f0',
+    backgroundColor: '#FAF3E0',
     padding: 10,
     borderRadius: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Dish history section styles
   dishHistoryCard: {
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#FAF3E0',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1877,6 +1862,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    flexWrap: 'wrap',
   },
   dishHistoryText: {
     fontSize: 14,

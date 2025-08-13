@@ -114,9 +114,27 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
     try {
       console.log('Capturing filtered image...');
       console.log('Filter values:', { brightnessValue, contrastValue, saturationValue });
+      console.log('Cropped image URI:', croppedImage?.uri);
       
       if (!filteredImageRef.current) {
         console.error('ViewShot ref not available');
+        return imageUri;
+      }
+      
+      if (!croppedImage?.uri) {
+        console.error('No cropped image available for filtering');
+        return imageUri;
+      }
+      
+      // Verify the image file exists before trying to capture
+      try {
+        const fileExists = await RNFS.exists(croppedImage.uri);
+        if (!fileExists) {
+          console.error('Cropped image file no longer exists:', croppedImage.uri);
+          return imageUri;
+        }
+      } catch (fileCheckError) {
+        console.error('Error checking if file exists:', fileCheckError);
         return imageUri;
       }
       
@@ -136,7 +154,10 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   
   const handleContinue = async () => {
-    if (!croppedImage) return;
+    if (!croppedImage || !croppedImage.uri) {
+      console.error('No valid cropped image to continue with');
+      return;
+    }
     
     try {
       setProcessing(true);
@@ -628,8 +649,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       // Lower resolution saves significantly on AI vision API costs (charged per pixel)
       const compressedImage = await ImageResizer.createResizedImage(
         imagePath,
-        800, // Max width - good balance between quality and cost
-        800, // Max height - good balance between quality and cost  
+        1000, // Max width - increased from 800 for better quality
+        1000, // Max height - increased from 800 for better quality  
         'JPEG', // Format
         85, // Quality (85% is sweet spot for good quality + smaller size)
         0, // Rotation
@@ -694,7 +715,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         height: cropSize || 1000,
         cropperCircleOverlay: false,
         cropping: true,
-        cropperToolbarTitle: 'Crop Photo (Square)',
+        cropperToolbarTitle: 'Crop Photo',
         hideBottomControls: false,
         showCropGuidelines: true,
         cropperActiveWidgetColor: '#ff6b6b',
@@ -769,7 +790,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       <SafeAreaView style={styles.container}>
         <StatusBar translucent backgroundColor="transparent" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
+          <ActivityIndicator size="large" color="#1a2b49" />
           <Text style={styles.loadingText}>
             {cropperOpened.current ? 'Processing photo...' : 'Opening editor...'}
           </Text>
@@ -786,6 +807,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.editImageContainer}>
         <ViewShot ref={filteredImageRef} options={{ format: 'jpg', quality: 0.9 }}>
           <ColorMatrix
+            key={`color-matrix-${photo?.uri || 'default'}`}
             matrix={concatColorMatrices(
               brightness(brightnessValue),
               contrast(contrastValue),
@@ -793,6 +815,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
           >
             <Image
+              key={`preview-image-${croppedImage?.uri || 'default'}`}
               source={{ uri: croppedImage.uri }}
               style={[styles.editPreviewImage, !imageLoaded && { opacity: 0 }]}
               resizeMode="contain"
@@ -801,7 +824,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           </ColorMatrix>
           {!imageLoaded && (
             <View style={StyleSheet.absoluteFillObject}>
-              <ActivityIndicator size="large" color="#ff6b6b" style={{ flex: 1 }} />
+              <ActivityIndicator size="large" color="#1a2b49" style={{ flex: 1 }} />
             </View>
           )}
         </ViewShot>
