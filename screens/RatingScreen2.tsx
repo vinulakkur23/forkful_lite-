@@ -940,13 +940,19 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       console.log('User authenticated:', user.uid);
       
-      // Extract city from restaurant name for location data
+      // Use city from location data (extracted via Google Places API) or fallback to restaurant parsing
       let cityInfo = '';
-      if (restaurant) {
+      if (location && location.city) {
+        // Use properly extracted city from Google Places API
+        cityInfo = location.city;
+        console.log('Using city from location data:', cityInfo);
+      } else if (restaurant) {
+        // Fallback to parsing restaurant string
         const restaurantParts = restaurant.split(',');
         if (restaurantParts.length > 1) {
           cityInfo = restaurantParts[1].trim();
         }
+        console.log('Using city from restaurant parsing fallback:', cityInfo);
       }
       
       // IMPORTANT: Don't upload image yet - wait until after editing

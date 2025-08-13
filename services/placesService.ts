@@ -225,7 +225,8 @@ export const getPlaceDetails = async (placeId: string): Promise<Restaurant | nul
       formatted_address: place.formatted_address,
       rating: place.rating,
       user_ratings_total: place.user_ratings_total,
-      geometry: place.geometry
+      geometry: place.geometry,
+      address_components: place.address_components
     };
     
     console.log(`Got place details for: ${restaurant.name}`);
