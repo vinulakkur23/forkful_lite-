@@ -817,74 +817,76 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         photosArray: verifyData?.photos
       });
 
-      // Check if there's a pending challenge from ResultScreen
-      const pendingChallenge = (global as any).pendingChallenge;
-      const pendingChallengePromise = (global as any).pendingChallengePromise;
-      
-      if (pendingChallenge) {
-        // Challenge is already ready, award it immediately
-        console.log('EditMealScreen: Found ready challenge, awarding it:', pendingChallenge.recommended_dish_name);
-        
-        // Import services
-        const { saveUserChallenge } = await import('../services/userChallengesService');
-        const challengeNotificationService = (await import('../services/challengeNotificationService')).default;
-        
-        // Save the challenge to Firebase
-        const success = await saveUserChallenge(pendingChallenge);
-        if (success) {
-          console.log('EditMealScreen: Challenge saved and awarded:', pendingChallenge.recommended_dish_name);
-          // Show challenge notification
-          challengeNotificationService.showChallenge(pendingChallenge);
-        } else {
-          console.error('EditMealScreen: Failed to save challenge to Firebase');
-        }
-        
-        // Clear the pending challenge
-        (global as any).pendingChallenge = null;
-        (global as any).pendingChallengePromise = null;
-      } else if (pendingChallengePromise) {
-        // Challenge is still generating, wait for it
-        console.log('EditMealScreen: Challenge still generating, waiting for completion...');
-        
+      // Handle challenge generation asynchronously - don't block the save
+      const handlePendingChallenge = async () => {
         try {
-          // Wait for the challenge to complete (with timeout)
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Challenge generation timeout')), 30000)
-          );
+          const pendingChallenge = (global as any).pendingChallenge;
+          const pendingChallengePromise = (global as any).pendingChallengePromise;
           
-          const challenge = await Promise.race([pendingChallengePromise, timeoutPromise]);
-          
-          if (challenge) {
-            console.log('EditMealScreen: Challenge completed while waiting:', challenge.recommended_dish_name);
+          if (pendingChallenge) {
+            // Challenge is already ready, award it immediately
+            console.log('EditMealScreen: Found ready challenge, awarding it:', pendingChallenge.recommended_dish_name);
             
             // Import services
             const { saveUserChallenge } = await import('../services/userChallengesService');
             const challengeNotificationService = (await import('../services/challengeNotificationService')).default;
             
-            // Save and show the challenge
-            const success = await saveUserChallenge(challenge);
+            // Save the challenge to Firebase
+            const success = await saveUserChallenge(pendingChallenge);
             if (success) {
-              console.log('EditMealScreen: Late challenge saved and awarded:', challenge.recommended_dish_name);
-              challengeNotificationService.showChallenge(challenge);
+              console.log('EditMealScreen: Challenge saved and awarded:', pendingChallenge.recommended_dish_name);
+              // Show challenge notification
+              challengeNotificationService.showChallenge(pendingChallenge);
+            } else {
+              console.error('EditMealScreen: Failed to save challenge to Firebase');
+            }
+            
+            // Clear the pending challenge
+            (global as any).pendingChallenge = null;
+            (global as any).pendingChallengePromise = null;
+          } else if (pendingChallengePromise) {
+            // Challenge is still generating, wait for it IN THE BACKGROUND
+            console.log('EditMealScreen: Challenge still generating, will award when ready...');
+            
+            // Don't await - let it run in background
+            pendingChallengePromise.then(async (challenge) => {
+              if (challenge) {
+                console.log('EditMealScreen: Challenge completed in background:', challenge.recommended_dish_name);
+                
+                // Import services
+                const { saveUserChallenge } = await import('../services/userChallengesService');
+                const challengeNotificationService = (await import('../services/challengeNotificationService')).default;
+                
+                // Save and show the challenge
+                const success = await saveUserChallenge(challenge);
+                if (success) {
+                  console.log('EditMealScreen: Background challenge saved and awarded:', challenge.recommended_dish_name);
+                  challengeNotificationService.showChallenge(challenge);
+                }
+              }
+            }).catch(error => {
+              console.error('EditMealScreen: Background challenge generation failed:', error);
+            }).finally(() => {
+              // Clear the pending challenge promise
+              (global as any).pendingChallenge = null;
+              (global as any).pendingChallengePromise = null;
+            });
+          } else {
+            console.log('EditMealScreen: No pending challenge found, checking if we should generate one...');
+            // Fallback: Generate a challenge if none was pre-generated (backward compatibility)
+            if (verifyData) {
+              generateChallengeForMeal(verifyData).catch(error => {
+                console.error('EditMealScreen: Fallback challenge generation failed:', error);
+              });
             }
           }
         } catch (error) {
-          console.error('EditMealScreen: Error waiting for challenge:', error);
-          // Don't block the save operation, just log the error
-        } finally {
-          // Clear the pending challenge promise
-          (global as any).pendingChallenge = null;
-          (global as any).pendingChallengePromise = null;
+          console.error('EditMealScreen: Error handling pending challenge:', error);
         }
-      } else {
-        console.log('EditMealScreen: No pending challenge found, checking if we should generate one...');
-        // Fallback: Generate a challenge if none was pre-generated (backward compatibility)
-        if (verifyData) {
-          generateChallengeForMeal(verifyData).catch(error => {
-            console.error('EditMealScreen: Fallback challenge generation failed:', error);
-          });
-        }
-      }
+      };
+      
+      // Start handling the challenge asynchronously (don't await)
+      handlePendingChallenge();
 
       // Show restaurant history overlay or go to meal detail
       if (meal.enhanced_facts?.food_facts?.restaurant_history) {
