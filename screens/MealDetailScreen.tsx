@@ -54,7 +54,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [cheersLoading, setCheersLoading] = useState(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
-  const [criteriaRatings, setCriteriaRatings] = useState<{ [key: string]: number } | null>(null);
+  const [quickRatings, setQuickRatings] = useState<{ [key: string]: number } | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   
   // Log the route params for debugging
@@ -66,6 +66,18 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     if (rating >= 6) return '#FFC107'; // Yellow for good
     if (rating >= 4) return '#FF9800'; // Orange for okay
     return '#F44336'; // Red for poor
+  };
+
+  // Helper function to render text with bold formatting
+  const renderTextWithBold = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const boldText = part.slice(2, -2);
+        return <Text key={index} style={styles.boldText}>{boldText}</Text>;
+      }
+      return <Text key={index}>{part}</Text>;
+    });
   };
   console.log("Meal ID:", mealId);
   
@@ -153,13 +165,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setCombinedResult(null);
       }
 
-      // Load saved criteria ratings if available
-      if (mealData.criteria_ratings) {
-        console.log('📊 Loading saved criteria ratings:', mealData.criteria_ratings);
-        setCriteriaRatings(mealData.criteria_ratings);
+      // Load saved quick ratings if available
+      if (mealData.quick_ratings) {
+        console.log('📊 Loading saved quick ratings:', mealData.quick_ratings);
+        setQuickRatings(mealData.quick_ratings);
       } else {
-        console.log('📊 No criteria ratings saved for this meal');
-        setCriteriaRatings(null);
+        console.log('📊 No quick ratings saved for this meal');
+        setQuickRatings(null);
       }
       
     } catch (err) {
@@ -769,6 +781,37 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </Text>
         </TouchableOpacity>
         
+        {/* Quick Ratings Section - only show rated statements */}
+        {quickRatings && meal.quick_criteria_result?.rating_statements && (
+          <View style={styles.quickRatingsSection}>
+            {meal.quick_criteria_result.rating_statements
+              .filter(statement => quickRatings[statement] !== undefined)
+              .map((statement, index) => (
+                <View key={index} style={styles.ratedStatementItem}>
+                  <Text style={styles.statementText}>
+                    {renderTextWithBold(statement)}
+                  </Text>
+                  <View style={styles.statementRating}>
+                    <Image
+                      source={
+                        quickRatings[statement] === 1 ? require('../assets/emojis/emoji-bad-inactive.png') :
+                        quickRatings[statement] === 2 ? require('../assets/emojis/emoji-ok-inactive.png') :
+                        quickRatings[statement] === 3 ? require('../assets/emojis/emoji-good-inactive.png') :
+                        quickRatings[statement] === 4 ? require('../assets/emojis/emoji-great-inactive.png') :
+                        quickRatings[statement] === 5 ? require('../assets/emojis/emoji-amazing-inactive.png') :
+                        quickRatings[statement] === 6 ? require('../assets/emojis/emoji-thebest-inactive.png') :
+                        require('../assets/emojis/emoji-good-inactive.png')
+                      }
+                      style={styles.ratingEmojiIcon}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </View>
+              ))
+            }
+          </View>
+        )}
+
         {/* Comments section - handle both new thoughts format and legacy liked/disliked format */}
         {(meal.comments?.thoughts || meal.comments?.liked || meal.comments?.disliked) && (
           <View style={styles.feedbackSection}>
@@ -1865,6 +1908,52 @@ const styles = StyleSheet.create({
     color: '#ef6c00',
     marginTop: 12,
     marginBottom: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Quick Ratings Styles
+  quickRatingsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    marginHorizontal: 12,
+    marginTop: 25,
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  ratedStatementItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  statementText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginRight: 12,
+    lineHeight: 18,
+  },
+  statementRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingEmojiIcon: {
+    width: 24,
+    height: 24,
+  },
+  boldText: {
+    fontWeight: 'bold',
+    color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

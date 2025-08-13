@@ -10,8 +10,6 @@ import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
-import DynamicCriteriaRating from '../components/DynamicCriteriaRating';
-import { DishCriterion } from '../services/dishCriteriaService';
 import { generateNextDishChallenge } from '../services/nextDishChallengeService';
 import { saveUserChallenge, hasActiveChallengeForDish, getPreviousChallengeNames } from '../services/userChallengesService';
 import challengeNotificationService from '../services/challengeNotificationService';
@@ -77,9 +75,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
-  // State for dish criteria and detailed ratings
-  const [dishCriteria, setDishCriteria] = useState<DishCriterion[]>([]);
-  const [criteriaRatings, setCriteriaRatings] = useState<{ [key: string]: number }>({});
+  // State for quick rating statements overlay
+  const [showQuickRatingsOverlay, setShowQuickRatingsOverlay] = useState<boolean>(false);
+  const [quickRatings, setQuickRatings] = useState<{ [key: string]: number }>({});
+  const [currentStatementIndex, setCurrentStatementIndex] = useState<number>(0);
+  const [pressedEmojiId, setPressedEmojiId] = useState<number | null>(null);
   
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -118,6 +118,12 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Set rating
       setRating(freshMealData.rating || 0);
       
+      // Load quick ratings from Firestore
+      if (freshMealData.quick_ratings) {
+        setQuickRatings(freshMealData.quick_ratings);
+        console.log('EditMealScreen - Loaded quick ratings:', freshMealData.quick_ratings);
+      }
+      
       // Set photos from fresh data
       if (freshMealData.photos && Array.isArray(freshMealData.photos)) {
         console.log('EditMealScreen - Setting photos from fresh data:', freshMealData.photos.length);
@@ -134,39 +140,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         setPhotos([]);
       }
       
-      // Load criteria from fresh data
-      let criteriaToUse = null;
-      
-      if (freshMealData.dish_criteria?.criteria && Array.isArray(freshMealData.dish_criteria.criteria)) {
-        console.log('EditMealScreen - Using criteria from fresh dish_criteria');
-        criteriaToUse = freshMealData.dish_criteria.criteria;
-      } else if (freshMealData.combined_result?.dish_criteria?.criteria && Array.isArray(freshMealData.combined_result.dish_criteria.criteria)) {
-        console.log('EditMealScreen - Using criteria from fresh combined_result');
-        criteriaToUse = freshMealData.combined_result.dish_criteria.criteria;
-      } else if (freshMealData.quick_criteria_result?.dish_criteria && Array.isArray(freshMealData.quick_criteria_result.dish_criteria)) {
-        console.log('EditMealScreen - Converting criteria from fresh quick_criteria_result');
-        criteriaToUse = freshMealData.quick_criteria_result.dish_criteria.map(criterion => ({
-          title: criterion.name || 'Quality Aspect',
-          description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-        }));
-      }
-      
-      if (criteriaToUse) {
-        setDishCriteria(criteriaToUse);
-        
-        if (freshMealData.criteria_ratings) {
-          setCriteriaRatings(freshMealData.criteria_ratings);
-        } else {
-          const defaultRatings: { [key: string]: number } = {};
-          criteriaToUse.forEach((criterion: DishCriterion) => {
-            defaultRatings[criterion.title] = 5;
-          });
-          setCriteriaRatings(defaultRatings);
-        }
-      } else {
-        setDishCriteria([]);
-        setCriteriaRatings({});
-      }
       
       // Set thoughts
       if (freshMealData.comments?.thoughts) {
@@ -301,19 +274,80 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     })();
     const isThoughtsChanged = thoughts !== originalThoughts;
     
-    // Check if criteria ratings have changed
-    const originalCriteriaRatings = meal.criteria_ratings || {};
-    const isCriteriaRatingsChanged = JSON.stringify(criteriaRatings) !== JSON.stringify(originalCriteriaRatings);
-    
-    setHasUnsavedChanges(isRatingChanged || isThoughtsChanged || isCriteriaRatingsChanged);
-  }, [rating, thoughts, criteriaRatings, meal]);
+    setHasUnsavedChanges(isRatingChanged || isThoughtsChanged);
+  }, [rating, thoughts, meal]);
 
   const handleRating = (selectedRating: number): void => {
     setRating(selectedRating);
   };
 
-  const handleCriteriaRatingsChange = (ratings: { [key: string]: number }): void => {
-    setCriteriaRatings(ratings);
+  // Handle quick ratings overlay
+  const handleOpenQuickRatings = (): void => {
+    if (meal.quick_criteria_result?.rating_statements && meal.quick_criteria_result.rating_statements.length > 0) {
+      setCurrentStatementIndex(0);
+      setShowQuickRatingsOverlay(true);
+    } else {
+      Alert.alert('No Rating Statements', 'No rating statements are available for this meal.');
+    }
+  };
+
+  const handleQuickRating = async (rating: number): Promise<void> => {
+    if (!meal.quick_criteria_result?.rating_statements) return;
+    
+    // Show press feedback briefly
+    setPressedEmojiId(rating);
+    
+    // Brief delay to show the press feedback
+    setTimeout(async () => {
+      const statements = meal.quick_criteria_result.rating_statements;
+      const currentStatement = statements[currentStatementIndex];
+      
+      // Save the rating for this statement
+      const updatedRatings = {
+        ...quickRatings,
+        [currentStatement]: rating
+      };
+      setQuickRatings(updatedRatings);
+      
+      // Save to Firestore immediately
+      try {
+        await firestore().collection('mealEntries').doc(mealId).update({
+          quick_ratings: updatedRatings
+        });
+        console.log('Quick rating saved to Firestore:', { statement: currentStatement, rating });
+      } catch (error) {
+        console.error('Error saving quick rating:', error);
+      }
+      
+      // Reset press feedback
+      setPressedEmojiId(null);
+      
+      // Move to next statement or close overlay
+      if (currentStatementIndex < statements.length - 1) {
+        setCurrentStatementIndex(currentStatementIndex + 1);
+      } else {
+        // All statements rated, close overlay
+        setShowQuickRatingsOverlay(false);
+        setCurrentStatementIndex(0);
+      }
+    }, 150); // 150ms delay for visual feedback
+  };
+
+  const handleCloseQuickRatings = (): void => {
+    setShowQuickRatingsOverlay(false);
+    setCurrentStatementIndex(0);
+  };
+
+  // Helper function to render text with bold formatting
+  const renderTextWithBold = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const boldText = part.slice(2, -2);
+        return <Text key={index} style={styles.boldText}>{boldText}</Text>;
+      }
+      return <Text key={index}>{part}</Text>;
+    });
   };
 
   // Handle image load error
@@ -650,21 +684,15 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     
     const photosChanged = JSON.stringify(photos) !== JSON.stringify(originalPhotos);
     
-    // Check if criteria ratings have changed
-    const originalCriteriaRatings = meal.criteria_ratings || {};
-    const criteriaRatingsChanged = JSON.stringify(criteriaRatings) !== JSON.stringify(originalCriteriaRatings);
-    
     console.log('EditMealScreen - Change detection:', {
       ratingChanged: rating !== meal.rating,
       thoughtsChanged: thoughts !== originalThoughts,
       photosChanged,
-      criteriaRatingsChanged,
       originalPhotosCount: originalPhotos.length,
-      currentPhotosCount: photos.length,
-      hasCriteria: dishCriteria.length > 0
+      currentPhotosCount: photos.length
     });
     
-    if (rating === meal.rating && thoughts === originalThoughts && !photosChanged && !criteriaRatingsChanged) {
+    if (rating === meal.rating && thoughts === originalThoughts && !photosChanged) {
       Alert.alert(
         "No Changes",
         "You haven't made any changes to this meal.",
@@ -695,11 +723,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         updatedAt: firestore.FieldValue.serverTimestamp()
       };
       
-      // Add criteria ratings if there are criteria
-      if (dishCriteria.length > 0 && Object.keys(criteriaRatings).length > 0) {
-        updateData.criteria_ratings = criteriaRatings;
-        console.log('EditMealScreen - Including criteria ratings in save:', criteriaRatings);
-      }
       
       // Debug logging
       console.log('EditMealScreen - Saving meal with data:', {
@@ -854,25 +877,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             )}
           </View>
 
-          {/* Dynamic Criteria Rating Section */}
-          {console.log('EditMealScreen - Render check:', { 
-            dishCriteriaLength: dishCriteria.length, 
-            criteriaRatingsKeys: Object.keys(criteriaRatings),
-            shouldRender: dishCriteria.length > 0 
-          })}
-          {dishCriteria.length > 0 && (
-            <View style={styles.criteriaSection}>
-              {console.log('EditMealScreen - Rendering DynamicCriteriaRating with:', { 
-                criteria: dishCriteria, 
-                initialRatings: criteriaRatings 
-              })}
-              <DynamicCriteriaRating 
-                criteria={dishCriteria}
-                initialRatings={criteriaRatings}
-                onRatingsChange={handleCriteriaRatingsChange}
-              />
-            </View>
-          )}
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.sectionTitle}>Dish it out! Let's hear your thoughts.</Text>
@@ -891,6 +895,18 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               Sharing will help others find your review helpful and allow us to give you better recommendations.
             </Text>
           </View>
+
+          {/* Dish Specific Ratings Button */}
+          {meal.quick_criteria_result?.rating_statements && meal.quick_criteria_result.rating_statements.length > 0 && (
+            <View style={styles.quickRatingsSection}>
+              <TouchableOpacity style={styles.quickRatingsButton} onPress={handleOpenQuickRatings}>
+                <Text style={styles.quickRatingsButtonText}>Click to Rate More!</Text>
+                <Text style={styles.quickRatingsCount}>
+                  {Object.keys(quickRatings).length}/{meal.quick_criteria_result.rating_statements.length}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Action buttons */}
@@ -911,6 +927,57 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
+
+      {/* Quick Ratings Overlay */}
+      {showQuickRatingsOverlay && meal.quick_criteria_result?.rating_statements && (
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayContent}>
+            <View style={styles.overlayHeader}>
+              <TouchableOpacity onPress={handleCloseQuickRatings} style={styles.overlayCloseButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.statementContainer}>
+              <Text style={styles.statementText}>
+                {renderTextWithBold(meal.quick_criteria_result.rating_statements[currentStatementIndex])}
+              </Text>
+            </View>
+            
+            <View style={styles.overlayEmojiContainer}>
+              <View style={styles.customEmojiRating}>
+                {[
+                  { id: 1, name: 'bad', active: require('../assets/emojis/emoji-bad-inactive.png'), inactive: require('../assets/emojis/emoji-bad-active.png') },
+                  { id: 2, name: 'ok', active: require('../assets/emojis/emoji-ok-inactive.png'), inactive: require('../assets/emojis/emoji-ok-active.png') },
+                  { id: 3, name: 'good', active: require('../assets/emojis/emoji-good-inactive.png'), inactive: require('../assets/emojis/emoji-good-active.png') },
+                  { id: 4, name: 'great', active: require('../assets/emojis/emoji-great-inactive.png'), inactive: require('../assets/emojis/emoji-great-active.png') },
+                  { id: 5, name: 'amazing', active: require('../assets/emojis/emoji-amazing-inactive.png'), inactive: require('../assets/emojis/emoji-amazing-active.png') },
+                  { id: 6, name: 'thebest', active: require('../assets/emojis/emoji-thebest-inactive.png'), inactive: require('../assets/emojis/emoji-thebest-active.png') },
+                ].map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji.id}
+                    onPress={() => handleQuickRating(emoji.id)}
+                    style={styles.overlayEmojiButton}
+                    activeOpacity={0.7}
+                  >
+                    <Image
+                      source={pressedEmojiId === emoji.id ? emoji.inactive : emoji.active}
+                      style={styles.overlayEmojiImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            
+            <View style={styles.overlayProgress}>
+              <Text style={styles.progressText}>
+                {currentStatementIndex + 1} of {meal.quick_criteria_result.rating_statements.length}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -1145,6 +1212,114 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontWeight: '600',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Quick Ratings Button Styles
+  quickRatingsSection: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  quickRatingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a2b49',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 20,
+  },
+  quickRatingsButtonText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  quickRatingsCount: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  // Overlay Styles
+  overlayContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  overlayContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    marginHorizontal: 20,
+    maxWidth: '90%',
+    minWidth: '80%',
+  },
+  overlayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  overlayCloseButton: {
+    padding: 8,
+  },
+  closeButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  statementContainer: {
+    marginBottom: 30,
+    paddingHorizontal: 8,
+  },
+  statementText: {
+    fontSize: 16,
+    color: '#1a2b49',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  overlayEmojiContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  customEmojiRating: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  overlayEmojiButton: {
+    marginHorizontal: 8,
+    padding: 4,
+  },
+  overlayEmojiImage: {
+    width: 32,
+    height: 32,
+  },
+  boldText: {
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  overlayProgress: {
+    alignItems: 'center',
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
