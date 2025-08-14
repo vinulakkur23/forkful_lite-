@@ -494,10 +494,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   if (!hasPermission) {
     return (
       <View style={styles.permissionContainer}>
-        <Icon name="no-photography" size={64} color="#ff6b6b" />
-        <Text style={styles.permissionText}>
-          Camera permission is required to capture meals
-        </Text>
         <TouchableOpacity
           style={styles.permissionButton}
           onPress={async () => {

@@ -1072,7 +1072,6 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           ListEmptyComponent={
             !loading && !refreshing && allNearbyMeals.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Icon name="restaurant" size={64} color="#ccc" />
                 <Text style={styles.emptyText}>
                   {locationError
                     ? "Couldn't access your location. Please check your settings."
@@ -1097,7 +1096,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       {/* Updated Header with Map Toggle */}
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>DishItOut</Text>
+        <Image 
+          source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
         <TouchableOpacity
           style={styles.mapToggleButton}
           onPress={() => setIndex(index === 0 ? 1 : 0)}
@@ -1189,6 +1192,10 @@ const styles = StyleSheet.create({
     textAlign: 'left', // Left-aligned text
     fontWeight: undefined, // Clear any default weight that might interfere
     marginBottom: 0, // Removed spacing below the title
+  },
+  headerLogo: {
+    width: 150,
+    height: 50,
   },
   loadingContainer: {
     flex: 1,

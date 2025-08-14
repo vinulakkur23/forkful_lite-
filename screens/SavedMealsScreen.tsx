@@ -264,7 +264,7 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
                 </>
               ) : (
                 <>
-                  <Text style={styles.emptyText}>No saved meals yet</Text>
+                  <Text style={styles.emptyText}>Save meals to see them here and on your map!</Text>
                 </>
               )}
             </View>
@@ -369,16 +369,20 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   emptyContainer: {
-    alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
-    padding: 50,
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 200,
+    paddingBottom: 50,
   },
   emptyText: {
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: 'normal',
     color: '#555',
     marginTop: 15,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',

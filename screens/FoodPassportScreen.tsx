@@ -37,6 +37,7 @@ import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
 import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
+import { getPhotoWithMetadata } from '../services/photoLibraryService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -117,6 +118,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // Follow state
     const [isUserFollowing, setIsUserFollowing] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
+    
+    // Track if viewing own profile
+    const [isOwnProfile, setIsOwnProfile] = useState(true);
+    
+    // Photo selection menu state
+    const [showPhotoMenu, setShowPhotoMenu] = useState(false);
     
 
     // Tab view state
@@ -285,9 +292,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             }
 
             // Load user profile
-            const isOwnProfile = !userId || userId === auth().currentUser?.uid;
+            const isViewingOwnProfile = !userId || userId === auth().currentUser?.uid;
+            setIsOwnProfile(isViewingOwnProfile);
             
-            if (!isOwnProfile && userId) {
+            if (!isViewingOwnProfile && userId) {
                 // Load other user's profile
                 const profile: any = {
                     userId: userId,
@@ -324,7 +332,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             setImageErrors({});
             
             // Check follow status if viewing another user's profile
-            if (!isOwnProfile && userId) {
+            if (!isViewingOwnProfile && userId) {
                 const followStatus = await isFollowing(userId);
                 setIsUserFollowing(followStatus);
             }
@@ -692,6 +700,59 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
       }
     };
     
+    // Photo selection handlers
+    const openCamera = () => {
+        setShowPhotoMenu(false);
+        navigation.navigate('Camera');
+    };
+
+    const selectFromGallery = async () => {
+        setShowPhotoMenu(false);
+        
+        try {
+            console.log("Opening gallery from Food Passport");
+            const photoAsset = await getPhotoWithMetadata();
+            
+            if (!photoAsset) {
+                console.log("No photo selected from gallery");
+                return;
+            }
+            
+            console.log("Photo selected from gallery:", {
+                uri: photoAsset.uri,
+                hasLocation: !!photoAsset.location
+            });
+            
+            // Navigate to RatingScreen2 with the selected photo
+            const timestamp = new Date().getTime();
+            const navigationKey = `gallery_photo_${timestamp}`;
+            
+            navigation.navigate('RatingScreen2', {
+                photo: {
+                    uri: photoAsset.uri,
+                    width: photoAsset.width,
+                    height: photoAsset.height,
+                    originalUri: photoAsset.originalUri,
+                    fromGallery: true,
+                    assetId: photoAsset.assetId,
+                },
+                location: photoAsset.location || null,
+                exifData: photoAsset.exifData,
+                photoSource: 'gallery',
+                _uniqueKey: navigationKey,
+                rating: 0,
+                likedComment: '',
+                dislikedComment: ''
+            });
+        } catch (error) {
+            console.error("Error selecting photo from gallery:", error);
+            Alert.alert(
+                "Gallery Error", 
+                "There was a problem accessing your photo library. Please try again."
+            );
+        }
+    };
+
     const signOut = async () => {
         try {
             console.log("Starting sign out process");
@@ -810,10 +871,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         contentContainerStyle={styles.list}
                         ListHeaderComponent={() => (
                             <>
-                                {/* Dishitout Logo - only show on own profile */}
+                                {/* Forkful Logo - only show on own profile */}
                                 {(!userId || userId === auth().currentUser?.uid) && (
                                     <View style={styles.logoContainer}>
-                                        <Text style={styles.logoText}>DishItOut</Text>
+                                        <Image 
+                                            source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+                                            style={styles.logoImage}
+                                            resizeMode="contain"
+                                        />
                                     </View>
                                 )}
                                 <View style={styles.profileCard}>
@@ -1013,21 +1078,62 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             Try different filters or clear your search
                                         </Text>
                                     </>
-                                ) : (
+                                ) : isOwnProfile ? (
                                     <>
                                         <Text style={styles.emptyText}>Welcome to your Food Passport!</Text>
                                         <TouchableOpacity 
                                             style={styles.addFirstMealButton}
-                                            onPress={() => navigation.navigate('Camera')}
+                                            onPress={() => setShowPhotoMenu(true)}
                                         >
                                             <Text style={styles.addFirstMealButtonText}>+</Text>
                                         </TouchableOpacity>
                                         <Text style={styles.emptySubText}>Track your culinary journey and enjoy a more mindful eating experience.</Text>
                                     </>
+                                ) : (
+                                    <>
+                                        <Text style={styles.emptyText}>User is planning on posting meals soon!</Text>
+                                    </>
                                 )}
                             </View>
                         }
                     />
+            )}
+            
+            {/* Photo selection menu */}
+            {showPhotoMenu && (
+                <TouchableOpacity 
+                    style={styles.photoMenuOverlay} 
+                    onPress={() => setShowPhotoMenu(false)}
+                    activeOpacity={1}
+                >
+                    <View style={styles.photoMenuContainer}>
+                        <TouchableOpacity
+                            style={styles.photoMenuItem}
+                            onPress={openCamera}
+                            activeOpacity={0.8}
+                        >
+                            <Image 
+                                source={require('../assets/icons/camera-inactive.png')} 
+                                style={{ width: 32, height: 32 }}
+                            />
+                            <Text style={styles.photoMenuText}>Camera</Text>
+                        </TouchableOpacity>
+                        
+                        <View style={styles.photoMenuDivider} />
+                        
+                        <TouchableOpacity
+                            style={styles.photoMenuItem}
+                            onPress={selectFromGallery}
+                            activeOpacity={0.8}
+                        >
+                            <Image 
+                                source={require('../assets/icons/upload-inactive.png')} 
+                                style={{ width: 32, height: 32 }}
+                            />
+                            <Text style={styles.photoMenuText}>Upload</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
             )}
         </SafeAreaView>
     );
@@ -1049,6 +1155,10 @@ const styles = StyleSheet.create({
         fontSize: 28,
         color: '#E63946',
         letterSpacing: 0.5,
+    },
+    logoImage: {
+        width: 140,
+        height: 47,
     },
     header: {
         flexDirection: 'row',
@@ -1443,6 +1553,46 @@ const styles = StyleSheet.create({
         color: '#E63946',
         fontWeight: '500',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    photoMenuOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    photoMenuContainer: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 8,
+        paddingVertical: 20,
+        paddingHorizontal: 30,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20,
+    },
+    photoMenuItem: {
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    photoMenuText: {
+        marginTop: 8,
+        fontSize: 14,
+        color: '#1a2b49', // Navy blue
+        fontWeight: '500',
+    },
+    photoMenuDivider: {
+        width: 1,
+        height: 60,
+        backgroundColor: '#eee',
     },
 });
 

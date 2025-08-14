@@ -251,6 +251,8 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
 const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+  
   // Pre-load and cache all tab bar icons using React.useMemo
   const tabIcons = React.useMemo(() => ({
     place: {
@@ -268,6 +270,9 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
     passport: {
       active: require('./assets/icons/passport-active.png'),
       inactive: require('./assets/icons/passport-inactive.png')
+    },
+    add: {
+      icon: require('./assets/icons/camera-active.png')
     }
   }), []);
 
@@ -337,49 +342,35 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
       }
     };
 
+    const openCamera = () => {
+      setShowPhotoMenu(false);
+      navigation.navigate('Camera');
+    };
+
+    const handleUploadPhoto = () => {
+      setShowPhotoMenu(false);
+      openImagePicker();
+    };
+
     const mainTabs = [
       { 
         name: 'FoodPassport', 
-        label: 'My Passport', 
+        label: 'Passport', 
         icon: (focused: boolean) => (
           <Image 
             source={focused ? tabIcons.passport.active : tabIcons.passport.inactive} 
-            style={{ width: 20, height: 20 }} // ORIGINAL: width: 24, height: 24 - made smaller
+            style={{ width: 32, height: 32 }}
             key={`passport-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
       },
       { 
-        name: 'Camera', 
-        label: 'Take Photo', 
-        icon: (focused: boolean) => (
-          <Image 
-            source={focused ? tabIcons.camera.active : tabIcons.camera.inactive} 
-            style={{ width: 28, height: 28 }} // ORIGINAL: width: 24, height: 24 - made larger
-            key={`camera-icon-${focused ? 'active' : 'inactive'}`}
-          />
-        )
-      },
-      {
-        name: 'Upload', // This is a virtual tab
-        label: 'Upload Photo',
-        icon: (focused: boolean) => ( // focused will always be false for this button
-          <Image 
-            source={tabIcons.upload.inactive} 
-            style={{ width: 28, height: 28 }} // ORIGINAL: width: 24, height: 24 - made larger
-            key="upload-icon-inactive"
-          />
-        ),
-        customAction: true
-      },
-      { 
         name: 'Home', 
-        label: 'Nearby', 
+        label: 'Discover', 
         icon: (focused: boolean) => (
           <Image 
             source={focused ? tabIcons.place.active : tabIcons.place.inactive} 
-            style={{ width: 20, height: 20 }} // ORIGINAL: width: 24, height: 24 - made smaller
-            // Force image to be reloaded properly
+            style={{ width: 32, height: 32 }}
             key={`home-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
@@ -387,56 +378,125 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
     ];
 
   return (
-    <View style={styles.tabBarContainer}>
-      {mainTabs.map((tab, index) => {
-        if (tab.customAction) {
+    <>
+      <View style={styles.tabBarContainer}>
+        {/* Left tab - Passport */}
+        {mainTabs[0] && (() => {
+          const tab = mainTabs[0];
+          const route = state.routes.find(r => r.name === tab.name);
+          if (!route) return null;
+          
+          const isFocused = state.index === state.routes.findIndex(r => r.name === tab.name);
+          
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name as any, (route as any).params);
+            }
+          };
+          
           return (
             <TouchableOpacity
-              key={index}
-              onPress={openImagePicker}
+              key={0}
+              onPress={onPress}
               style={styles.tabButton}
               activeOpacity={0.7}
             >
-              {tab.icon(false)}
+              {tab.icon(isFocused)}
+              <Text style={styles.tabLabel}>
+                {tab.label}
+              </Text>
             </TouchableOpacity>
           );
-        }
+        })()}
         
-        const route = state.routes.find(r => r.name === tab.name);
-        if (!route) return null;
-        
-        const { options } = descriptors[route.key];
-        // Use tab.label for consistency, fallback to route info
-        const labelToDisplay = tab.label || options.tabBarLabel || options.title || route.name;
-        
-        const isFocused = state.index === state.routes.findIndex(r => r.name === tab.name);
-        
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-          
-          if (!isFocused && !event.defaultPrevented) {
-            // For tabs, navigate to the tab's initial screen or itself.
-            // If it's a stack navigator, it will go to its initial route.
-            navigation.navigate(route.name as any, (route as any).params);
-          }
-        };
-        
-        return (
+        {/* Center button - Add Photo */}
+        <View style={styles.centerButtonContainer}>
           <TouchableOpacity
-            key={index}
-            onPress={onPress}
-            style={styles.tabButton}
-            activeOpacity={0.7}
+            onPress={() => setShowPhotoMenu(true)}
+            style={styles.centerButton}
+            activeOpacity={0.9}
           >
-            {tab.icon(isFocused)}
+            <Text style={styles.centerButtonText}>+</Text>
           </TouchableOpacity>
-        );
-      })}
-    </View>
+        </View>
+        
+        {/* Right tab - Home */}
+        {mainTabs[1] && (() => {
+          const tab = mainTabs[1];
+          const route = state.routes.find(r => r.name === tab.name);
+          if (!route) return null;
+          
+          const isFocused = state.index === state.routes.findIndex(r => r.name === tab.name);
+          
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name as any, (route as any).params);
+            }
+          };
+          
+          return (
+            <TouchableOpacity
+              key={1}
+              onPress={onPress}
+              style={styles.tabButton}
+              activeOpacity={0.7}
+            >
+              {tab.icon(isFocused)}
+              <Text style={styles.tabLabel}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })()}
+      </View>
+      
+      {/* Photo selection menu */}
+      {showPhotoMenu && (
+        <TouchableOpacity 
+          style={styles.photoMenuOverlay} 
+          onPress={() => setShowPhotoMenu(false)}
+          activeOpacity={1}
+        >
+          <View style={styles.photoMenuContainer}>
+            <TouchableOpacity
+              style={styles.photoMenuItem}
+              onPress={openCamera}
+              activeOpacity={0.8}
+            >
+              <Image 
+                source={tabIcons.camera.inactive} 
+                style={{ width: 32, height: 32 }}
+              />
+            </TouchableOpacity>
+            
+            <View style={styles.photoMenuDivider} />
+            
+            <TouchableOpacity
+              style={styles.photoMenuItem}
+              onPress={handleUploadPhoto}
+              activeOpacity={0.8}
+            >
+              <Image 
+                source={tabIcons.upload.inactive} 
+                style={{ width: 32, height: 32 }}
+              />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+    </>
   );
 });
 
@@ -804,28 +864,79 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FAF9F6',
-    height: Platform.OS === 'ios' ? 70 : 60, // Reduced height since no text labels
-    paddingBottom: Platform.OS === 'ios' ? 25 : 15, // Reduced padding
-    paddingTop: 8, // Slightly reduced top padding
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 10,
+    backgroundColor: '#ffffff',
+    height: Platform.OS === 'ios' ? 80 : 70, // Increased height for labels
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    paddingTop: 8,
+    zIndex: 5,
   },
   tabButton: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    // Removed width: width / 3 as mainTabs.length is 4. Flexbox handles distribution.
+  },
+  centerButtonContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  centerButton: {
+    position: 'absolute',
+    bottom: -45,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centerButtonText: {
+    fontSize: 100,
+    fontWeight: '350',
+    color: '#1a2b49',
+    lineHeight: 100,
+    marginTop: -15,
+  },
+  photoMenuOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  photoMenuContainer: {
+    backgroundColor: 'white',
+    marginBottom: Platform.OS === 'ios' ? 95 : 85,
+    marginHorizontal: 'auto',
+    width: 80,
+    alignSelf: 'center',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  photoMenuItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  photoMenuDivider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginHorizontal: 8,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     marginTop: 4,
+    color: '#1a2b49', // Always navy blue
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   }
 });
 

@@ -325,7 +325,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search cuisine, food, city, or user"
+          placeholder="Filter by cuisine, food, city, or user"
           value={searchText}
           onChangeText={(text) => {
             setSearchText(text);

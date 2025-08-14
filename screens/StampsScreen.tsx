@@ -547,7 +547,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             </>
           )}
 
-          {/* DEBUG BUTTONS */}
+          {/* DEBUG BUTTONS - COMMENTED OUT FOR NOW
           <TouchableOpacity 
             style={[styles.debugButton, { bottom: 80 }]}
             onPress={handleClearStamps}
@@ -561,6 +561,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           >
             <Text style={styles.debugButtonText}>🧹 Clear ALL Data</Text>
           </TouchableOpacity>
+          */}
           
             </>
           )}
@@ -738,7 +739,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAF9F6', // Match the app's cream background
   },
   scrollContent: {
     paddingBottom: 50, // Extra space at bottom for comfortable scrolling

@@ -1147,7 +1147,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   floatingButton: {
-    backgroundColor: 'rgba(230, 57, 70, 0.8)', // Increased opacity to 0.8
+    backgroundColor: 'rgba(26, 43, 73, 0.8)', // Navy blue with 0.8 opacity
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
   wishlistToggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E63946', // Changed to Lobster red color for "My Meals" mode
+    backgroundColor: '#1a2b49', // Changed to navy blue for "My Meals" mode
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,

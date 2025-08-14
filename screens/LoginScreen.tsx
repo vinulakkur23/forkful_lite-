@@ -212,7 +212,11 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Text style={styles.title}>DishItOut</Text>
+        <Image 
+          source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <Text style={styles.subtitle}>Find meals you love. Release your inner food critic.</Text>
       </View>
 
@@ -265,6 +269,11 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: 50,
+  },
+  logoImage: {
+    width: 200,
+    height: 67,
+    marginBottom: 20,
   },
   title: {
     fontFamily: 'Lobster-Regular',
