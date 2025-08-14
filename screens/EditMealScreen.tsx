@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform
+  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard
 } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -83,18 +83,21 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [showIngredientHistory, setShowIngredientHistory] = useState<boolean>(false);
   const [showRestaurantHistory, setShowRestaurantHistory] = useState<boolean>(false);
   
+  // State to track if facts are being loaded
+  const [factsLoading, setFactsLoading] = useState<boolean>(false);
+  
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   
-  // Function to fetch fresh meal data from Firestore
+  // Function to fetch fresh meal data from Firestore (used for initial load)
   const fetchFreshMealData = async () => {
     try {
       console.log('EditMealScreen - Fetching fresh meal data for ID:', mealId);
       const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
       
       if (!mealDoc.exists) {
-        Alert.alert('Error', 'Meal not found');
+        console.log('EditMealScreen - Meal not found, navigating back silently');
         navigation.goBack();
         return;
       }
@@ -111,37 +114,42 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         hasCombinedResult: !!freshMealData.combined_result,
         hasCombinedCriteria: !!freshMealData.combined_result?.dish_criteria?.criteria,
         combinedCriteriaLength: freshMealData.combined_result?.dish_criteria?.criteria?.length || 0,
+        hasEnhancedFacts: !!freshMealData.enhanced_facts,
         allFields: Object.keys(freshMealData)
       });
       
-      // IMPORTANT: Set fresh data directly to state to avoid stale data issues
-      setMeal(freshMealData);
+      // Process fresh meal data
+      processFreshMealData(freshMealData);
       
-      // Set rating
+    } catch (error) {
+      console.error('EditMealScreen - Error fetching fresh meal data:', error);
+      Alert.alert('Error', 'Failed to load meal data');
+    }
+  };
+
+  // Helper function to process meal data (shared between fetchFreshMealData and listener)
+  const processFreshMealData = (freshMealData: any, isFromListener: boolean = false) => {
+    // Check if facts are present, and update loading state accordingly
+    const hasEnhancedFacts = !!freshMealData.enhanced_facts?.food_facts;
+    const shouldShowFactsLoading = freshMealData.quick_criteria_result && !hasEnhancedFacts;
+    
+    if (shouldShowFactsLoading !== factsLoading) {
+      setFactsLoading(shouldShowFactsLoading);
+      if (shouldShowFactsLoading) {
+        console.log('EditMealScreen - Facts loading started...');
+      } else if (hasEnhancedFacts) {
+        console.log('EditMealScreen - Facts loading completed!');
+      }
+    }
+    
+    // IMPORTANT: Set fresh data directly to state to avoid stale data issues
+    setMeal(freshMealData);
+    
+    // Only update rating and thoughts if this is NOT from the listener
+    // or if they haven't been locally modified (to preserve user's unsaved changes)
+    if (!isFromListener) {
+      // Initial load - set everything from database
       setRating(freshMealData.rating || 0);
-      
-      // Load quick ratings from Firestore
-      if (freshMealData.quick_ratings) {
-        setQuickRatings(freshMealData.quick_ratings);
-        console.log('EditMealScreen - Loaded quick ratings:', freshMealData.quick_ratings);
-      }
-      
-      // Set photos from fresh data
-      if (freshMealData.photos && Array.isArray(freshMealData.photos)) {
-        console.log('EditMealScreen - Setting photos from fresh data:', freshMealData.photos.length);
-        setPhotos(freshMealData.photos);
-      } else if (freshMealData.photoUrl) {
-        console.log('EditMealScreen - Converting single photoUrl to photos array');
-        setPhotos([{
-          url: freshMealData.photoUrl,
-          isFlagship: true,
-          order: 0,
-          uploadedAt: freshMealData.createdAt
-        }]);
-      } else {
-        setPhotos([]);
-      }
-      
       
       // Set thoughts
       if (freshMealData.comments?.thoughts) {
@@ -157,21 +165,102 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       } else {
         setThoughts('');
       }
+    }
+    // If from listener, only update rating/thoughts if they match what's in the database
+    // (i.e., user hasn't made local changes)
+    else {
+      // Don't overwrite local rating if user has changed it
+      if (rating === meal.rating) {
+        setRating(freshMealData.rating || 0);
+      }
+      
+      // Don't overwrite local thoughts if user has changed them
+      const currentDbThoughts = meal.comments?.thoughts || '';
+      if (thoughts === currentDbThoughts) {
+        if (freshMealData.comments?.thoughts) {
+          setThoughts(freshMealData.comments.thoughts);
+        }
+      }
+    }
+    
+    // Always update quick ratings from Firestore (these are saved immediately)
+    if (freshMealData.quick_ratings) {
+      setQuickRatings(freshMealData.quick_ratings);
+      console.log('EditMealScreen - Loaded quick ratings:', freshMealData.quick_ratings);
+    }
+    
+    // Set photos from fresh data
+    if (freshMealData.photos && Array.isArray(freshMealData.photos)) {
+      console.log('EditMealScreen - Setting photos from fresh data:', freshMealData.photos.length);
+      setPhotos(freshMealData.photos);
+    } else if (freshMealData.photoUrl) {
+      console.log('EditMealScreen - Converting single photoUrl to photos array');
+      setPhotos([{
+        url: freshMealData.photoUrl,
+        isFlagship: true,
+        order: 0,
+        uploadedAt: freshMealData.createdAt
+      }]);
+    } else {
+      setPhotos([]);
+    }
 
-      // Reset overlay state when loading fresh meal data
+    // Only reset overlay state when NOT from listener or when overlay is not active
+    // This prevents the listener from interfering with active quick rating sessions
+    if (!isFromListener || !showQuickRatingsOverlay) {
       setCurrentStatementIndex(0);
       setShowQuickRatingsOverlay(false);
-      setQuickRatings({});
-    } catch (error) {
-      console.error('EditMealScreen - Error fetching fresh meal data:', error);
-      Alert.alert('Error', 'Failed to load meal data');
+      // Don't reset quickRatings here - they should persist from Firestore data loaded above
     }
   };
   
-  // Fetch fresh data on mount
+  // Set up Firestore listener to watch for enhanced_facts updates
   useEffect(() => {
-    fetchFreshMealData();
-  }, [mealId]);
+    let unsubscribe: (() => void) | null = null;
+    
+    const setupFirestoreListener = () => {
+      console.log('EditMealScreen - Setting up Firestore listener for meal:', mealId);
+      
+      unsubscribe = firestore()
+        .collection('mealEntries')
+        .doc(mealId)
+        .onSnapshot(
+          (documentSnapshot) => {
+            if (documentSnapshot.exists) {
+              const freshMealData = { id: documentSnapshot.id, ...documentSnapshot.data() };
+              
+              // Skip processing if quick ratings overlay is active to prevent interference
+              if (showQuickRatingsOverlay) {
+                console.log('EditMealScreen - Skipping listener update while quick ratings overlay is active');
+                return;
+              }
+              
+              // Log when enhanced_facts becomes available
+              if (freshMealData.enhanced_facts && !meal.enhanced_facts) {
+                console.log('EditMealScreen - Enhanced facts now available! Updating UI...');
+              }
+              
+              // Process the fresh data (this will update the UI with new facts)
+              processFreshMealData(freshMealData, true);
+            }
+          },
+          (error) => {
+            console.error('EditMealScreen - Firestore listener error:', error);
+          }
+        );
+    };
+    
+    // Set up the listener immediately
+    setupFirestoreListener();
+    
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        console.log('EditMealScreen - Cleaning up Firestore listener');
+        unsubscribe();
+      }
+    };
+  }, [mealId, showQuickRatingsOverlay]); // Added showQuickRatingsOverlay dependency
   
   // Handle processed photo returned from CropScreen
   const handleProcessedPhotoReturn = useCallback(async (processedImageUri: string) => {
@@ -285,13 +374,27 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [rating, thoughts, meal]);
 
   const handleRating = (selectedRating: number): void => {
+    Keyboard.dismiss();
     setRating(selectedRating);
   };
 
   // Handle quick ratings overlay
   const handleOpenQuickRatings = (): void => {
+    Keyboard.dismiss();
     if (meal.quick_criteria_result?.rating_statements && meal.quick_criteria_result.rating_statements.length > 0) {
-      setCurrentStatementIndex(0);
+      const statements = meal.quick_criteria_result.rating_statements;
+      
+      // Find the first unrated statement
+      let nextUnratedIndex = 0;
+      for (let i = 0; i < statements.length; i++) {
+        if (!quickRatings[statements[i]]) {
+          nextUnratedIndex = i;
+          break;
+        }
+      }
+      
+      console.log('EditMealScreen - Opening quick ratings at index:', nextUnratedIndex, 'Total rated:', Object.keys(quickRatings).length);
+      setCurrentStatementIndex(nextUnratedIndex);
       setShowQuickRatingsOverlay(true);
     } else {
       Alert.alert('No Rating Statements', 'No rating statements are available for this meal.');
@@ -949,6 +1052,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
+        enableAutomaticScroll={false}
+        enableResetScrollToCoords={false}
+        keyboardOpeningTime={0}
       >
         {/* Meal photos */}
         <View style={styles.photosSection}>
@@ -1004,7 +1110,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <Text style={styles.sectionTitle}>Dish it out! Let's hear your thoughts.</Text>
+            <Text style={styles.sectionTitle}>What did you think?</Text>
             <TextInput
               key={`thoughts-${mealId}`}
               style={styles.commentInput}
@@ -1526,6 +1632,7 @@ const styles = StyleSheet.create({
   factContainer: {
     alignItems: 'center',
     paddingHorizontal: 2,
+    paddingTop: 0,
   },
   factTitle: {
     fontSize: 18,
@@ -1533,7 +1640,8 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+    marginTop: -8,
   },
   factText: {
     fontSize: 15,

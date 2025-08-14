@@ -787,7 +787,7 @@ const HomeMapComponent: React.FC<Props> = ({
         >
           <Image 
             source={MAP_ICONS.myLocation} 
-            style={[styles.buttonIcon, { tintColor: 'white' }]} 
+            style={styles.buttonIcon} 
           />
         </TouchableOpacity>
       </View>
@@ -961,7 +961,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   followingToggleButton: {
-    backgroundColor: '#E63946', // Lobster red when showing all
+    backgroundColor: '#FAF9F6', // Cream when showing all
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -973,7 +973,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     borderWidth: 1,
-    borderColor: '#E63946',
+    borderColor: '#FAF9F6',
   },
   followingToggleButtonActive: {
     backgroundColor: '#1a2b49', // Navy blue when showing following
@@ -986,7 +986,7 @@ const styles = StyleSheet.create({
   followingToggleText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FAF3E0', // Cream text on red background
+    color: '#1a2b49', // Navy text on cream background
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   followingToggleTextActive: {
@@ -1000,7 +1000,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   floatingLocationButton: {
-    backgroundColor: 'rgba(230, 57, 70, 0.8)', // Match MapScreen background
+    backgroundColor: '#FAF9F6', // Cream background
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -1011,13 +1011,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
-    // Removed border to match MapScreen
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   buttonIcon: {
     width: 24,
     height: 24,
     resizeMode: 'contain',
-    tintColor: '#ffffff', // White tint for the icon - using full hex
+    tintColor: '#1a2b49', // Navy tint for the icon on cream background
   },
   // Simple pin marker styles for zoomed out view
   simplePinMarker: {

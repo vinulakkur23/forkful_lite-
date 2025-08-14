@@ -1306,8 +1306,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         {(!quickCriteriaResult || !quickCriteriaResult.dish_criteria) && (
           <View style={styles.criteriaLoadingContainer}>
             <ActivityIndicator size="large" color="#2C5530" />
-            <Text style={styles.criteriaLoadingText}>Analyzing your dish...</Text>
-            <Text style={styles.criteriaLoadingSubtext}>Stick around to learn what makes it special!</Text>
+            <Text style={styles.criteriaLoadingText}>Stick around to learn what to look for in your meal!</Text>
           </View>
         )}
 

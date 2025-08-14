@@ -1341,7 +1341,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 }
               }}
             >
-              <MaterialIcon name="restaurant" size={16} color="white" />
+              <Text style={styles.buttonPlusText}>+</Text>
             </TouchableOpacity>
           </View>
             
@@ -1395,7 +1395,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                   <ActivityIndicator size="small" color="white" />
                 ) : (
                   <>
-                    <MaterialIcon name="fastfood" size={16} color="white" />
+                    <Text style={styles.buttonPlusText}>+</Text>
                     {suggestedMeals.length > 0 && (
                       <View style={styles.badgeContainer}>
                         <Text style={styles.badgeText}>{suggestedMeals.length}</Text>
@@ -1444,7 +1444,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: mealName.trim() ? '#ffc008' : '#cccccc' }
+              { backgroundColor: mealName.trim() ? '#1a2b49' : '#cccccc' }
             ]}
             onPress={saveRating}
             disabled={!mealName.trim() || isProcessing}
@@ -1673,7 +1673,7 @@ const styles = StyleSheet.create({
   infoSection: {
     width: '100%',
     marginBottom: 10,
-    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
+    backgroundColor: '#FFFFFF', // White background
     borderRadius: 12,
     padding: 15,
     shadowColor: '#000',
@@ -1856,7 +1856,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '80%',
     maxHeight: '70%',
-    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
+    backgroundColor: '#FFFFFF', // White background for consistency
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
@@ -1945,6 +1945,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 2,
     fontWeight: '500',
+  },
+  buttonPlusText: {
+    color: 'white',
+    fontSize: 32,
+    fontWeight: 'bold',
+    lineHeight: 32,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   reloadButton: {
     backgroundColor: '#ffc008',

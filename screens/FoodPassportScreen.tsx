@@ -1081,13 +1081,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 ) : isOwnProfile ? (
                                     <>
                                         <Text style={styles.emptyText}>Welcome to your Food Passport!</Text>
-                                        <TouchableOpacity 
-                                            style={styles.addFirstMealButton}
-                                            onPress={() => setShowPhotoMenu(true)}
-                                        >
-                                            <Text style={styles.addFirstMealButtonText}>+</Text>
-                                        </TouchableOpacity>
-                                        <Text style={styles.emptySubText}>Track your culinary journey and enjoy a more mindful eating experience.</Text>
+                                        <Text style={styles.emptySubText}>
+                                            <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}>Track your culinary journey</Text>
+                                            <Text> while enjoying a more </Text>
+                                            <Text style={styles.highlightedWord}>insightful</Text>
+                                            <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}> eating experience</Text>
+                                            <Text>.</Text>
+                                        </Text>
+                                        <Text style={styles.tryItOutText}>Try it out!</Text>
+                                        <Text style={styles.downArrow}>↓</Text>
                                     </>
                                 ) : (
                                     <>
@@ -1395,17 +1397,17 @@ const styles = StyleSheet.create({
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 50,
+        padding: 30,
+        paddingTop: 60, // Move entire container up more
     },
     emptyText: {
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: 'normal',
         color: '#1a2b49', // Navy blue
-        marginTop: -30, // Move text up
         textAlign: 'center',
         paddingHorizontal: 0,
         lineHeight: 22,
-        marginBottom: 40, // Add space before button
+        marginBottom: 20, // Space before subtitle
     },
     emptySubText: {
         fontSize: 14,
@@ -1413,34 +1415,35 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         paddingHorizontal: 0,
         lineHeight: 20,
-        marginTop: 30, // Add space after button
+        marginBottom: 0, // No margin since "Try it out!" has marginTop
+    },
+    highlightedWord: {
+        backgroundColor: '#ffc008', // Gold background
+        paddingHorizontal: 3,
+        paddingVertical: 1,
+        borderRadius: 3,
+        fontWeight: 'bold',
+    },
+    tryItOutText: {
+        fontSize: 16,
+        color: '#1a2b49', // Navy blue
+        textAlign: 'center',
+        fontWeight: 'bold',
+        marginTop: 100, // Move down from subtitle
+        marginBottom: 0, // No gap with arrow
+    },
+    downArrow: {
+        fontSize: 90, // Changed to 90
+        color: '#1a2b49', // Navy blue
+        textAlign: 'center',
+        fontWeight: '50', // Ultra light weight
+        lineHeight: 140, // Keep the same line height for thickness
     },
     emptySubtext: {
         fontSize: 14,
         color: '#888',
         textAlign: 'center',
         marginTop: 5,
-    },
-    addFirstMealButton: {
-        width: 150,
-        height: 150,
-        backgroundColor: 'transparent', // Fully transparent center
-        borderRadius: 25,
-        borderWidth: 5,
-        borderColor: '#1a2b49', // Bold navy blue outline
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 5,
-    },
-    addFirstMealButtonText: {
-        fontSize: 90, // Much bigger + sign
-        fontWeight: 'bold',
-        color: '#1a2b49', // Navy blue color
-        lineHeight: 90,
     },
     // Profile card styles
     userAvatarContainer: {

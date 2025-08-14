@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#1a2b49',
     borderStyle: 'dashed',
     justifyContent: 'center',
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   addPhotoPlus: {
     fontSize: 36,
     color: '#1a2b49',
-    fontWeight: 'bold',
+    fontWeight: '400',
     textAlign: 'center',
     lineHeight: 36,
   },

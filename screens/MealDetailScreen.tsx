@@ -117,9 +117,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
       
       if (!mealDoc.exists) {
-        console.log("Meal document not found");
-        setError('Meal not found');
+        console.log("MealDetailScreen - Meal not found, navigating back silently");
         setLoading(false);
+        navigation.goBack();
         return;
       }
       
