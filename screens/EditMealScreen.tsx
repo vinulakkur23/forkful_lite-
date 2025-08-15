@@ -544,13 +544,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Photo upload and management functions
   const uploadPhotoToStorage = async (imageUri: string): Promise<string> => {
     try {
-      // Compress image before upload
+      // Compress image before upload - improved quality settings
       const compressedImage = await ImageResizer.createResizedImage(
         imageUri,
-        800,
-        800,
+        1200, // Increased from 800 for better quality
+        1200, // Increased from 800 for better quality
         'JPEG',
-        85,
+        90, // Increased from 85 to 90 for better quality
         0,
         undefined,
         false,

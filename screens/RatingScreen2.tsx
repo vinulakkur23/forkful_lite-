@@ -877,9 +877,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       const originalHeight = route.params.photo.height || 1000;
       const isPortrait = originalHeight > originalWidth;
       
-      // Set 800 on the shortest side, scale the other proportionally
-      const targetWidth = isPortrait ? 800 : Math.round(800 * (originalWidth / originalHeight));
-      const targetHeight = isPortrait ? Math.round(800 * (originalHeight / originalWidth)) : 800;
+      // Set 1200 on the shortest side, scale the other proportionally - increased for better quality
+      const targetWidth = isPortrait ? 1200 : Math.round(1200 * (originalWidth / originalHeight));
+      const targetHeight = isPortrait ? Math.round(1200 * (originalHeight / originalWidth)) : 1200;
       
       console.log(`Resizing image from ${originalWidth}x${originalHeight} to ${targetWidth}x${targetHeight} for API calls...`);
       const resizedImage = await ImageResizer.createResizedImage(
@@ -887,7 +887,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         targetWidth,  // Proportional width
         targetHeight, // Proportional height
         'JPEG',
-        85,   // Quality - matches CropScreen compression
+        92,   // Quality - increased from 85 to 92 for better quality
         0,    // Rotation
         undefined,  // Output path (let it generate)
         false,  // Keep metadata

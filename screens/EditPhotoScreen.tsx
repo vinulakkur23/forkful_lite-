@@ -257,13 +257,13 @@ const EditPhotoScreen: React.FC<Props> = ({ route, navigation }) => {
     try {
       console.log('Resizing image from:', uri);
       
-      // Resize to a reasonable size (1000x1000 max, maintaining aspect ratio)
+      // Resize to a reasonable size (1400x1400 max, maintaining aspect ratio)
       const resizedImage = await ImageResizer.createResizedImage(
         uri,
-        1000,
-        1000,
+        1400,
+        1400,
         'JPEG',
-        70,  // 70% quality - good balance between size and quality
+        92,  // 92% quality - increased for better display quality
         0,
         undefined,
         false,

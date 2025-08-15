@@ -649,10 +649,10 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       // Lower resolution saves significantly on AI vision API costs (charged per pixel)
       const compressedImage = await ImageResizer.createResizedImage(
         imagePath,
-        1000, // Max width - increased from 800 for better quality
-        1000, // Max height - increased from 800 for better quality  
+        1400, // Max width - increased for better quality (display images need higher res)
+        1400, // Max height - increased for better quality
         'JPEG', // Format
-        85, // Quality (85% is sweet spot for good quality + smaller size)
+        95, // Quality - increased from 85% to 95% for better quality
         0, // Rotation
         undefined, // Output path (auto-generated)
         false, // Keep metadata
