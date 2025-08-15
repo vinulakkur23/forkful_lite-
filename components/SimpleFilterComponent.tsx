@@ -79,6 +79,8 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       const cuisineTypesSet = new Set<string>();
       const foodTypesSet = new Set<string>();
       const citiesSet = new Set<string>();
+      const dishNamesSet = new Set<string>();
+      const ingredientsSet = new Set<string>();
       
       // Query for meals
       const mealsSnapshot = await firestore()
@@ -89,6 +91,11 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       // Extract unique values
       mealsSnapshot.docs.forEach(doc => {
         const data = doc.data();
+        
+        // Get meal name if available
+        if (data.meal && data.meal.length > 2) {
+          dishNamesSet.add(data.meal);
+        }
         
         // Get city from location data if available
         if (data.location && data.location.city) {
@@ -111,7 +118,86 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
           }
         }
         
-        // Get cuisine and food types from metadata
+        // Get metadata enriched (newer format)
+        if (data.metadata_enriched) {
+          const enrichedData = data.metadata_enriched;
+          
+          // Dish specific name
+          if (enrichedData.dish_specific) {
+            dishNamesSet.add(enrichedData.dish_specific);
+          }
+          
+          // Dish general category
+          if (enrichedData.dish_general) {
+            foodTypesSet.add(enrichedData.dish_general);
+          }
+          
+          // Cuisine type
+          if (enrichedData.cuisine_type && 
+              enrichedData.cuisine_type !== 'Unknown') {
+            cuisineTypesSet.add(enrichedData.cuisine_type);
+          }
+          
+          // Key ingredients
+          if (enrichedData.key_ingredients && 
+              Array.isArray(enrichedData.key_ingredients)) {
+            enrichedData.key_ingredients.forEach(ingredient => {
+              if (ingredient && ingredient.length > 2) {
+                ingredientsSet.add(ingredient);
+              }
+            });
+          }
+          
+          // Also try to extract ingredients from interesting ingredient (if it's a string)
+          if (enrichedData.interesting_ingredient && 
+              typeof enrichedData.interesting_ingredient === 'string' &&
+              enrichedData.interesting_ingredient.length > 2) {
+            ingredientsSet.add(enrichedData.interesting_ingredient);
+          }
+        }
+        
+        // Also check enhanced_facts as backup (in case both structures exist)
+        if (data.enhanced_facts?.food_facts) {
+          const foodFacts = data.enhanced_facts.food_facts;
+          
+          if (foodFacts.dish_specific) {
+            dishNamesSet.add(foodFacts.dish_specific);
+          }
+          if (foodFacts.dish_general) {
+            foodTypesSet.add(foodFacts.dish_general);
+          }
+          if (foodFacts.cuisine_type && foodFacts.cuisine_type !== 'Unknown') {
+            cuisineTypesSet.add(foodFacts.cuisine_type);
+          }
+          if (foodFacts.key_ingredients && Array.isArray(foodFacts.key_ingredients)) {
+            foodFacts.key_ingredients.forEach(ingredient => {
+              if (ingredient && ingredient.length > 2) {
+                ingredientsSet.add(ingredient);
+              }
+            });
+          }
+        }
+        
+        // Also check quick_criteria_result for metadata
+        if (data.quick_criteria_result) {
+          // Dish specific
+          if (data.quick_criteria_result.dish_specific) {
+            dishNamesSet.add(data.quick_criteria_result.dish_specific);
+          }
+          
+          // Dish general
+          if (data.quick_criteria_result.dish_general) {
+            foodTypesSet.add(data.quick_criteria_result.dish_general);
+          }
+          
+          // Cuisine type
+          if (data.quick_criteria_result.cuisine_type && 
+              data.quick_criteria_result.cuisine_type !== 'Unknown') {
+            cuisineTypesSet.add(data.quick_criteria_result.cuisine_type);
+          }
+        }
+        
+        // Get cuisine and food types from old metadata (backwards compatibility)
         if (data.aiMetadata) {
           if (data.aiMetadata.cuisineType && 
               data.aiMetadata.cuisineType !== 'Unknown') {
@@ -139,6 +225,11 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       // Create combined options array
       const options: FilterItem[] = [];
       
+      // Add dish names
+      Array.from(dishNamesSet).sort().forEach(dish => {
+        options.push({ type: 'dishName', value: dish });
+      });
+      
       // Add cuisine types
       Array.from(cuisineTypesSet).sort().forEach(cuisine => {
         options.push({ type: 'cuisineType', value: cuisine });
@@ -147,6 +238,11 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       // Add food types
       Array.from(foodTypesSet).sort().forEach(food => {
         options.push({ type: 'foodType', value: food });
+      });
+      
+      // Add ingredients
+      Array.from(ingredientsSet).sort().forEach(ingredient => {
+        options.push({ type: 'ingredient', value: ingredient });
       });
       
       // Add cities
@@ -325,7 +421,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Filter by cuisine, food, city, or user"
+          placeholder="Filter by dish, cuisine, ingredient, city, or user"
           value={searchText}
           onChangeText={(text) => {
             setSearchText(text);
@@ -378,8 +474,10 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
                   </View>
                   <Text style={styles.optionType}>
                     {item.type === 'user' ? 'User' :
+                     item.type === 'dishName' ? 'Dish' :
                      item.type === 'cuisineType' ? 'Cuisine' : 
-                     item.type === 'foodType' ? 'Food' : 'City'}
+                     item.type === 'foodType' ? 'Food' : 
+                     item.type === 'ingredient' ? 'Ingredient' : 'City'}
                   </Text>
                 </TouchableOpacity>
               )}

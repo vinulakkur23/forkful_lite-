@@ -88,6 +88,16 @@ interface MealEntry {
     platingStyle: string;
     beverageType: string;
   };
+  metadata_enriched?: {
+    cuisine_type?: string;
+    dish_general?: string;
+    dish_specific?: string;
+    key_ingredients?: string[];
+    interesting_ingredient?: string;
+    [key: string]: any;
+  } | null;
+  enhanced_facts?: any;
+  quick_criteria_result?: any;
 }
 
 const { width } = Dimensions.get('window');
@@ -457,7 +467,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             setting: aiMetadata.setting || 'Unknown',
             platingStyle: aiMetadata.platingStyle || 'Unknown',
             beverageType: aiMetadata.beverageType || 'Unknown'
-          }
+          },
+          metadata_enriched: rawMeal.metadata_enriched || null, // Include metadata_enriched field
+          enhanced_facts: rawMeal.enhanced_facts || null, // Include enhanced_facts field
+          quick_criteria_result: rawMeal.quick_criteria_result || null // Include quick_criteria_result field
         });
       }
       
@@ -519,9 +532,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
     
-    // Check if we have meals with aiMetadata for debugging
+    // Check if we have meals with metadata for debugging
     const mealsWithMetadata = allNearbyMeals.filter(meal => meal.aiMetadata);
-    console.log(`HomeScreen: Found ${mealsWithMetadata.length} out of ${allNearbyMeals.length} meals with aiMetadata`);
+    const mealsWithEnrichedMetadata = allNearbyMeals.filter(meal => meal.metadata_enriched);
+    console.log(`HomeScreen: Found ${mealsWithMetadata.length} meals with aiMetadata, ${mealsWithEnrichedMetadata.length} with metadata_enriched out of ${allNearbyMeals.length} total`);
     
     // Print some sample data to understand the structure
     if (allNearbyMeals.length > 0) {
@@ -531,7 +545,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         restaurant: allNearbyMeals[0].restaurant,
         city: allNearbyMeals[0].city,
         locationCity: allNearbyMeals[0].location?.city,
-        aiMetadata: allNearbyMeals[0].aiMetadata
+        aiMetadata: allNearbyMeals[0].aiMetadata,
+        metadata_enriched: allNearbyMeals[0].metadata_enriched
       });
     }
     
@@ -563,34 +578,81 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       activeFilters.forEach(filter => {
       const countBefore = result.length;
       console.log(`HomeScreen: Applying filter: ${filter.type} = ${filter.value}`);
+      console.log(`HomeScreen: Starting with ${countBefore} meals to filter`);
+      
+      // Debug: Show first few meals' data for this filter type
+      if (result.length > 0) {
+        console.log(`HomeScreen: Sample meal data for ${filter.type} filtering:`, {
+          meal: result[0].meal,
+          metadata_enriched: result[0].metadata_enriched,
+          enhanced_facts: result[0].enhanced_facts,
+          quick_criteria_result: result[0].quick_criteria_result
+        });
+      }
       
       if (filter.type === 'cuisineType') {
         result = result.filter(meal => {
-          const matches = meal.aiMetadata && 
-                        meal.aiMetadata.cuisineType && 
-                        meal.aiMetadata.cuisineType === filter.value;
-          if (matches) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType: ${filter.value}`);
+          // Check old aiMetadata format
+          if (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (aiMetadata): ${filter.value}`);
+            return true;
           }
-          return matches;
+          
+          // Check metadata_enriched format
+          if (meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (metadata_enriched): ${filter.value}`);
+            return true;
+          }
+          
+          // Check enhanced_facts format
+          if (meal.enhanced_facts?.food_facts?.cuisine_type && meal.enhanced_facts.food_facts.cuisine_type === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (enhanced_facts): ${filter.value}`);
+            return true;
+          }
+          
+          // Check quick_criteria_result format
+          if (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (quick_criteria_result): ${filter.value}`);
+            return true;
+          }
+          
+          return false;
         });
       } else if (filter.type === 'foodType') {
         result = result.filter(meal => {
-          if (!meal.aiMetadata || !meal.aiMetadata.foodType) return false;
-          
-          // foodType is now an array
-          let matches = false;
-          if (Array.isArray(meal.aiMetadata.foodType)) {
-            matches = meal.aiMetadata.foodType.includes(filter.value);
-          } else {
-            // Handle old data that might still be a string
-            matches = meal.aiMetadata.foodType === filter.value;
+          // Check old aiMetadata format
+          if (meal.aiMetadata?.foodType) {
+            let matches = false;
+            if (Array.isArray(meal.aiMetadata.foodType)) {
+              matches = meal.aiMetadata.foodType.includes(filter.value);
+            } else {
+              matches = meal.aiMetadata.foodType === filter.value;
+            }
+            if (matches) {
+              console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (aiMetadata): ${filter.value}`);
+              return true;
+            }
           }
           
-          if (matches) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType: ${filter.value}`);
+          // Check metadata_enriched format
+          if (meal.metadata_enriched?.dish_general && meal.metadata_enriched.dish_general === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (metadata_enriched): ${filter.value}`);
+            return true;
           }
-          return matches;
+          
+          // Check enhanced_facts format
+          if (meal.enhanced_facts?.food_facts?.dish_general && meal.enhanced_facts.food_facts.dish_general === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (enhanced_facts): ${filter.value}`);
+            return true;
+          }
+          
+          // Check quick_criteria_result format
+          if (meal.quick_criteria_result?.dish_general && meal.quick_criteria_result.dish_general === filter.value) {
+            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (quick_criteria_result): ${filter.value}`);
+            return true;
+          }
+          
+          return false;
         });
       } else if (filter.type === 'city') {
         result = result.filter(meal => {
@@ -629,12 +691,113 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           }
           return false;
         });
+      } else if (filter.type === 'dishName') {
+        result = result.filter(meal => {
+          // Debug each meal for dishName filter
+          console.log(`HomeScreen: Checking meal "${meal.meal}" against dishName filter "${filter.value}"`);
+          console.log(`HomeScreen: Meal data - basic meal: "${meal.meal}", metadata_enriched.dish_specific: "${meal.metadata_enriched?.dish_specific}"`);
+          
+          // Check basic meal name
+          if (meal.meal && meal.meal.toLowerCase().includes(filter.value.toLowerCase())) {
+            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (basic): ${filter.value}`);
+            return true;
+          }
+          
+          // Check metadata_enriched.dish_specific
+          if (meal.metadata_enriched?.dish_specific && 
+              meal.metadata_enriched.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (metadata_enriched): ${filter.value}`);
+            return true;
+          }
+          
+          // Check enhanced_facts.food_facts.dish_specific
+          if (meal.enhanced_facts?.food_facts?.dish_specific && 
+              meal.enhanced_facts.food_facts.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (enhanced_facts): ${filter.value}`);
+            return true;
+          }
+          
+          // Check quick_criteria_result.dish_specific
+          if (meal.quick_criteria_result?.dish_specific && 
+              meal.quick_criteria_result.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (quick_criteria_result): ${filter.value}`);
+            return true;
+          }
+          
+          console.log(`HomeScreen: ❌ Meal "${meal.meal}" does NOT match dishName filter "${filter.value}"`);
+          return false;
+        });
+      } else if (filter.type === 'ingredient') {
+        result = result.filter(meal => {
+          // Debug each meal for ingredient filter
+          console.log(`HomeScreen: Checking meal "${meal.meal}" against ingredient filter "${filter.value}"`);
+          console.log(`HomeScreen: Meal ingredients - key_ingredients: ${JSON.stringify(meal.metadata_enriched?.key_ingredients)}, interesting_ingredient: "${meal.metadata_enriched?.interesting_ingredient}"`);
+          
+          // Check metadata_enriched.key_ingredients
+          if (meal.metadata_enriched?.key_ingredients && Array.isArray(meal.metadata_enriched.key_ingredients)) {
+            const matches = meal.metadata_enriched.key_ingredients.some(ingredient => 
+              ingredient.toLowerCase().includes(filter.value.toLowerCase())
+            );
+            if (matches) {
+              console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (metadata_enriched): ${filter.value}`);
+              return true;
+            }
+          }
+          
+          // Check metadata_enriched.interesting_ingredient
+          if (meal.metadata_enriched?.interesting_ingredient && 
+              meal.metadata_enriched.interesting_ingredient.toLowerCase().includes(filter.value.toLowerCase())) {
+            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (interesting_ingredient): ${filter.value}`);
+            return true;
+          }
+          
+          // Check enhanced_facts.food_facts.key_ingredients
+          if (meal.enhanced_facts?.food_facts?.key_ingredients && Array.isArray(meal.enhanced_facts.food_facts.key_ingredients)) {
+            const matches = meal.enhanced_facts.food_facts.key_ingredients.some(ingredient => 
+              ingredient.toLowerCase().includes(filter.value.toLowerCase())
+            );
+            if (matches) {
+              console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (enhanced_facts): ${filter.value}`);
+              return true;
+            }
+          }
+          
+          console.log(`HomeScreen: ❌ Meal "${meal.meal}" does NOT match ingredient filter "${filter.value}"`);
+          return false;
+        });
       }
       console.log(`HomeScreen: After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
       });
     }
     
     console.log(`HomeScreen: Final filter results: ${result.length} meals match all filter criteria`);
+    
+    // Comprehensive debugging summary
+    if (activeFilters && activeFilters.length > 0) {
+      console.log('HomeScreen: 🔍 FILTERING SUMMARY:');
+      console.log(`- Started with ${allNearbyMeals.length} total meals`);
+      console.log(`- Applied ${activeFilters.length} filters: ${JSON.stringify(activeFilters)}`);
+      console.log(`- Ended with ${result.length} filtered meals`);
+      
+      if (result.length === 0) {
+        console.log('HomeScreen: ⚠️ NO MEALS MATCH - checking why...');
+        // Sample some meals to see their structure
+        if (allNearbyMeals.length > 0) {
+          console.log('HomeScreen: Sample meal structures:');
+          allNearbyMeals.slice(0, 3).forEach((meal, i) => {
+            console.log(`Meal ${i + 1}:`, {
+              meal: meal.meal,
+              hasMetadataEnriched: !!meal.metadata_enriched,
+              metadataEnriched: meal.metadata_enriched,
+              hasEnhancedFacts: !!meal.enhanced_facts,
+              hasQuickCriteria: !!meal.quick_criteria_result
+            });
+          });
+        }
+      } else if (result.length === allNearbyMeals.length) {
+        console.log('HomeScreen: ⚠️ ALL MEALS MATCH - filter may not be working correctly');
+      }
+    }
     
     // Apply rating filters if any are active
     if (activeRatingFilters && activeRatingFilters.length > 0) {

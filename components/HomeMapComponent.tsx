@@ -198,6 +198,16 @@ interface MealEntry {
     platingStyle: string;
     beverageType: string;
   };
+  metadata_enriched?: {
+    cuisine_type?: string;
+    dish_general?: string;
+    dish_specific?: string;
+    key_ingredients?: string[];
+    interesting_ingredient?: string;
+    [key: string]: any;
+  } | null;
+  enhanced_facts?: any;
+  quick_criteria_result?: any;
 }
 
 type Props = {

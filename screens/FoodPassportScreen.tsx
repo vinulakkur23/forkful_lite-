@@ -86,6 +86,16 @@ interface MealEntry {
     platingStyle: string;
     beverageType: string;
   };
+  metadata_enriched?: {
+    cuisine_type?: string;
+    dish_general?: string;
+    dish_specific?: string;
+    key_ingredients?: string[];
+    interesting_ingredient?: string;
+    [key: string]: any;
+  } | null;
+  enhanced_facts?: any;
+  quick_criteria_result?: any;
 }
 
 const { width } = Dimensions.get('window');
@@ -251,6 +261,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         platingStyle: aiMetadata.platingStyle || 'Unknown',
                         beverageType: aiMetadata.beverageType || 'Unknown'
                     },
+                    metadata_enriched: data.metadata_enriched || null, // Include metadata_enriched field
+                    enhanced_facts: data.enhanced_facts || null, // Include enhanced_facts field
+                    quick_criteria_result: data.quick_criteria_result || null, // Include quick_criteria_result field
                     mealType: data.mealType || 'Restaurant',
                     comments: data.comments || { liked: '', disliked: '' }
                 });
@@ -397,19 +410,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             return;
         }
         
-        // Check if we have meals with aiMetadata for debugging
+        // Check if we have meals with metadata for debugging
         const mealsWithMetadata = meals.filter(meal => meal.aiMetadata);
-        console.log(`Found ${mealsWithMetadata.length} out of ${meals.length} meals with aiMetadata`);
+        const mealsWithEnrichedMetadata = meals.filter(meal => meal.metadata_enriched);
+        console.log(`FoodPassport: Found ${mealsWithMetadata.length} meals with aiMetadata, ${mealsWithEnrichedMetadata.length} with metadata_enriched out of ${meals.length} total`);
         
         // Print some sample data to understand the structure
         if (meals.length > 0) {
-            console.log('Sample meal data (first meal):', {
+            console.log('FoodPassport: Sample meal data (first meal):', {
                 id: meals[0].id,
                 meal: meals[0].meal,
                 restaurant: meals[0].restaurant,
                 city: meals[0].city,
                 locationCity: meals[0].location?.city,
-                aiMetadata: meals[0].aiMetadata
+                aiMetadata: meals[0].aiMetadata,
+                metadata_enriched: meals[0].metadata_enriched
             });
         }
         
@@ -433,31 +448,67 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             
             if (filter.type === 'cuisineType') {
                 result = result.filter(meal => {
-                    const matches = meal.aiMetadata && 
-                                  meal.aiMetadata.cuisineType && 
-                                  meal.aiMetadata.cuisineType === filter.value;
-                    if (matches) {
-                        console.log(`Meal "${meal.meal}" matches cuisineType: ${filter.value}`);
+                    // Check old aiMetadata format
+                    if (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (aiMetadata): ${filter.value}`);
+                        return true;
                     }
-                    return matches;
+                    
+                    // Check metadata_enriched format
+                    if (meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (metadata_enriched): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check enhanced_facts format
+                    if (meal.enhanced_facts?.food_facts?.cuisine_type && meal.enhanced_facts.food_facts.cuisine_type === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (enhanced_facts): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check quick_criteria_result format
+                    if (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (quick_criteria_result): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    return false;
                 });
             } else if (filter.type === 'foodType') {
                 result = result.filter(meal => {
-                    if (!meal.aiMetadata || !meal.aiMetadata.foodType) return false;
-                    
-                    // foodType is now an array
-                    let matches = false;
-                    if (Array.isArray(meal.aiMetadata.foodType)) {
-                        matches = meal.aiMetadata.foodType.includes(filter.value);
-                    } else {
-                        // Handle old data that might still be a string
-                        matches = meal.aiMetadata.foodType === filter.value;
+                    // Check old aiMetadata format
+                    if (meal.aiMetadata?.foodType) {
+                        let matches = false;
+                        if (Array.isArray(meal.aiMetadata.foodType)) {
+                            matches = meal.aiMetadata.foodType.includes(filter.value);
+                        } else {
+                            matches = meal.aiMetadata.foodType === filter.value;
+                        }
+                        if (matches) {
+                            console.log(`FoodPassport: Meal "${meal.meal}" matches foodType (aiMetadata): ${filter.value}`);
+                            return true;
+                        }
                     }
                     
-                    if (matches) {
-                        console.log(`Meal "${meal.meal}" matches foodType: ${filter.value}`);
+                    // Check metadata_enriched format
+                    if (meal.metadata_enriched?.dish_general && meal.metadata_enriched.dish_general === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches foodType (metadata_enriched): ${filter.value}`);
+                        return true;
                     }
-                    return matches;
+                    
+                    // Check enhanced_facts format
+                    if (meal.enhanced_facts?.food_facts?.dish_general && meal.enhanced_facts.food_facts.dish_general === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches foodType (enhanced_facts): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check quick_criteria_result format
+                    if (meal.quick_criteria_result?.dish_general && meal.quick_criteria_result.dish_general === filter.value) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches foodType (quick_criteria_result): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    return false;
                 });
             } else if (filter.type === 'city') {
                 result = result.filter(meal => {
@@ -494,6 +545,70 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             return matches;
                         }
                     }
+                    return false;
+                });
+            } else if (filter.type === 'dishName') {
+                result = result.filter(meal => {
+                    // Check basic meal name
+                    if (meal.meal && meal.meal.toLowerCase().includes(filter.value.toLowerCase())) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches dishName (basic): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check metadata_enriched.dish_specific
+                    if (meal.metadata_enriched?.dish_specific && 
+                        meal.metadata_enriched.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches dishName (metadata_enriched): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check enhanced_facts.food_facts.dish_specific
+                    if (meal.enhanced_facts?.food_facts?.dish_specific && 
+                        meal.enhanced_facts.food_facts.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches dishName (enhanced_facts): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check quick_criteria_result.dish_specific
+                    if (meal.quick_criteria_result?.dish_specific && 
+                        meal.quick_criteria_result.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches dishName (quick_criteria_result): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    return false;
+                });
+            } else if (filter.type === 'ingredient') {
+                result = result.filter(meal => {
+                    // Check metadata_enriched.key_ingredients
+                    if (meal.metadata_enriched?.key_ingredients && Array.isArray(meal.metadata_enriched.key_ingredients)) {
+                        const matches = meal.metadata_enriched.key_ingredients.some(ingredient => 
+                            ingredient.toLowerCase().includes(filter.value.toLowerCase())
+                        );
+                        if (matches) {
+                            console.log(`FoodPassport: Meal "${meal.meal}" matches ingredient (metadata_enriched): ${filter.value}`);
+                            return true;
+                        }
+                    }
+                    
+                    // Check metadata_enriched.interesting_ingredient
+                    if (meal.metadata_enriched?.interesting_ingredient && 
+                        meal.metadata_enriched.interesting_ingredient.toLowerCase().includes(filter.value.toLowerCase())) {
+                        console.log(`FoodPassport: Meal "${meal.meal}" matches ingredient (interesting_ingredient): ${filter.value}`);
+                        return true;
+                    }
+                    
+                    // Check enhanced_facts.food_facts.key_ingredients
+                    if (meal.enhanced_facts?.food_facts?.key_ingredients && Array.isArray(meal.enhanced_facts.food_facts.key_ingredients)) {
+                        const matches = meal.enhanced_facts.food_facts.key_ingredients.some(ingredient => 
+                            ingredient.toLowerCase().includes(filter.value.toLowerCase())
+                        );
+                        if (matches) {
+                            console.log(`FoodPassport: Meal "${meal.meal}" matches ingredient (enhanced_facts): ${filter.value}`);
+                            return true;
+                        }
+                    }
+                    
                     return false;
                 });
             }
