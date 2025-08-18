@@ -407,13 +407,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         console.log("No Firebase apps found, initializing...");
         try {
           firebase.initializeApp({
-            apiKey: "AIzaSyC1DaoxD2IKXUuxb0YRGXn_TfZhz1eNGUc",
-            authDomain: "dishitout-explorer.firebaseapp.com",
-            projectId: "dishitout-explorer",
-            storageBucket: "dishitout-explorer.firebasestorage.app",
-            messagingSenderId: "498038344155",
-            appId: "1:498038344155:ios:c7ba5226fe3e7d53883ffe",
-            measurementId: "G-1D131XEPV1"
+            apiKey: "AIzaSyCgus61osM-9Qu6Z05-KA-s070e99vFtUg",
+            authDomain: "forkful-lite.firebaseapp.com",
+            projectId: "forkful-lite",
+            storageBucket: "forkful-lite.firebasestorage.app",
+            messagingSenderId: "219668861569",
+            appId: "1:219668861569:ios:b4c5f776e2bced10ffb380"
           });
           console.log("Firebase initialized successfully");
         } catch (initError) {

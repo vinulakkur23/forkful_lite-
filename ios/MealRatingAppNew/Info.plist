@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Dishitout Explorer</string>
+	<string>Forkful Lite</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconName</key>
@@ -31,7 +31,7 @@
 			<string>manu.mealratingapp.googleSignIn</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie</string>
+				<string>com.googleusercontent.apps.219668861569-qm93jan5voigimfur98slrudb78r6uvp</string>
 			</array>
 		</dict>
 	</array>

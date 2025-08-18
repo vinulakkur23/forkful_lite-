@@ -4,15 +4,14 @@ import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-// Your Firebase configuration - Explorer project config
+// Your Firebase configuration - Forkful Lite project config
 const firebaseConfig = {
-  apiKey: "AIzaSyC1DaoxD2IKXUuxb0YRGXn_TfZhz1eNGUc",
-  authDomain: "dishitout-explorer.firebaseapp.com",
-  projectId: "dishitout-explorer",
-  storageBucket: "dishitout-explorer.firebasestorage.app",
-  messagingSenderId: "498038344155",
-  appId: "1:498038344155:ios:c7ba5226fe3e7d53883ffe",
-  measurementId: "G-1D131XEPV1"
+  apiKey: "AIzaSyCgus61osM-9Qu6Z05-KA-s070e99vFtUg",
+  authDomain: "forkful-lite.firebaseapp.com",
+  projectId: "forkful-lite",
+  storageBucket: "forkful-lite.firebasestorage.app",
+  messagingSenderId: "219668861569",
+  appId: "1:219668861569:ios:b4c5f776e2bced10ffb380"
 };
 
 // Initialize Firebase if it's not already initialized
@@ -28,7 +27,7 @@ const firebaseStorage = firebase.app().storage();
 
 // Configure Google Sign-In
 GoogleSignin.configure({
-  webClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com', // Get this from Firebase console
+  webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com', // Get this from Firebase console
 });
 
 // Setup Firestore

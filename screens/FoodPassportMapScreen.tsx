@@ -127,8 +127,8 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     // Initialize GoogleSignin
     GoogleSignin.configure({
-      webClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
-      iosClientId: '498038344155-52mk6j6dhpnq8m9nu9ski5psn185anie.apps.googleusercontent.com',
+      webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
+      iosClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
       offlineAccess: true,
     });
 
