@@ -614,9 +614,6 @@ const App: React.FC = () => {
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
-      iosClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
-      offlineAccess: true,
-      forceCodeForRefreshToken: true,
     });
     
     // PERFORMANCE: Warm up the backend service to reduce first API call delay
@@ -682,7 +679,7 @@ const App: React.FC = () => {
       }
     }
     
-    // Ensure user document exists in Firestore
+    // Ensure user document exists in Firestore and sync profile data
     if (user) {
       try {
         const userDoc = await firestore().collection('users').doc(user.uid).get();
@@ -697,10 +694,23 @@ const App: React.FC = () => {
             lastLoginAt: firestore.FieldValue.serverTimestamp()
           });
         } else {
-          // Update last login
+          // Update last login and sync auth profile with Firestore data
+          const userData = userDoc.data();
           await firestore().collection('users').doc(user.uid).update({
             lastLoginAt: firestore.FieldValue.serverTimestamp()
           });
+          
+          // If Firestore has profile data but auth doesn't, update auth profile
+          if (userData && (userData.displayName || userData.photoURL)) {
+            if (userData.displayName !== user.displayName || userData.photoURL !== user.photoURL) {
+              console.log("Syncing auth profile with Firestore data");
+              await user.updateProfile({
+                displayName: userData.displayName || user.displayName || 'User',
+                photoURL: userData.photoURL || user.photoURL || null
+              });
+              console.log("Auth profile synced with Firestore");
+            }
+          }
         }
       } catch (error) {
         console.error("Error ensuring user document exists:", error);

@@ -70,6 +70,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       setIsSigningIn(true);
       console.log("1. Starting Google sign-in process");
       
+      
       // Make sure Google Play Services are available
       await GoogleSignin.hasPlayServices();
       console.log("2. Google Play Services available");

@@ -39,7 +39,9 @@ import ImageResizer from 'react-native-image-resizer';
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // TEMPORARILY DISABLED FOR PERFORMANCE
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
-import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService';
+// import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
+import { extractRatingStatements, RatingStatementsData } from '../services/ratingStatementsService';
+import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
 import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
 import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 import Geolocation from '@react-native-community/geolocation';
@@ -681,10 +683,18 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       logWithSession("Component unmounting, cleaning up");
       
       // Clear any in-progress API calls to prevent them from affecting next session
-      if ((global as any).quickCriteriaExtractionPromise) {
-        console.log("Clearing in-progress quick criteria extraction promise");
+      if ((global as any).quickCriteriaExtractionPromise || (global as any).ratingStatementsExtractionPromise) {
+        console.log("Clearing in-progress extraction promises");
+        // Clear old quick criteria globals
         (global as any).quickCriteriaExtractionPromise = null;
         (global as any).quickCriteriaStartTime = null;
+        (global as any).quickCriteriaSessionId = null;
+        // Clear new rating statements globals
+        (global as any).ratingStatementsExtractionPromise = null;
+        (global as any).ratingStatementsStartTime = null;
+        (global as any).ratingStatementsSessionId = null;
+        (global as any).ratingStatementsPhotoUri = null;
+        (global as any).ratingStatementsMealData = null;
       }
     };
   }, [route.params._uniqueKey, route.params.photo.uri]); // Re-run when unique key or photo URI changes
@@ -925,7 +935,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // ASYNC (NON-BLOCKING) but SEQUENTIAL: Start dish criteria API and let it run in background
       logWithSession('Starting dish criteria API asynchronously...');
-      let quickCriteriaResult: QuickCriteriaData | null = null;
+      let ratingStatementsResult: RatingStatementsData | null = null;
       
       // CLEAN APPROACH: Create basic meal entry first, then update with criteria
       console.log('🧹 Creating basic meal entry first...');
@@ -981,8 +991,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         platform: Platform.OS,
         appVersion: '1.0.0',
         // Initially null - will be updated by background API call
-        quick_criteria_result: null,
-        dish_criteria: null
+        rating_statements_result: null
       };
       
       // Save basic meal data and get the document ID
@@ -991,53 +1000,57 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       console.log('✅ Basic meal saved with ID:', mealId);
       logWithSession(`Basic meal saved: ${mealId}`);
       
-      // Start with quick criteria first, then enhanced metadata sequentially
-      console.log('🔄 Starting quick criteria extraction...');
-      logWithSession('Starting sequential API calls - quick criteria first');
+      // Start with rating statements first, then enhanced metadata sequentially
+      console.log('🔄 Starting rating statements extraction...');
+      console.log('📸 Using photo URI:', freshPhoto.uri);
+      console.log('🍽️ Using meal name:', mealName);
+      logWithSession('Starting parallel API calls - rating statements AND pixel art generation');
       
-      extractQuickCriteria(
+      // Start both API calls in parallel for better performance
+      console.log('🚨 RatingScreen2: About to call extractRatingStatements with:', { uri: freshPhoto.uri, mealName });
+      console.log('🚨 RatingScreen2: About to call generatePixelArtIcon with:', { uri: freshPhoto.uri, mealName });
+      
+      // Start pixel art generation in parallel (don't wait for it)
+      const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
+      
+      extractRatingStatements(
         freshPhoto.uri,
-        mealName,
-        restaurant
+        mealName
       ).then(async (result) => {
+        console.log('🚨 RatingScreen2: extractRatingStatements resolved with result:', result);
         if (result) {
-          console.log('✅ Quick criteria completed:', result.dish_criteria?.length || 0, 'criteria');
-          console.log('📊 Full criteria result:', JSON.stringify(result, null, 2));
-          logWithSession(`Quick criteria completed with ${result.dish_criteria?.length || 0} criteria`);
+          console.log('✅ Rating statements completed:', result.rating_statements?.length || 0, 'statements');
+          console.log('📊 Full rating statements result:', JSON.stringify(result, null, 2));
+          logWithSession(`Rating statements completed with ${result.rating_statements?.length || 0} statements`);
           
           // Log if this looks like fallback data
-          if (result.dish_criteria && result.dish_criteria[0]?.name === 'Visual Appeal') {
-            console.warn('⚠️ WARNING: This looks like fallback/default criteria!');
+          if (result.extraction_error) {
+            console.warn('⚠️ WARNING: This looks like fallback rating statements!');
           }
           
-          // Update the meal document with criteria
+          // Update the meal document with rating statements
           try {
-            const criteriaUpdate = {
-              quick_criteria_result: result,
-              dish_criteria: result.dish_criteria ? {
-                criteria: result.dish_criteria.map(criterion => ({
-                  title: criterion.name || criterion.title || 'Quality Aspect',
-                  description: `${criterion.what_to_look_for || ''} ${criterion.insight || ''}`.trim()
-                }))
-              } : null,
-              criteria_updated_at: firestore.FieldValue.serverTimestamp()
+            const statementsUpdate = {
+              rating_statements_result: result,
+              statements_updated_at: firestore.FieldValue.serverTimestamp()
             };
             
-            await firestore().collection('mealEntries').doc(mealId).update(criteriaUpdate);
-            console.log('🎉 Meal updated with criteria, starting enhanced metadata...');
-            logWithSession(`Criteria saved, starting enhanced metadata extraction`);
+            await firestore().collection('mealEntries').doc(mealId).update(statementsUpdate);
+            console.log('🎉 Meal updated with rating statements, starting enhanced metadata...');
+            logWithSession(`Rating statements saved, starting enhanced metadata extraction`);
             
             // NOW start enhanced metadata extraction
             return extractEnhancedMetadata(freshPhoto.uri, mealName, restaurant);
             
           } catch (firestoreError) {
-            console.error('❌ Error saving criteria to Firestore:', firestoreError);
-            logWithSession(`Criteria save error: ${firestoreError}`);
+            console.error('❌ Error saving rating statements to Firestore:', firestoreError);
+            logWithSession(`Rating statements save error: ${firestoreError}`);
             throw firestoreError;
           }
         } else {
-          console.warn('⚠️ Quick criteria returned null');
-          logWithSession('Quick criteria failed - skipping enhanced metadata');
+          console.error('🚨 RatingScreen2: Rating statements returned null!');
+          console.error('🚨 RatingScreen2: This means extractRatingStatements failed completely');
+          logWithSession('Rating statements failed - skipping enhanced metadata');
           return null;
         }
       }).then(async (metadata) => {
@@ -1099,8 +1112,70 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           }
         }
       }).catch(error => {
-        console.error('❌ Sequential API call failed:', error);
+        console.error('🚨 RatingScreen2: Sequential API call failed:', error);
+        console.error('🚨 RatingScreen2: Error type:', typeof error);
+        console.error('🚨 RatingScreen2: Error stringified:', JSON.stringify(error));
+        console.error('🚨 RatingScreen2: Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
         logWithSession(`Sequential API error: ${error}`);
+      });
+      
+      // Handle pixel art generation in background
+      pixelArtPromise.then(async (pixelArtResult) => {
+        if (pixelArtResult) {
+          console.log('✅ Pixel art generation completed:', {
+            dish: pixelArtResult.dish_name,
+            service: pixelArtResult.service,
+            imageSize: pixelArtResult.image_data?.length || 0
+          });
+          
+          // SHOW THE PIXEL ART IMMEDIATELY (before uploading to storage)
+          const pixelArtDataUri = createImageDataUri(pixelArtResult.image_data, pixelArtResult.mime_type);
+          console.log('🎨 Displaying pixel art locally:', pixelArtDataUri.substring(0, 50) + '...');
+          
+          // TODO: Add state to show this image in the UI if needed
+          
+          // Save pixel art to Firebase Storage and update Firestore with URL
+          try {
+            console.log('📤 Uploading pixel art to Firebase Storage...');
+            
+            // Create data URI for upload (React Native Firebase Storage handles base64 data URIs)
+            const pixelArtDataUri = `data:${pixelArtResult.mime_type || 'image/png'};base64,${pixelArtResult.image_data}`;
+            console.log(`📦 Pixel art data length: ${pixelArtResult.image_data.length} characters`);
+            
+            // Create storage reference
+            const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
+            const pixelArtRef = storage().ref(`pixel_art/${pixelArtFileName}`);
+            
+            // Upload the pixel art using putString with base64 format
+            await pixelArtRef.putString(pixelArtResult.image_data, 'base64', {
+              contentType: pixelArtResult.mime_type || 'image/png'
+            });
+            
+            // Get download URL
+            const pixelArtUrl = await pixelArtRef.getDownloadURL();
+            console.log('✅ Pixel art uploaded successfully:', pixelArtUrl);
+            
+            // Update Firestore with just the URL and metadata
+            await firestore().collection('mealEntries').doc(mealId).update({
+              pixel_art_url: pixelArtUrl,
+              pixel_art_mime_type: pixelArtResult.mime_type,
+              pixel_art_generated_at: firestore.FieldValue.serverTimestamp(),
+              pixel_art_service: pixelArtResult.service
+            });
+            
+            console.log('✅ Pixel art metadata saved to Firestore successfully');
+            logWithSession('Pixel art generation, upload, and save completed');
+          } catch (firestoreError) {
+            console.error('❌ Error saving pixel art:', firestoreError);
+            logWithSession(`Pixel art save error: ${firestoreError}`);
+          }
+        } else {
+          console.warn('⚠️ Pixel art generation failed');
+          logWithSession('Pixel art generation failed');
+        }
+      }).catch(error => {
+        console.error('❌ Pixel art generation error:', error);
+        logWithSession(`Pixel art error: ${error}`);
       });
       
       console.log('DEBUG: Dish criteria API running asynchronously');
@@ -1155,16 +1230,23 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Function to start quick criteria extraction in background
+  // Function to start rating statements extraction in background
   const startQuickCriteriaExtraction = (photo: any, restaurant: string, mealName: string) => {
     const currentSessionId = photoSessionRef.current;
     
-    // Clear any existing promise first to prevent stale data
-    if ((global as any).quickCriteriaExtractionPromise) {
-      logWithSession('Clearing previous quick criteria extraction promise before starting new one');
+    // Clear any existing promise first to prevent stale data - BOTH old and new
+    if ((global as any).quickCriteriaExtractionPromise || (global as any).ratingStatementsExtractionPromise) {
+      logWithSession('Clearing previous extraction promises before starting new one');
+      // Clear old quick criteria globals
       (global as any).quickCriteriaExtractionPromise = null;
       (global as any).quickCriteriaStartTime = null;
       (global as any).quickCriteriaSessionId = null;
+      // Clear new rating statements globals
+      (global as any).ratingStatementsExtractionPromise = null;
+      (global as any).ratingStatementsStartTime = null;
+      (global as any).ratingStatementsSessionId = null;
+      (global as any).ratingStatementsPhotoUri = null;
+      (global as any).ratingStatementsMealData = null;
     }
     
     // Use setTimeout to ensure this runs completely asynchronously and doesn't block navigation
@@ -1174,17 +1256,17 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         
         // Store the request in global scope so other screens can access it
         // This allows Results screen to wait for completion
-        const extractionPromise = extractQuickCriteria(
+        const extractionPromise = extractRatingStatements(
           photo.uri, 
-          { mealName, restaurant }
+          mealName
         );
         
         // Store in global for later retrieval WITH SESSION TRACKING
-        (global as any).quickCriteriaExtractionPromise = extractionPromise;
-        (global as any).quickCriteriaStartTime = Date.now();
-        (global as any).quickCriteriaSessionId = currentSessionId; // Track which session this belongs to
-        (global as any).quickCriteriaPhotoUri = photo.uri; // Track which photo this is for
-        (global as any).quickCriteriaMealData = { mealName, restaurant }; // Track meal data
+        (global as any).ratingStatementsExtractionPromise = extractionPromise;
+        (global as any).ratingStatementsStartTime = Date.now();
+        (global as any).ratingStatementsSessionId = currentSessionId; // Track which session this belongs to
+        (global as any).ratingStatementsPhotoUri = photo.uri; // Track which photo this is for
+        (global as any).ratingStatementsMealData = { mealName }; // Track meal data
         
         logWithSession(`Quick criteria extraction started in background for session: ${currentSessionId}`);
       } catch (error) {

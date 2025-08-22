@@ -330,14 +330,40 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 
                 setUserProfile(profile);
             } else {
-                // Own profile
+                // Own profile - fetch from Firestore to ensure we have the latest data
                 const currentUser = auth().currentUser;
                 if (currentUser) {
-                    setUserProfile({
-                        userId: currentUser.uid,
-                        displayName: currentUser.displayName || 'User',
-                        photoURL: currentUser.photoURL,
-                    });
+                    try {
+                        // Try to get user data from Firestore first
+                        const userDoc = await firestore()
+                            .collection('users')
+                            .doc(currentUser.uid)
+                            .get();
+                        
+                        if (userDoc.exists) {
+                            const userData = userDoc.data();
+                            setUserProfile({
+                                userId: currentUser.uid,
+                                displayName: userData?.displayName || currentUser.displayName || 'User',
+                                photoURL: userData?.photoURL || currentUser.photoURL,
+                            });
+                        } else {
+                            // Fallback to auth user data
+                            setUserProfile({
+                                userId: currentUser.uid,
+                                displayName: currentUser.displayName || 'User',
+                                photoURL: currentUser.photoURL,
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error fetching user profile from Firestore:', error);
+                        // Fallback to auth user data
+                        setUserProfile({
+                            userId: currentUser.uid,
+                            displayName: currentUser.displayName || 'User',
+                            photoURL: currentUser.photoURL,
+                        });
+                    }
                 }
             }
 

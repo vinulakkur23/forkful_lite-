@@ -22,8 +22,8 @@ import { checkAchievements } from '../services/achievementService';
 import { Achievement } from '../types/achievements';
 // Enhanced metadata facts service now handled in RatingScreen2
 // import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
-// Import quick criteria service for fresh API calls when background data is stale
-import { extractQuickCriteria } from '../services/quickCriteriaService';
+// Import rating statements service for fresh API calls when background data is stale
+import { extractRatingStatements } from '../services/ratingStatementsService';
 // Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
@@ -80,10 +80,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const thoughts = mealData?.comments?.thoughts || '';
   const likedComment = mealData?.comments?.liked || '';
   const dislikedComment = mealData?.comments?.disliked || '';
-  const quickCriteriaResult = mealData?.quick_criteria_result || null;
+  const ratingStatementsResult = mealData?.rating_statements_result || null;
   const dishCriteria = mealData?.dish_criteria || null;
   const enhancedMetadata = mealData?.metadata_enriched || null;
   const combinedResult = mealData?.combined_result || null;
+  // NEW: Pixel art icon data (updated to use URL from Firebase Storage)
+  const pixelArtUrl = mealData?.pixel_art_url || null;
+  const pixelArtGenerated = mealData?.pixel_art_generated_at || null;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -91,11 +94,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [savedMealId, setSavedMealId] = useState<string | null>(null);
   // Track if we're waiting to navigate to EditMeal
   const [navigateToEditAfterSave, setNavigateToEditAfterSave] = useState(false);
+  // Pixel art is handled via Firestore - no local state needed
   // SIMPLIFIED STATE: No more contamination-prone state variables for criteria or enhanced facts
   // Remove meal enhancement states - no longer used
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
+
+
 
   // Load meal data from Firestore with real-time listener
   const loadMealFromFirestore = async () => {
@@ -128,7 +134,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               id: loadedMealData.id,
               meal: loadedMealData.meal,
               restaurant: loadedMealData.restaurant,
-              hasCriteria: !!loadedMealData.quick_criteria_result,
+              hasCriteria: !!loadedMealData.rating_statements_result,
               hasEnhancedFacts: !!loadedMealData.enhanced_metadata_facts,
               criteriaTimestamp: loadedMealData.criteria_updated_at ? new Date(loadedMealData.criteria_updated_at.seconds * 1000).toLocaleTimeString() : 'None'
             });
@@ -216,10 +222,20 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     console.log("ResultScreen CLEAN approach - clearing global state only");
     
-    // Clear any stale global state
+    // Clear any stale global state - both old and new
     (global as any).quickCriteriaExtractionPromise = null;
     (global as any).quickCriteriaStartTime = null;
     (global as any).quickCriteriaMealData = null;
+    
+    // Clear the new rating statements global state
+    (global as any).ratingStatementsExtractionPromise = null;
+    (global as any).ratingStatementsStartTime = null;
+    (global as any).ratingStatementsSessionId = null;
+    (global as any).ratingStatementsPhotoUri = null;
+    (global as any).ratingStatementsMealData = null;
+    
+    // Pixel art is handled in RatingScreen2 - no local state to reset
+    console.log("✅ Pixel art handled in RatingScreen2");
   }, [instanceKey]);
 
   // Process image upload and enhanced metadata after meal data is loaded
@@ -260,6 +276,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           
           // Enhanced metadata facts processing now handled in RatingScreen2
           console.log("✅ Enhanced metadata facts handled in RatingScreen2");
+          
+          // Pixel art is now handled in RatingScreen2 and stored in Firestore
+          console.log("✅ Pixel art handled in RatingScreen2");
         } catch (error) {
           console.error("Error processing image/metadata:", error);
           Alert.alert("Upload Error", "Failed to upload the edited image. Please try again.");
@@ -289,9 +308,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             mealType: mealType,
             thoughts: thoughts,
             dishCriteria: null, // Will be loaded fresh from API and saved to Firestore
-            dishSpecific: quickCriteriaResult?.dish_specific || '',
-            dishGeneral: quickCriteriaResult?.dish_general || '',
-            cuisineType: quickCriteriaResult?.cuisine_type || '',
+            dishSpecific: meal || '',
+            dishGeneral: 'Dish',
+            cuisineType: 'Unknown',
           }
         });
       }
@@ -851,7 +870,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           metadata_enriched: null,
           dish_criteria: null,
           combined_result: null,
-          quick_criteria_result: null,
+          rating_statements_result: null,
           enhanced_metadata_facts: null
         };
         
@@ -1122,7 +1141,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       // Start challenge generation in background BEFORE navigating to EditMeal
       // Use the actual meal name from user input and criteria from Firestore
       const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
-      const actualCriteria = quickCriteriaResult?.dish_criteria || mealData?.quick_criteria_result?.dish_criteria;
+      const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
       
       console.log("🍽️ Checking challenge generation data:", {
         mealName: actualMealName,
@@ -1140,7 +1159,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           }));
           
           // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
-          const dishGeneral = quickCriteriaResult?.cuisine_type || mealData?.cuisine_type || "Dish";
+          const dishGeneral = mealData?.cuisine_type || "Dish";
           
           // Store the promise so EditMealScreen can wait for it if needed
           const challengePromise = generateNextDishChallenge(
@@ -1180,9 +1199,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           mealType: mealType,
           thoughts: thoughts,
           dishCriteria: dishCriteria,
-          dishSpecific: quickCriteriaResult?.dish_specific || '',
-          dishGeneral: quickCriteriaResult?.dish_general || '',
-          cuisineType: quickCriteriaResult?.cuisine_type || '',
+          dishSpecific: meal || '',
+          dishGeneral: 'Dish',
+          cuisineType: 'Unknown',
         }
       });
     } else {
@@ -1215,7 +1234,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // Start challenge generation in background BEFORE navigating to FoodPassport
     // Use the actual meal name from user input and criteria from Firestore
     const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
-    const actualCriteria = quickCriteriaResult?.dish_criteria || mealData?.quick_criteria_result?.dish_criteria;
+    const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
     
     console.log("🍽️ Checking challenge generation data (FoodPassport):", {
       mealName: actualMealName,
@@ -1233,7 +1252,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         }));
         
         // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
-        const dishGeneral = quickCriteriaResult?.cuisine_type || mealData?.cuisine_type || "Dish";
+        const dishGeneral = mealData?.cuisine_type || "Dish";
         
         // Store the promise so EditMealScreen can wait for it if needed
         const challengePromise = generateNextDishChallenge(
@@ -1301,85 +1320,50 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Loading screen when criteria aren't loaded yet */}
-        {(!quickCriteriaResult || !quickCriteriaResult.dish_criteria) && (
+        {/* Loading screen when rating statements aren't loaded yet */}
+        {(!ratingStatementsResult || !ratingStatementsResult.rating_statements) && (
           <View style={styles.criteriaLoadingContainer}>
             <ActivityIndicator size="large" color="#2C5530" />
-            <Text style={styles.criteriaLoadingText}>Stick around to learn what to look for in your meal!</Text>
+            <Text style={styles.criteriaLoadingText}>Getting specific things to look for in your meal!</Text>
           </View>
         )}
 
-        {/* Dish History Section - from quick criteria service */}
-        {quickCriteriaResult && quickCriteriaResult.dish_history && (
-          <View style={styles.dishHistoryCard}>
-            <Text style={styles.dishHistoryTitle}>About {meal || 'This Dish'}</Text>
-            {renderTextWithBold(quickCriteriaResult.dish_history || '', styles.dishHistoryText)}
-          </View>
-        )}
-
-        {/* REMOVED: Loading state - processing now happens in background after save */}
-
-        {/* Dish Criteria Section - from quick criteria service */}
-        {quickCriteriaResult && quickCriteriaResult.dish_criteria && quickCriteriaResult.dish_criteria.length > 0 && (
-          <View style={styles.dishCriteriaCard}>
-            <View style={styles.dishCriteriaTitleContainer}>
-              <Text style={styles.dishCriteriaTitle}>What Makes a Good {meal || 'Dish'}</Text>
-            </View>
-            {quickCriteriaResult.dish_criteria.map((criterion, index) => {
-              // Ensure criterion is an object with string properties
-              if (!criterion || typeof criterion !== 'object') return null;
-              
-              // Handle name field (previously title)
-              const name = typeof criterion.name === 'string' ? criterion.name : 
-                          (typeof criterion.title === 'string' ? criterion.title : '');
-              
-              // Get all fields - handle both old and new format
-              const criteria = typeof criterion.criteria === 'string' ? criterion.criteria : '';
-              const whatToLookFor = typeof criterion.what_to_look_for === 'string' ? criterion.what_to_look_for : '';
-              const insight = typeof criterion.insight === 'string' ? criterion.insight : '';
-              const test = typeof criterion.test === 'string' ? criterion.test : '';
-              
-              return (
-                <View key={index} style={styles.criterionItem}>
-                  <Text style={styles.criterionTitle}>{name}</Text>
-                  
-                  {/* NEW FORMAT: Display combined criteria if available */}
-                  {criteria ? (
-                    <View style={styles.criterionSubSection}>
-                      {renderTextWithBold(criteria, styles.criterionDescription)}
-                    </View>
-                  ) : (
-                    /* OLD FORMAT: Display separate fields */
-                    <View style={styles.criterionSubSection}>
-                      {/* What to Look For paragraph */}
-                      {whatToLookFor && renderTextWithBold(whatToLookFor, styles.criterionDescription)}
-                      
-                      {/* Insight paragraph with full line spacing */}
-                      {insight && (
-                        <View style={{ marginTop: 16 }}>
-                          {renderTextWithBold(insight, styles.criterionInsight)}
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  
-                  {/* Test section - only for old format */}
-                  {test && (
-                    <View style={[styles.criterionSubSection, { marginTop: 16 }]}>
-                      {renderTextWithBold(`**Try it out!** ${test}`, styles.criterionTest)}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Rating Statements Section - NEW */}
-        {quickCriteriaResult && quickCriteriaResult.rating_statements && quickCriteriaResult.rating_statements.length > 0 && (
+        {/* Rating Statements Section - Main content */}
+        {ratingStatementsResult && ratingStatementsResult.rating_statements && ratingStatementsResult.rating_statements.length > 0 && (
           <View style={styles.ratingStatementsCard}>
-            <Text style={styles.ratingStatementsTitle}>Look for These!</Text>
-            {quickCriteriaResult.rating_statements.map((statement, index) => (
+            {/* Pixel Art Icon Section */}
+            <View style={styles.emojiSection}>
+              {pixelArtUrl ? (
+                <View style={styles.emojiContainer}>
+                  <Image 
+                    source={{ uri: pixelArtUrl }} 
+                    style={styles.customEmoji}
+                    resizeMode="contain"
+                    onError={(error) => {
+                      console.error('❌ Pixel art failed to load');
+                      console.error('❌ Error:', JSON.stringify(error.nativeEvent));
+                    }}
+                    onLoad={() => {
+                      console.log('✅ Pixel art icon loaded successfully!');
+                    }}
+                  />
+                  <Text style={styles.emojiLabel}>AI Pixel Art Icon</Text>
+                </View>
+              ) : pixelArtGenerated ? (
+                <View style={styles.emojiLoading}>
+                  <ActivityIndicator size="small" color="#ffc008" />
+                  <Text style={styles.emojiLoadingText}>Loading pixel art...</Text>
+                </View>
+              ) : (
+                <View style={styles.emojiLoading}>
+                  <ActivityIndicator size="small" color="#ffc008" />
+                  <Text style={styles.emojiLoadingText}>Generating pixel art icon...</Text>
+                </View>
+              )}
+            </View>
+            
+            <Text style={styles.ratingStatementsTitle}>Look for These in Your {meal || 'Dish'}!</Text>
+            {ratingStatementsResult.rating_statements.map((statement, index) => (
               <View key={index} style={styles.ratingStatementItem}>
                 <Text style={styles.ratingStatementBullet}>•</Text>
                 <View style={{ flex: 1 }}>
@@ -1752,6 +1736,45 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  // Emoji styles
+  emojiSection: {
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  emojiLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  emojiLoadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  emojiContainer: {
+    alignItems: 'center',
+  },
+  customEmoji: {
+    width: 120,  // Larger size for testing
+    height: 120,  // Larger size for testing
+    marginBottom: 8,
+    resizeMode: 'contain',  // Ensure image fits properly
+    backgroundColor: '#f5f5f5',  // Light background to see container
+    borderRadius: 12,  // Rounded corners
+    borderWidth: 1,  // Add border to see container outline
+    borderColor: '#e0e0e0',
+  },
+  emojiLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  defaultEmoji: {
+    fontSize: 32,
+    textAlign: 'center',
   },
   ratingStatementsTitle: {
     fontSize: 18,

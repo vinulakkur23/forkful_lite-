@@ -14,7 +14,7 @@ class AppDelegate: RCTAppDelegate {
     // Initialize Google Maps - replace "YOUR_API_KEY" with your actual Google Maps API key
     GMSServices.provideAPIKey("AIzaSyAC3ibPKbYQFvv47fwTG9QqwUS5GYZhxFI")
 
-    self.moduleName = "MealRatingAppNew"
+    self.moduleName = "ForkfulLite"
     self.dependencyProvider = RCTAppDependencyProvider()
 
     // You can add your custom initial props in the dictionary below.

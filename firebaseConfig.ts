@@ -27,7 +27,7 @@ const firebaseStorage = firebase.app().storage();
 
 // Configure Google Sign-In
 GoogleSignin.configure({
-  webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com', // Get this from Firebase console
+  webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
 });
 
 // Setup Firestore
