@@ -24,6 +24,13 @@ import { Achievement } from '../types/achievements';
 // import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Import rating statements service for fresh API calls when background data is stale
 import { extractRatingStatements } from '../services/ratingStatementsService';
+// Import restaurant pairing service with separate drink and dessert functions
+import { 
+  getAllPairings, 
+  CombinedPairingData,
+  DessertData,
+  DrinkPairingData 
+} from '../services/restaurantPairingService';
 // Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
@@ -98,6 +105,17 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // SIMPLIFIED STATE: No more contamination-prone state variables for criteria or enhanced facts
   // Remove meal enhancement states - no longer used
   
+  // Restaurant pairing state (separate for drinks and dessert)
+  const [drinkPairingData, setDrinkPairingData] = useState<DrinkPairingData | null>(null);
+  const [dessertData, setDessertData] = useState<DessertData | null>(null);
+  const [loadingPairings, setLoadingPairings] = useState(false);
+  const [pairingsLoaded, setPairingsLoaded] = useState(false);
+  
+  // Expansion state for pairing details
+  const [dessertExpanded, setDessertExpanded] = useState(false);
+  const [beerExpanded, setBeerExpanded] = useState(false);
+  const [wineExpanded, setWineExpanded] = useState(false);
+  
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
 
@@ -161,6 +179,54 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Load restaurant pairing recommendations (both drinks and dessert)
+  const loadRestaurantPairings = async () => {
+    // Prevent multiple simultaneous calls
+    if (loadingPairings || pairingsLoaded) {
+      console.log('🚀 ResultScreen: Skipping restaurant pairings - already loading/loaded');
+      return;
+    }
+
+    // Only load pairings if we have meal data and it's a restaurant meal with photo
+    if (!mealData || mealType !== 'Restaurant' || !restaurant || !meal || !photo?.uri) {
+      console.log('🚀 ResultScreen: Skipping restaurant pairings - missing required data');
+      return;
+    }
+    
+    console.log('🚀 ResultScreen: Loading restaurant pairings (drinks + dessert)...');
+    setLoadingPairings(true);
+    
+    try {
+      const pairingData = await getAllPairings(
+        photo.uri,
+        meal,
+        restaurant,
+        mealData.location?.city // Optional location
+      );
+      
+      if (pairingData) {
+        console.log('✅ ResultScreen: Restaurant pairings loaded successfully');
+        if (pairingData.drinks) {
+          setDrinkPairingData(pairingData.drinks);
+          console.log('✅ ResultScreen: Drink pairings set');
+        }
+        if (pairingData.dessert) {
+          setDessertData(pairingData.dessert);
+          console.log('✅ ResultScreen: Dessert recommendation set');
+        }
+        setPairingsLoaded(true);
+      } else {
+        console.log('❌ ResultScreen: Failed to load restaurant pairings');
+        setPairingsLoaded(true); // Mark as attempted even if failed
+      }
+    } catch (error) {
+      console.error('🚨 ResultScreen: Error loading restaurant pairings:', error);
+      setPairingsLoaded(true); // Mark as attempted even if error
+    } finally {
+      setLoadingPairings(false);
+    }
+  };
+
   // Initialization effect - runs only once per instance
   useEffect(() => {
     console.log("ResultScreen mounted with key:", instanceKey, "mealId:", routeMealId);
@@ -204,6 +270,15 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setSaving(false);
     setSaved(false);
     setPhotoUrl(null);
+    // Reset restaurant pairing state for new instance
+    setDrinkPairingData(null);
+    setDessertData(null);
+    setLoadingPairings(false);
+    setPairingsLoaded(false);
+    // Reset expansion states
+    setDessertExpanded(false);
+    setBeerExpanded(false);
+    setWineExpanded(false);
     // CLEAN APPROACH: Meal is already saved, no need to save again
     
     // Enhanced metadata processing will be handled in a separate useEffect after meal data loads
@@ -237,6 +312,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // Pixel art is handled in RatingScreen2 - no local state to reset
     console.log("✅ Pixel art handled in RatingScreen2");
   }, [instanceKey]);
+
+  // Load restaurant pairings after meal data is loaded (only once per meal)
+  useEffect(() => {
+    if (mealData && !loadingMealData && !pairingsLoaded && !loadingPairings) {
+      console.log('🚀 ResultScreen: Meal data ready, attempting to load restaurant pairings...');
+      loadRestaurantPairings();
+    }
+  }, [mealData, loadingMealData, pairingsLoaded, loadingPairings]);
 
   // Process image upload and enhanced metadata after meal data is loaded
   useEffect(() => {
@@ -1331,36 +1414,25 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Rating Statements Section - Main content */}
         {ratingStatementsResult && ratingStatementsResult.rating_statements && ratingStatementsResult.rating_statements.length > 0 && (
           <View style={styles.ratingStatementsCard}>
-            {/* Pixel Art Icon Section */}
-            <View style={styles.emojiSection}>
-              {pixelArtUrl ? (
-                <View style={styles.emojiContainer}>
-                  <Image 
-                    source={{ uri: pixelArtUrl }} 
-                    style={styles.customEmoji}
-                    resizeMode="contain"
-                    onError={(error) => {
-                      console.error('❌ Pixel art failed to load');
-                      console.error('❌ Error:', JSON.stringify(error.nativeEvent));
-                    }}
-                    onLoad={() => {
-                      console.log('✅ Pixel art icon loaded successfully!');
-                    }}
-                  />
-                  <Text style={styles.emojiLabel}>AI Pixel Art Icon</Text>
-                </View>
-              ) : pixelArtGenerated ? (
-                <View style={styles.emojiLoading}>
-                  <ActivityIndicator size="small" color="#ffc008" />
-                  <Text style={styles.emojiLoadingText}>Loading pixel art...</Text>
-                </View>
-              ) : (
-                <View style={styles.emojiLoading}>
-                  <ActivityIndicator size="small" color="#ffc008" />
-                  <Text style={styles.emojiLoadingText}>Generating pixel art icon...</Text>
-                </View>
-              )}
-            </View>
+            {/* Pixel Art Icon - Just the image, no box or text */}
+            {pixelArtUrl ? (
+              <Image 
+                source={{ uri: pixelArtUrl }} 
+                style={styles.pixelArtIcon}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error('❌ Pixel art failed to load');
+                  console.error('❌ Error:', JSON.stringify(error.nativeEvent));
+                }}
+                onLoad={() => {
+                  console.log('✅ Pixel art icon loaded successfully!');
+                }}
+              />
+            ) : pixelArtGenerated ? (
+              <ActivityIndicator size="small" color="#ffc008" style={styles.pixelArtLoading} />
+            ) : (
+              <ActivityIndicator size="small" color="#ffc008" style={styles.pixelArtLoading} />
+            )}
             
             <Text style={styles.ratingStatementsTitle}>Look for These in Your {meal || 'Dish'}!</Text>
             {ratingStatementsResult.rating_statements.map((statement, index) => (
@@ -1372,6 +1444,127 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             ))}
           </View>
+        )}
+
+        {/* Restaurant Pairing Recommendations Section - Now Split into Dessert and Drinks */}
+        {mealType === 'Restaurant' && restaurant && (
+          <>
+            {/* Dessert Recommendation Card */}
+            {(loadingPairings || dessertData) && (
+              <View style={styles.dessertCard}>
+                {loadingPairings ? (
+                  <View style={styles.pairingLoadingContainer}>
+                    <ActivityIndicator size="small" color="#ffc008" />
+                    <Text style={styles.pairingLoadingText}>Finding the best dessert at {restaurant}...</Text>
+                  </View>
+                ) : dessertData ? (
+                  <>
+                    <Text style={styles.pairingTitle}>Must-Try Dessert at {restaurant}</Text>
+                    <View style={styles.pairingItem}>
+                      <TouchableOpacity 
+                        style={styles.pairingItemHeader}
+                        onPress={() => setDessertExpanded(!dessertExpanded)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.pairingExpandIcon}>
+                          {dessertExpanded ? '−' : '+'}
+                        </Text>
+                        <Text style={styles.pairingItemIcon}>🍰</Text>
+                        <View style={styles.pairingItemTextContainer}>
+                          <Text style={styles.pairingItemName}>{dessertData.dessert.name}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      {dessertExpanded && (
+                        <View style={styles.pairingItemDetails}>
+                          <Text style={styles.pairingItemReason}>
+                            {renderTextWithBold(dessertData.dessert.why_recommended, styles.pairingItemText)}
+                          </Text>
+                          {dessertData.dessert.source && (
+                            <Text style={styles.pairingItemSource}>
+                              Source: {dessertData.dessert.source}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  </>
+                ) : null}
+              </View>
+            )}
+
+            {/* Drink Pairings Card */}
+            {(loadingPairings || drinkPairingData) && (
+              <View style={styles.pairingCard}>
+                {loadingPairings ? (
+                  <View style={styles.pairingLoadingContainer}>
+                    <ActivityIndicator size="small" color="#ffc008" />
+                    <Text style={styles.pairingLoadingText}>Getting drink pairings for your {meal}...</Text>
+                  </View>
+                ) : drinkPairingData ? (
+                  <>
+                    <Text style={styles.pairingTitle}>Perfect Drink Pairings</Text>
+                    
+                    {/* Beer Pairing */}
+                    <View style={styles.pairingItem}>
+                      <TouchableOpacity 
+                        style={styles.pairingItemHeader}
+                        onPress={() => setBeerExpanded(!beerExpanded)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.pairingExpandIcon}>
+                          {beerExpanded ? '−' : '+'}
+                        </Text>
+                        <Text style={styles.pairingItemIcon}>🍺</Text>
+                        <View style={styles.pairingItemTextContainer}>
+                          <Text style={styles.pairingItemTitle}>Beer Pairing</Text>
+                          <Text style={styles.pairingItemName}>{drinkPairingData.beer_pairing.style}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      {beerExpanded && (
+                        <View style={styles.pairingItemDetails}>
+                          <Text style={styles.pairingItemReason}>
+                            {renderTextWithBold(drinkPairingData.beer_pairing.pairing_reason, styles.pairingItemText)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Wine Pairing */}
+                    <View style={styles.pairingItem}>
+                      <TouchableOpacity 
+                        style={styles.pairingItemHeader}
+                        onPress={() => setWineExpanded(!wineExpanded)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.pairingExpandIcon}>
+                          {wineExpanded ? '−' : '+'}
+                        </Text>
+                        <Text style={styles.pairingItemIcon}>🍷</Text>
+                        <View style={styles.pairingItemTextContainer}>
+                          <Text style={styles.pairingItemTitle}>Wine Pairing</Text>
+                          <Text style={styles.pairingItemName}>{drinkPairingData.wine_pairing.style}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      {wineExpanded && (
+                        <View style={styles.pairingItemDetails}>
+                          <Text style={styles.pairingItemReason}>
+                            {renderTextWithBold(drinkPairingData.wine_pairing.pairing_reason, styles.pairingItemText)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.pairingErrorContainer}>
+                    <Text style={styles.pairingErrorText}>Unable to load drink pairings</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </>
         )}
 
         {/* Action buttons - now part of scrollable content */}
@@ -1756,6 +1949,16 @@ const styles = StyleSheet.create({
   emojiContainer: {
     alignItems: 'center',
   },
+  pixelArtIcon: {
+    width: 80,
+    height: 80,
+    marginBottom: 16,
+    alignSelf: 'center',
+  },
+  pixelArtLoading: {
+    marginBottom: 16,
+    alignSelf: 'center',
+  },
   customEmoji: {
     width: 120,  // Larger size for testing
     height: 120,  // Larger size for testing
@@ -1930,6 +2133,130 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Restaurant Pairing Styles
+  pairingCard: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  dessertCard: {
+    backgroundColor: '#FFF0E6',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pairingTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 16,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  pairingLoadingText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    marginLeft: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItem: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D0E0D0',
+  },
+  pairingItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pairingExpandIcon: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginRight: 8,
+    width: 20,
+    textAlign: 'center',
+  },
+  pairingItemDetails: {
+    marginTop: 8,
+    paddingLeft: 28, // Indent to align with text after + icon
+  },
+  pairingItemTextContainer: {
+    flex: 1,
+  },
+  pairingItemIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  pairingItemTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemDescription: {
+    fontSize: 14,
+    color: '#1a2b49',
+    marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemReason: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemText: {
+    fontSize: 14,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemSource: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingErrorContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  pairingErrorText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   loadingText: {
     fontSize: 16,
