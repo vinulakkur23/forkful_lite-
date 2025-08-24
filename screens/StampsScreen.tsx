@@ -95,7 +95,9 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   };
 
   useEffect(() => {
-    // DISABLED: Achievements/stamps feature
+    // DISABLED: Achievements/stamps feature - set loading to false immediately
+    setLoading(false);
+    setAchievementItems([]);
     // loadAchievements();
     // DISABLED: Top rated photos and cities to reduce Firestore calls
     // loadTopRatedPhotos();

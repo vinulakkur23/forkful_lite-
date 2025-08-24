@@ -124,7 +124,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     mealId: string,
     mealIdForImage: string, // Now the same as mealId, used to load image from Firebase Storage
     mealName: string,
-    restaurantName: string
+    restaurantName: string,
+    mealDataForContext?: any // Optional meal data for city context
   ) => {
     try {
       console.log('🎆 Starting background enhanced metadata extraction for meal ID:', mealId);
@@ -151,7 +152,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           metadata.cuisine_type,
           mealName,
           restaurantName,
-          mealData?.location?.city
+          mealDataForContext?.location?.city || mealDataForContext?.city
         );
         
         if (factsData) {
@@ -376,26 +377,42 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     console.log("✅ Pixel art handled in RatingScreen2");
   }, [instanceKey]);
 
-  // Background processing when user leaves ResultScreen
+  // Process enhanced metadata and facts when screen loads (if not already done)
   useEffect(() => {
-    return () => {
-      // Run enhanced metadata and facts extraction in background when unmounting
-      // Now uses Firebase Storage URLs instead of temporary photo URIs
-      if (mealData && meal && routeMealId) {
-        console.log('🎆 ResultScreen unmounting - starting background processing...');
+    // Check if data already exists or is being processed
+    if (mealData && meal && routeMealId && !loadingMealData) {
+      const hasMetadata = mealData.metadata_enriched;
+      const hasFacts = mealData.enhanced_facts;
+      
+      // Only run if we don't have the data yet
+      if (!hasMetadata || !hasFacts) {
+        const globalKey = `enhancedMetadata_${routeMealId}`;
         
-        // Run in background - don't await or block
-        setTimeout(() => {
-          processEnhancedMetadataInBackground(
-            routeMealId,
-            routeMealId, // Pass mealId instead of photoUri
-            meal,
-            restaurant || ''
-          );
-        }, 1000); // Small delay to ensure navigation is complete
+        // Check if already processing
+        if ((global as any)[globalKey]) {
+          console.log('⚠️ Enhanced metadata already processing for meal:', routeMealId);
+          return;
+        }
+        
+        console.log('🎆 Starting enhanced metadata processing (missing data)...');
+        (global as any)[globalKey] = true; // Mark as processing
+        
+        // Run the processing
+        processEnhancedMetadataInBackground(
+          routeMealId,
+          routeMealId,
+          meal,
+          restaurant || '',
+          mealData // Pass meal data for context
+        ).finally(() => {
+          // Clear the flag after processing completes
+          delete (global as any)[globalKey];
+        });
+      } else {
+        console.log('✅ Enhanced metadata and facts already exist, skipping processing');
       }
-    };
-  }, [mealData, meal, routeMealId, restaurant]);
+    }
+  }, [routeMealId, loadingMealData]); // Run when meal loads
 
   // Load restaurant pairings after meal data is loaded (only once per meal)
   useEffect(() => {
@@ -404,6 +421,85 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       loadRestaurantPairings();
     }
   }, [mealData, loadingMealData, pairingsLoaded, loadingPairings]);
+
+  // Track if we've already triggered the background APIs (reset per meal)
+  const [backgroundAPIsTriggered, setBackgroundAPIsTriggered] = useState(false);
+  
+  // Reset state flags when meal changes
+  useEffect(() => {
+    console.log('🔄 Resetting state for new meal ID:', routeMealId);
+    setBackgroundAPIsTriggered(false);
+    setPairingsLoaded(false);
+    setLoadingPairings(false);
+    setDrinkPairingData(null);
+    setSaved(false);
+    setSavedMealId(null);
+    setPhotoUrl(null);
+    setImageError(false);
+  }, [routeMealId]); // Reset for each new meal
+  
+  // Trigger API calls that were previously in buttons - runs ONCE when screen mounts with meal data
+  useEffect(() => {
+    if (mealData && !loadingMealData && !backgroundAPIsTriggered) {
+      console.log('🔄 ResultScreen: Triggering background API calls on mount (ONCE)...');
+      setBackgroundAPIsTriggered(true); // Prevent re-running
+      
+      // 1. Refresh authentication token if user is logged in
+      const user = auth().currentUser;
+      if (user) {
+        console.log('🔐 Refreshing authentication token...');
+        user.getIdToken(true).then(() => {
+          console.log('✅ Authentication token refreshed');
+        }).catch((error) => {
+          console.error('❌ Token refresh failed:', error);
+        });
+      }
+      
+      // 2. Start challenge generation in background - CHECK IF NOT ALREADY RUNNING
+      if (!(global as any).pendingChallengePromise) {
+        const actualMealName = mealData?.meal || meal;
+        const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
+        
+        if (actualMealName && actualCriteria && actualCriteria.length > 0) {
+          console.log('🍽️ Starting background challenge generation on mount for:', actualMealName);
+          
+          import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+            // Map criteria to expected format
+            const criteria = actualCriteria.map(c => ({
+              title: c.name || c.title || 'Unknown Criteria',
+              description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+            }));
+            
+            const dishGeneral = mealData?.cuisine_type || "Dish";
+            
+            // Generate and store challenge
+            const challengePromise = generateNextDishChallenge(
+              actualMealName,
+              dishGeneral,
+              criteria,
+              mealData.location?.city || mealData.city,
+              [] // Previous challenges
+            );
+            
+            // Store globally for other screens
+            (global as any).pendingChallengePromise = challengePromise;
+            
+            challengePromise.then(challenge => {
+              if (challenge) {
+                console.log('✅ Background challenge generated:', challenge.recommended_dish_name);
+                (global as any).pendingChallenge = challenge;
+              }
+            }).catch(error => {
+              console.error('❌ Background challenge generation failed:', error);
+              (global as any).pendingChallengePromise = null;
+            });
+          });
+        }
+      } else {
+        console.log('⚠️ Challenge generation already in progress, skipping...');
+      }
+    }
+  }, [routeMealId, loadingMealData, backgroundAPIsTriggered]); // Use meal ID instead of mealData to prevent loops
 
   // Process image upload and enhanced metadata after meal data is loaded
   useEffect(() => {
@@ -1498,28 +1594,34 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* Pixel Art Emoji - Now displayed above statements */}
+        <View style={styles.pixelArtContainer}>
+          {pixelArtUrl ? (
+            <Image 
+              source={{ uri: pixelArtUrl }} 
+              style={styles.pixelArtEmojiLarge}
+              resizeMode="contain"
+              onError={(error) => {
+                console.error('❌ Pixel art failed to load');
+                console.error('❌ Error:', JSON.stringify(error.nativeEvent));
+              }}
+              onLoad={() => {
+                console.log('✅ Pixel art icon loaded successfully!');
+              }}
+            />
+          ) : (
+            <View style={styles.pixelArtLoadingContainer}>
+              <ActivityIndicator size="large" color="#001f3f" />
+              <Text style={styles.pixelArtLoadingText}>
+                Stick around for your custom {meal || 'dish'} emoji
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* Rating Statements Section - Main content */}
         {ratingStatementsResult && ratingStatementsResult.rating_statements && ratingStatementsResult.rating_statements.length > 0 && (
           <View style={styles.ratingStatementsCard}>
-            {/* Pixel Art Icon - Just the image, no box or text */}
-            {pixelArtUrl ? (
-              <Image 
-                source={{ uri: pixelArtUrl }} 
-                style={styles.pixelArtIcon}
-                resizeMode="contain"
-                onError={(error) => {
-                  console.error('❌ Pixel art failed to load');
-                  console.error('❌ Error:', JSON.stringify(error.nativeEvent));
-                }}
-                onLoad={() => {
-                  console.log('✅ Pixel art icon loaded successfully!');
-                }}
-              />
-            ) : pixelArtGenerated ? (
-              <ActivityIndicator size="small" color="#ffc008" style={styles.pixelArtLoading} />
-            ) : (
-              <ActivityIndicator size="small" color="#ffc008" style={styles.pixelArtLoading} />
-            )}
             
             {ratingStatementsResult.rating_statements.map((statement, index) => (
               <View key={index} style={[
@@ -1611,39 +1713,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Action buttons - now part of scrollable content */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={handleRateNow}
-          >
-            <Text style={styles.shareButtonText}>Rate/Post Now</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.foodPassportButton}
-            onPress={goToFoodPassport}
-          >
-            <Text style={styles.foodPassportButtonText}>Rate/Post Later</Text>
-          </TouchableOpacity>
-
-          {!auth().currentUser && (
-            <TouchableOpacity
-              style={[styles.saveButton, saving || saved ? styles.disabledButton : {}]}
-              onPress={saveToFirebase}
-              disabled={saving || saved}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <>
-                  <MaterialIcon name={saved ? "check" : "save"} size={18} color="white" />
-                  <Text style={styles.buttonText}>{saved ? 'Saved' : 'Save'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
+        {/* Bottom Message */}
+        <View style={styles.bottomMessageContainer}>
+          <Text style={styles.bottomMessage}>Enjoy your meal!</Text>
         </View>
+        
+        {/* Action buttons - DISABLED */}
+        {/* Buttons removed to prevent API calls */}
       </ScrollView>
     </SafeAreaView>
   );
@@ -2002,6 +2078,38 @@ const styles = StyleSheet.create({
   pixelArtLoading: {
     marginBottom: 16,
     alignSelf: 'center',
+  },
+  // New styles for separated pixel art emoji
+  pixelArtContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingVertical: 10,
+  },
+  pixelArtEmojiLarge: {
+    width: 40,
+    height: 40,
+  },
+  pixelArtLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  pixelArtLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  bottomMessageContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    marginTop: 20,
+  },
+  bottomMessage: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#333',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   customEmoji: {
     width: 120,  // Larger size for testing
