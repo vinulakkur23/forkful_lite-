@@ -13,22 +13,20 @@ import EmojiDisplay from '../components/EmojiDisplay';
 import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
-// Import enhanced metadata service - COMMENTED OUT, using combined service instead
-// import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
+// Import enhanced metadata service for background processing
+import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
 // Import dish criteria service
 import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaService';
-// Import achievement service
-import { checkAchievements } from '../services/achievementService';
-import { Achievement } from '../types/achievements';
-// Enhanced metadata facts service now handled in RatingScreen2
-// import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
+// Import achievement service - DISABLED
+// import { checkAchievements } from '../services/achievementService';
+// import { Achievement } from '../types/achievements';
+// Enhanced metadata facts service for background processing
+import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Import rating statements service for fresh API calls when background data is stale
 import { extractRatingStatements } from '../services/ratingStatementsService';
 // Import restaurant pairing service with separate drink and dessert functions
 import { 
-  getAllPairings, 
-  CombinedPairingData,
-  DessertData,
+  getDrinkPairings,
   DrinkPairingData 
 } from '../services/restaurantPairingService';
 // Removed meal enhancement service - no longer used
@@ -94,6 +92,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // NEW: Pixel art icon data (updated to use URL from Firebase Storage)
   const pixelArtUrl = mealData?.pixel_art_url || null;
   const pixelArtGenerated = mealData?.pixel_art_generated_at || null;
+  // NEW: Restaurant pairing data from RatingScreen2 (already loaded)
+  const firestoreDrinkPairings = mealData?.drink_pairings || null;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -105,19 +105,72 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // SIMPLIFIED STATE: No more contamination-prone state variables for criteria or enhanced facts
   // Remove meal enhancement states - no longer used
   
-  // Restaurant pairing state (separate for drinks and dessert)
+  // Restaurant pairing state (drinks only)
   const [drinkPairingData, setDrinkPairingData] = useState<DrinkPairingData | null>(null);
-  const [dessertData, setDessertData] = useState<DessertData | null>(null);
   const [loadingPairings, setLoadingPairings] = useState(false);
   const [pairingsLoaded, setPairingsLoaded] = useState(false);
   
   // Expansion state for pairing details
-  const [dessertExpanded, setDessertExpanded] = useState(false);
   const [beerExpanded, setBeerExpanded] = useState(false);
   const [wineExpanded, setWineExpanded] = useState(false);
+  // Expansion state for rating statements
+  const [statementExpanded, setStatementExpanded] = useState<{ [key: number]: boolean }>({});
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
+
+  // Background processing function for enhanced metadata and facts
+  const processEnhancedMetadataInBackground = async (
+    mealId: string,
+    mealIdForImage: string, // Now the same as mealId, used to load image from Firebase Storage
+    mealName: string,
+    restaurantName: string
+  ) => {
+    try {
+      console.log('🎆 Starting background enhanced metadata extraction for meal ID:', mealId);
+      
+      // Step 1: Enhanced metadata extraction using meal ID
+      const metadata = await extractEnhancedMetadata(mealId, mealName, restaurantName);
+      
+      if (metadata) {
+        console.log('✅ Background enhanced metadata completed:', metadata.dish_specific);
+        
+        // Save enhanced metadata to Firestore
+        await firestore().collection('mealEntries').doc(mealId).update({
+          metadata_enriched: metadata,
+          metadata_updated_at: firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log('🎆 Starting background facts extraction...');
+        
+        // Step 2: Enhanced facts extraction using the metadata and meal ID
+        const factsData = await extractEnhancedMetadataFacts(
+          mealId,
+          metadata.dish_specific,
+          metadata.dish_general,
+          metadata.cuisine_type,
+          mealName,
+          restaurantName,
+          mealData?.location?.city
+        );
+        
+        if (factsData) {
+          console.log('✅ Background facts extraction completed');
+          
+          // Save facts to Firestore
+          await firestore().collection('mealEntries').doc(mealId).update({
+            enhanced_facts: factsData,
+            facts_updated_at: firestore.FieldValue.serverTimestamp()
+          });
+          
+          console.log('🎉 Background processing completed successfully!');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Background processing error:', error);
+      // Don't throw - this is background processing
+    }
+  };
 
 
 
@@ -179,48 +232,59 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Load restaurant pairing recommendations (both drinks and dessert)
+  // Load restaurant drink pairings
   const loadRestaurantPairings = async () => {
     // Prevent multiple simultaneous calls
     if (loadingPairings || pairingsLoaded) {
-      console.log('🚀 ResultScreen: Skipping restaurant pairings - already loading/loaded');
+      console.log('🚀 ResultScreen: Skipping drink pairings - already loading/loaded');
       return;
     }
 
-    // Only load pairings if we have meal data and it's a restaurant meal with photo
-    if (!mealData || mealType !== 'Restaurant' || !restaurant || !meal || !photo?.uri) {
-      console.log('🚀 ResultScreen: Skipping restaurant pairings - missing required data');
+    // Only load pairings if we have meal data and it's a restaurant meal
+    if (!mealData || mealType !== 'Restaurant' || !restaurant || !meal) {
+      console.log('🚀 ResultScreen: Skipping drink pairings - missing required data');
       return;
     }
     
-    console.log('🚀 ResultScreen: Loading restaurant pairings (drinks + dessert)...');
+    console.log('🚀 ResultScreen: Checking for pre-loaded drink pairings...');
+    
+    // First check if we have pre-loaded data from RatingScreen2
+    if (firestoreDrinkPairings) {
+      console.log('✅ ResultScreen: Using pre-loaded drink pairings from RatingScreen2');
+      setDrinkPairingData(firestoreDrinkPairings);
+      console.log('✅ ResultScreen: Pre-loaded drink pairings set');
+      setPairingsLoaded(true);
+      return;
+    }
+    
+    // If no pre-loaded data and we don't have photo, can't make API call
+    if (!photo?.uri) {
+      console.log('🚀 ResultScreen: No pre-loaded pairings and no photo for API call');
+      return;
+    }
+    
+    console.log('🚀 ResultScreen: No pre-loaded pairings found, making fresh API call...');
     setLoadingPairings(true);
     
     try {
-      const pairingData = await getAllPairings(
+      const drinkData = await getDrinkPairings(
         photo.uri,
         meal,
         restaurant,
         mealData.location?.city // Optional location
       );
       
-      if (pairingData) {
-        console.log('✅ ResultScreen: Restaurant pairings loaded successfully');
-        if (pairingData.drinks) {
-          setDrinkPairingData(pairingData.drinks);
-          console.log('✅ ResultScreen: Drink pairings set');
-        }
-        if (pairingData.dessert) {
-          setDessertData(pairingData.dessert);
-          console.log('✅ ResultScreen: Dessert recommendation set');
-        }
+      if (drinkData) {
+        console.log('✅ ResultScreen: Drink pairings loaded successfully via API');
+        setDrinkPairingData(drinkData);
+        console.log('✅ ResultScreen: API drink pairings set');
         setPairingsLoaded(true);
       } else {
-        console.log('❌ ResultScreen: Failed to load restaurant pairings');
+        console.log('❌ ResultScreen: Failed to load drink pairings via API');
         setPairingsLoaded(true); // Mark as attempted even if failed
       }
     } catch (error) {
-      console.error('🚨 ResultScreen: Error loading restaurant pairings:', error);
+      console.error('🚨 ResultScreen: Error loading drink pairings via API:', error);
       setPairingsLoaded(true); // Mark as attempted even if error
     } finally {
       setLoadingPairings(false);
@@ -272,13 +336,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setPhotoUrl(null);
     // Reset restaurant pairing state for new instance
     setDrinkPairingData(null);
-    setDessertData(null);
     setLoadingPairings(false);
     setPairingsLoaded(false);
     // Reset expansion states
-    setDessertExpanded(false);
     setBeerExpanded(false);
     setWineExpanded(false);
+    setStatementExpanded({});
     // CLEAN APPROACH: Meal is already saved, no need to save again
     
     // Enhanced metadata processing will be handled in a separate useEffect after meal data loads
@@ -312,6 +375,27 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     // Pixel art is handled in RatingScreen2 - no local state to reset
     console.log("✅ Pixel art handled in RatingScreen2");
   }, [instanceKey]);
+
+  // Background processing when user leaves ResultScreen
+  useEffect(() => {
+    return () => {
+      // Run enhanced metadata and facts extraction in background when unmounting
+      // Now uses Firebase Storage URLs instead of temporary photo URIs
+      if (mealData && meal && routeMealId) {
+        console.log('🎆 ResultScreen unmounting - starting background processing...');
+        
+        // Run in background - don't await or block
+        setTimeout(() => {
+          processEnhancedMetadataInBackground(
+            routeMealId,
+            routeMealId, // Pass mealId instead of photoUri
+            meal,
+            restaurant || ''
+          );
+        }, 1000); // Small delay to ensure navigation is complete
+      }
+    };
+  }, [mealData, meal, routeMealId, restaurant]);
 
   // Load restaurant pairings after meal data is loaded (only once per meal)
   useEffect(() => {
@@ -1063,17 +1147,18 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               aiMetadata: metadata
             };
             
-            console.log("Checking achievements with complete metadata...");
+            console.log("Achievement checking DISABLED");
             
-            // Check for achievements with the metadata included
-            return checkAchievements(mealEntry);
+            // DISABLED: Check for achievements with the metadata included
+            // return checkAchievements(mealEntry);
+            return Promise.resolve([]);
           })
           .then(achievements => {
             if (achievements && achievements.length > 0) {
               console.log(`Unlocked ${achievements.length} achievements:`, 
                 achievements.map(a => a.name).join(', '));
               
-              // Don't set local state - let the global notification handle it
+              // DISABLED: Don't set local state - let the global notification handle it
               // The checkAchievements function already emits global notifications
             } else {
               console.log("No achievements unlocked for this meal");
@@ -1106,8 +1191,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               // No aiMetadata here, but non-metadata achievements might still trigger
             };
             
-            console.log("Trying fallback achievement check without metadata...");
-            return checkAchievements(basicMealEntry);
+            console.log("Achievement check DISABLED");
+            // return checkAchievements(basicMealEntry);
+            return Promise.resolve([]);
           })
           .then(fallbackAchievements => {
             // Handle any achievements from fallback check
@@ -1403,6 +1489,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+
         {/* Loading screen when rating statements aren't loaded yet */}
         {(!ratingStatementsResult || !ratingStatementsResult.rating_statements) && (
           <View style={styles.criteriaLoadingContainer}>
@@ -1434,137 +1521,94 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               <ActivityIndicator size="small" color="#ffc008" style={styles.pixelArtLoading} />
             )}
             
-            <Text style={styles.ratingStatementsTitle}>Look for These in Your {meal || 'Dish'}!</Text>
             {ratingStatementsResult.rating_statements.map((statement, index) => (
-              <View key={index} style={styles.ratingStatementItem}>
-                <Text style={styles.ratingStatementBullet}>•</Text>
-                <View style={{ flex: 1 }}>
-                  {renderTextWithBold(statement, styles.ratingStatementText)}
-                </View>
+              <View key={index} style={[
+                styles.ratingStatementItem,
+                // Remove bottom border from the last item
+                index === ratingStatementsResult.rating_statements.length - 1 && { borderBottomWidth: 0, paddingBottom: 0 }
+              ]}>
+                <TouchableOpacity
+                  style={styles.ratingStatementHeader}
+                  onPress={() => setStatementExpanded(prev => ({ ...prev, [index]: !prev[index] }))}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.ratingStatementExpandIcon}>
+                    {statementExpanded[index] ? '−' : '+'}
+                  </Text>
+                  <View style={styles.ratingStatementTextContainer}>
+                    {typeof statement === 'string' ? (
+                      // Handle old format (string)
+                      renderTextWithBold(statement, styles.ratingStatementText)
+                    ) : (
+                      // Handle new format (object with title)
+                      renderTextWithBold(`Look for: ${statement.title}`, styles.pairingItemOneLine)
+                    )}
+                  </View>
+                </TouchableOpacity>
+                
+                {statementExpanded[index] && statement.description && (
+                  <View style={styles.ratingStatementDetails}>
+                    {renderTextWithBold(statement.description, styles.statementItemDescription)}
+                  </View>
+                )}
               </View>
             ))}
           </View>
         )}
 
-        {/* Restaurant Pairing Recommendations Section - Now Split into Dessert and Drinks */}
-        {mealType === 'Restaurant' && restaurant && (
-          <>
-            {/* Dessert Recommendation Card */}
-            {(loadingPairings || dessertData) && (
-              <View style={styles.dessertCard}>
-                {loadingPairings ? (
-                  <View style={styles.pairingLoadingContainer}>
-                    <ActivityIndicator size="small" color="#ffc008" />
-                    <Text style={styles.pairingLoadingText}>Finding the best dessert at {restaurant}...</Text>
-                  </View>
-                ) : dessertData ? (
-                  <>
-                    <Text style={styles.pairingTitle}>Must-Try Dessert at {restaurant}</Text>
-                    <View style={styles.pairingItem}>
-                      <TouchableOpacity 
-                        style={styles.pairingItemHeader}
-                        onPress={() => setDessertExpanded(!dessertExpanded)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.pairingExpandIcon}>
-                          {dessertExpanded ? '−' : '+'}
-                        </Text>
-                        <Text style={styles.pairingItemIcon}>🍰</Text>
-                        <View style={styles.pairingItemTextContainer}>
-                          <Text style={styles.pairingItemName}>{dessertData.dessert.name}</Text>
-                        </View>
-                      </TouchableOpacity>
-                      
-                      {dessertExpanded && (
-                        <View style={styles.pairingItemDetails}>
-                          <Text style={styles.pairingItemReason}>
-                            {renderTextWithBold(dessertData.dessert.why_recommended, styles.pairingItemText)}
-                          </Text>
-                          {dessertData.dessert.source && (
-                            <Text style={styles.pairingItemSource}>
-                              Source: {dessertData.dessert.source}
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  </>
-                ) : null}
-              </View>
-            )}
+        {/* Drink Pairings - Moved to bottom before buttons */}
+        {mealType === 'Restaurant' && restaurant && drinkPairingData && (
+          <View style={styles.pairingCard}>
+            {/* Beer Pairing */}
+            <View style={styles.pairingItem}>
+              <TouchableOpacity 
+                style={styles.pairingItemHeader}
+                onPress={() => setBeerExpanded(!beerExpanded)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pairingExpandIcon}>
+                  {beerExpanded ? '−' : '+'}
+                </Text>
+                <Text style={styles.pairingItemIcon}>🍺</Text>
+                <View style={styles.pairingItemTextContainer}>
+                  {renderTextWithBold(`Beer Pairing: ${drinkPairingData.beer_pairing.style}`, styles.pairingItemOneLine)}
+                </View>
+              </TouchableOpacity>
+              
+              {beerExpanded && (
+                <View style={styles.pairingItemDetails}>
+                  <Text style={styles.pairingItemReason}>
+                    {renderTextWithBold(drinkPairingData.beer_pairing.pairing_reason, styles.pairingItemText)}
+                  </Text>
+                </View>
+              )}
+            </View>
 
-            {/* Drink Pairings Card */}
-            {(loadingPairings || drinkPairingData) && (
-              <View style={styles.pairingCard}>
-                {loadingPairings ? (
-                  <View style={styles.pairingLoadingContainer}>
-                    <ActivityIndicator size="small" color="#ffc008" />
-                    <Text style={styles.pairingLoadingText}>Getting drink pairings for your {meal}...</Text>
-                  </View>
-                ) : drinkPairingData ? (
-                  <>
-                    <Text style={styles.pairingTitle}>Perfect Drink Pairings</Text>
-                    
-                    {/* Beer Pairing */}
-                    <View style={styles.pairingItem}>
-                      <TouchableOpacity 
-                        style={styles.pairingItemHeader}
-                        onPress={() => setBeerExpanded(!beerExpanded)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.pairingExpandIcon}>
-                          {beerExpanded ? '−' : '+'}
-                        </Text>
-                        <Text style={styles.pairingItemIcon}>🍺</Text>
-                        <View style={styles.pairingItemTextContainer}>
-                          <Text style={styles.pairingItemTitle}>Beer Pairing</Text>
-                          <Text style={styles.pairingItemName}>{drinkPairingData.beer_pairing.style}</Text>
-                        </View>
-                      </TouchableOpacity>
-                      
-                      {beerExpanded && (
-                        <View style={styles.pairingItemDetails}>
-                          <Text style={styles.pairingItemReason}>
-                            {renderTextWithBold(drinkPairingData.beer_pairing.pairing_reason, styles.pairingItemText)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Wine Pairing */}
-                    <View style={styles.pairingItem}>
-                      <TouchableOpacity 
-                        style={styles.pairingItemHeader}
-                        onPress={() => setWineExpanded(!wineExpanded)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.pairingExpandIcon}>
-                          {wineExpanded ? '−' : '+'}
-                        </Text>
-                        <Text style={styles.pairingItemIcon}>🍷</Text>
-                        <View style={styles.pairingItemTextContainer}>
-                          <Text style={styles.pairingItemTitle}>Wine Pairing</Text>
-                          <Text style={styles.pairingItemName}>{drinkPairingData.wine_pairing.style}</Text>
-                        </View>
-                      </TouchableOpacity>
-                      
-                      {wineExpanded && (
-                        <View style={styles.pairingItemDetails}>
-                          <Text style={styles.pairingItemReason}>
-                            {renderTextWithBold(drinkPairingData.wine_pairing.pairing_reason, styles.pairingItemText)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.pairingErrorContainer}>
-                    <Text style={styles.pairingErrorText}>Unable to load drink pairings</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </>
+            {/* Wine Pairing */}
+            <View style={[styles.pairingItem, { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 }]}>
+              <TouchableOpacity 
+                style={styles.pairingItemHeader}
+                onPress={() => setWineExpanded(!wineExpanded)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pairingExpandIcon}>
+                  {wineExpanded ? '−' : '+'}
+                </Text>
+                <Text style={styles.pairingItemIcon}>🍷</Text>
+                <View style={styles.pairingItemTextContainer}>
+                  {renderTextWithBold(`Wine Pairing: ${drinkPairingData.wine_pairing.style}`, styles.pairingItemOneLine)}
+                </View>
+              </TouchableOpacity>
+              
+              {wineExpanded && (
+                <View style={styles.pairingItemDetails}>
+                  <Text style={styles.pairingItemReason}>
+                    {renderTextWithBold(drinkPairingData.wine_pairing.pairing_reason, styles.pairingItemText)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         )}
 
         {/* Action buttons - now part of scrollable content */}
@@ -1608,12 +1652,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: '#FFFFFF',
     position: 'relative', // Make sure relative positioning is set for absolute children
   },
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -1621,7 +1665,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30, // Extra padding at bottom
   },
   imageCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 10,
@@ -1634,7 +1678,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
     height: 320, // Increased height to match MealDetailScreen
-    backgroundColor: '#FAF3E0', // Card background color
+    backgroundColor: '#FFFFFF', // Card background color
     overflow: 'hidden',
     position: 'relative',
   },
@@ -1691,7 +1735,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   detailsCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10, // Reduced from 20
@@ -1908,7 +1952,7 @@ const styles = StyleSheet.create({
   },
   // Dish criteria section styles
   dishCriteriaCard: {
-    backgroundColor: '#FAF9F6',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1920,7 +1964,7 @@ const styles = StyleSheet.create({
   },
   // Rating statements styles - NEW
   ratingStatementsCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1950,9 +1994,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pixelArtIcon: {
-    width: 80,
-    height: 80,
-    marginBottom: 16,
+    width: 40,
+    height: 40,
+    marginBottom: 8,
     alignSelf: 'center',
   },
   pixelArtLoading: {
@@ -1988,9 +2032,30 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   ratingStatementItem: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D0E0D0',
+  },
+  ratingStatementHeader: {
     flexDirection: 'row',
-    marginBottom: 8,
+    alignItems: 'center',
     paddingLeft: 8,
+  },
+  ratingStatementExpandIcon: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginRight: 8,
+    width: 20,
+    textAlign: 'center',
+  },
+  ratingStatementTextContainer: {
+    flex: 1,
+  },
+  ratingStatementDetails: {
+    marginTop: 8,
+    paddingLeft: 36, // Indent to align with text after + icon
   },
   ratingStatementBullet: {
     color: '#1a2b49',
@@ -2002,6 +2067,19 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontSize: 14,
     lineHeight: 20,
+  },
+  statementItemTitle: {
+    color: '#1a2b49',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  statementItemDescription: {
+    color: '#1a2b49',
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   dishCriteriaTitleContainer: {
     flexDirection: 'row',
@@ -2062,14 +2140,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1a2b49',
     lineHeight: 18,
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FFFFFF',
     padding: 10,
     borderRadius: 8,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Dish history section styles
   dishHistoryCard: {
-    backgroundColor: '#FAF3E0',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -2136,29 +2214,14 @@ const styles = StyleSheet.create({
   },
   // Restaurant Pairing Styles
   pairingCard: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
-    marginTop: 16,
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  dessertCard: {
-    backgroundColor: '#FFF0E6',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 4,
     elevation: 2,
   },
   pairingTitle: {
@@ -2264,6 +2327,12 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     marginLeft: 10,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  pairingItemOneLine: {
+    fontSize: 16,
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    flexWrap: 'wrap',
   },
 });
 

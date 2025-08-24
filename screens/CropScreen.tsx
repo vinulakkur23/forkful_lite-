@@ -24,7 +24,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import { searchNearbyRestaurants } from '../services/placesService';
-import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService';
+// import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // DISABLED FOR PERFORMANCE
 import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
 import RNFS from 'react-native-fs';
@@ -507,8 +507,11 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           console.log('Successfully prefetched restaurant suggestions directly from Google Places API:',
             suggestions.restaurants?.length || 0, 'restaurants');
             
+          // DISABLED FOR PERFORMANCE - EXPENSIVE API CALLS
           // If we have restaurant suggestions, also prefetch meal suggestions for the first restaurant
           if (restaurants.length > 0) {
+            console.log(`Skipping meal suggestions prefetch for restaurant: ${restaurants[0].name} (disabled for performance)`);
+            /* COMMENTED OUT - EXPENSIVE API CALLS
             try {
               console.log(`Prefetching meal suggestions for restaurant: ${restaurants[0].name}`);
               
@@ -536,6 +539,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
               console.error('Error prefetching meal suggestions:', mealError);
               // Continue without meal suggestions - they will be fetched later if needed
             }
+            */
           }
         } catch (apiError) {
           console.error('Error calling Places API:', apiError);

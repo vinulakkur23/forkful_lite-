@@ -37,10 +37,11 @@ import RNFS from 'react-native-fs';
 import ImageResizer from 'react-native-image-resizer';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
-// import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // TEMPORARILY DISABLED FOR PERFORMANCE
+// import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // DISABLED FOR PERFORMANCE
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 // import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
 import { extractRatingStatements, RatingStatementsData } from '../services/ratingStatementsService';
+import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
 import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
 import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
@@ -565,7 +566,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const resetState = () => {
     // Generate a completely new session ID with high entropy
     const newSessionId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${Math.random().toString(36).substring(2, 8)}`;
-    console.log(`========= COMPLETE RESET for new photo session: ${newSessionId} =========`);
+    // Complete reset for new photo session
     logWithSession(`Resetting state for new photo session: ${newSessionId}`);
     
     // Check if the current photo URI matches the prefetched photo URI
@@ -578,13 +579,12 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // They should already be cleared in CropScreen when a new photo is detected
     // and we want to preserve the original phasset location data from CropScreen
     if (isSamePhotoAsPrefetched) {
-      console.log(`Using existing prefetched suggestions for photo: ${route.params.photo.uri}`);
+      // Using existing prefetched suggestions
       if ((global as any).prefetchedLocation) {
-        console.log(`Preserved original location data: ${(global as any).prefetchedLocation.latitude}, ${(global as any).prefetchedLocation.longitude} (source: ${(global as any).prefetchedLocation.source})`);
+        // Preserved original location data
       }
     } else {
-      console.log(`No matching prefetched data for photo: ${route.params.photo.uri}`);
-      console.log(`Expected: ${(global as any).prefetchedPhotoUri || 'none'}, Current: ${route.params.photo.uri}`);
+      // No matching prefetched data
     }
     
     // Always update the currentPhotoUri to track the current photo being processed
@@ -642,7 +642,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     // Always fetch device location as fallback
     getCurrentLocation();
     
-    console.log(`========= RESET COMPLETE for photo: ${route.params.photo.uri} with session: ${newSessionId} =========`);
+    // Reset complete for new photo session
     logWithSession(`State reset complete for photo: ${route.params.photo.uri}`);
   };
   
@@ -664,14 +664,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     // On first render, log the details
     if (isFirstRender.current) {
-      console.log(`============= INITIALIZING RATING SCREEN =============`);
-      console.log(`Initial _uniqueKey: ${route.params._uniqueKey}`);
-      console.log(`Initial photo URI: ${route.params.photo.uri}`);
+      // Initializing rating screen
       isFirstRender.current = false;
     } else {
-      console.log(`============= ROUTE PARAMS CHANGED =============`);
-      console.log(`New _uniqueKey: ${route.params._uniqueKey}`);
-      console.log(`New photo URI: ${route.params.photo.uri}`);
+      // Route params changed
     }
     
     // Force a complete reset of state for this photo
@@ -679,12 +675,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     // Clean up on unmount
     return () => {
-      console.log(`============= CLEANING UP RATING SCREEN =============`);
+      // Cleaning up rating screen
       logWithSession("Component unmounting, cleaning up");
       
       // Clear any in-progress API calls to prevent them from affecting next session
       if ((global as any).quickCriteriaExtractionPromise || (global as any).ratingStatementsExtractionPromise) {
-        console.log("Clearing in-progress extraction promises");
         // Clear old quick criteria globals
         (global as any).quickCriteriaExtractionPromise = null;
         (global as any).quickCriteriaStartTime = null;
@@ -848,11 +843,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       };
       
       await reference.putFile(imageUri, metadata);
-      console.log('✅ File uploaded successfully');
+      // File uploaded successfully
       
       // Get download URL
       const downloadURL = await reference.getDownloadURL();
-      console.log('✅ Image uploaded to Firebase Storage:', downloadURL);
       
       return downloadURL;
     } catch (error) {
@@ -938,7 +932,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       let ratingStatementsResult: RatingStatementsData | null = null;
       
       // CLEAN APPROACH: Create basic meal entry first, then update with criteria
-      console.log('🧹 Creating basic meal entry first...');
+      // Creating basic meal entry first
       
       // Get current user
       const user = auth().currentUser;
@@ -948,25 +942,25 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         return;
       }
       
-      console.log('User authenticated:', user.uid);
+      // User authenticated
       
       // Use city from location data (extracted via Google Places API) or fallback to restaurant parsing
       let cityInfo = '';
       if (location && location.city) {
         // Use properly extracted city from Google Places API
         cityInfo = location.city;
-        console.log('Using city from location data:', cityInfo);
+        // Using city from location data
       } else if (restaurant) {
         // Fallback to parsing restaurant string
         const restaurantParts = restaurant.split(',');
         if (restaurantParts.length > 1) {
           cityInfo = restaurantParts[1].trim();
         }
-        console.log('Using city from restaurant parsing fallback:', cityInfo);
+        // Using city from restaurant parsing fallback
       }
       
       // IMPORTANT: Don't upload image yet - wait until after editing
-      console.log('Skipping image upload - will upload after editing');
+      // Create document first, then upload image
       
       // Create basic meal data (without image URL yet)
       const basicMealData = {
@@ -997,30 +991,52 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Save basic meal data and get the document ID
       const docRef = await firestore().collection('mealEntries').add(basicMealData);
       const mealId = docRef.id;
-      console.log('✅ Basic meal saved with ID:', mealId);
+      // Basic meal saved with ID: mealId
       logWithSession(`Basic meal saved: ${mealId}`);
       
-      // Start with rating statements first, then enhanced metadata sequentially
-      console.log('🔄 Starting rating statements extraction...');
-      console.log('📸 Using photo URI:', freshPhoto.uri);
-      console.log('🍽️ Using meal name:', mealName);
-      logWithSession('Starting parallel API calls - rating statements AND pixel art generation');
+      // Upload image to Firebase Storage and update the document with the URL
+      // Upload image to Firebase Storage
+      const imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
       
-      // Start both API calls in parallel for better performance
-      console.log('🚨 RatingScreen2: About to call extractRatingStatements with:', { uri: freshPhoto.uri, mealName });
-      console.log('🚨 RatingScreen2: About to call generatePixelArtIcon with:', { uri: freshPhoto.uri, mealName });
+      // Update the document with the image URL
+      await firestore().collection('mealEntries').doc(mealId).update({
+        imageUrl: imageUrl,
+        photoUrl: imageUrl // Keep backward compatibility with photoUrl field
+      });
+      // Document updated with image URL
+      
+      // Start with rating statements first, then enhanced metadata sequentially
+      // Starting rating statements extraction
+      logWithSession('Starting parallel API calls - rating statements, pixel art, AND restaurant pairings');
+      
+      // Start all API calls in parallel for better performance
+      // Starting parallel API calls
       
       // Start pixel art generation in parallel (don't wait for it)
       const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
       
+      // Start drink pairings in parallel if we have restaurant data
+      let drinkPairingPromise: Promise<DrinkPairingData | null> | null = null;
+      
+      if (restaurant && restaurant.trim() && mealName && mealName.trim()) {
+        console.log('🍺🍷 Starting drink pairings in parallel...');
+        drinkPairingPromise = getDrinkPairings(
+          freshPhoto.uri,
+          mealName,
+          restaurant,
+          location?.city || cityInfo
+        );
+      } else {
+        console.log('⚠️ Skipping drink pairings - missing restaurant or meal name');
+      }
+      
       extractRatingStatements(
-        freshPhoto.uri,
         mealName
       ).then(async (result) => {
-        console.log('🚨 RatingScreen2: extractRatingStatements resolved with result:', result);
+        // Rating statements API call completed
         if (result) {
-          console.log('✅ Rating statements completed:', result.rating_statements?.length || 0, 'statements');
-          console.log('📊 Full rating statements result:', JSON.stringify(result, null, 2));
+          // Rating statements completed successfully
+          // Full result logged for debugging if needed
           logWithSession(`Rating statements completed with ${result.rating_statements?.length || 0} statements`);
           
           // Log if this looks like fallback data
@@ -1036,11 +1052,35 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             };
             
             await firestore().collection('mealEntries').doc(mealId).update(statementsUpdate);
-            console.log('🎉 Meal updated with rating statements, starting enhanced metadata...');
+            // Meal updated with rating statements
             logWithSession(`Rating statements saved, starting enhanced metadata extraction`);
             
-            // NOW start enhanced metadata extraction
-            return extractEnhancedMetadata(freshPhoto.uri, mealName, restaurant);
+            // Handle drink pairings in background (don't block save process)
+            if (drinkPairingPromise) {
+              // Drink pairings running in background
+              // Let them complete in background and save to Firestore when done
+              drinkPairingPromise.then(async (drinkData) => {
+                if (drinkData) {
+                  try {
+                    const pairingUpdate = {
+                      drink_pairings: drinkData,
+                      drink_pairings_updated_at: firestore.FieldValue.serverTimestamp()
+                    };
+                    console.log('🍺🍷 Drink pairings ready:', drinkData.beer_pairing.style, '&', drinkData.wine_pairing.style);
+                    await firestore().collection('mealEntries').doc(mealId).update(pairingUpdate);
+                    console.log('🎉 Drink pairings saved to Firestore!');
+                  } catch (pairingError) {
+                    console.error('❌ Error saving drink pairings:', pairingError);
+                  }
+                }
+              }).catch(error => {
+                console.error('❌ Error with drink pairings:', error);
+              });
+            }
+            
+            // MOVED TO BACKGROUND - NO LONGER BLOCKING USER EXPERIENCE
+            // Rating statements saved, navigation can proceed
+            return null; // Don't block - enhanced metadata will run later
             
           } catch (firestoreError) {
             console.error('❌ Error saving rating statements to Firestore:', firestoreError);
@@ -1048,8 +1088,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             throw firestoreError;
           }
         } else {
-          console.error('🚨 RatingScreen2: Rating statements returned null!');
-          console.error('🚨 RatingScreen2: This means extractRatingStatements failed completely');
+          console.error('Rating statements extraction failed - returned null');
           logWithSession('Rating statements failed - skipping enhanced metadata');
           return null;
         }
@@ -1178,7 +1217,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Pixel art error: ${error}`);
       });
       
-      console.log('DEBUG: Dish criteria API running asynchronously');
+      // Dish criteria API running asynchronously
       logWithSession('Dish criteria API started - continuing with navigation');
       
       /* COMMENTED OUT - Using new quick criteria service instead
@@ -1220,7 +1259,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         _uniqueKey: sessionId
       };
       
-      console.log('RatingScreen2 navigating to Crop with cleaned params');
+      // Navigating to Crop with cleaned params
       navigation.navigate('Crop', cropNavParams);
     } catch (error) {
       logWithSession(`Error preparing image for Result screen: ${error}`);
@@ -1257,7 +1296,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Store the request in global scope so other screens can access it
         // This allows Results screen to wait for completion
         const extractionPromise = extractRatingStatements(
-          photo.uri, 
           mealName
         );
         

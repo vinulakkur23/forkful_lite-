@@ -4,6 +4,8 @@
  */
 
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
+import ImageResizer from 'react-native-image-resizer';
+import { firestore } from '../firebaseConfig';
 
 export interface EnhancedMetadata {
   meal_type: string;
@@ -46,9 +48,10 @@ export interface EnhancedFactsResponse {
 
 /**
  * Extract enhanced metadata and food facts for detailed display in ResultScreen
+ * Loads image from Firebase Storage for the given meal ID
  */
 export const extractEnhancedMetadataFacts = async (
-  imageUri: string,
+  mealId: string,
   dishSpecific: string,
   dishGeneral: string,
   cuisineType: string,
@@ -57,16 +60,54 @@ export const extractEnhancedMetadataFacts = async (
   city?: string
 ): Promise<EnhancedFactsData | null> => {
   try {
-    console.log('EnhancedMetadataFactsService: Starting enhanced metadata and facts extraction');
+    console.log('EnhancedMetadataFactsService: Starting enhanced metadata and facts extraction for meal:', mealId);
+    
+    // Load meal data from Firestore to get the image URL
+    const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+    if (!mealDoc.exists) {
+      throw new Error(`Meal document ${mealId} not found`);
+    }
+    
+    const mealData = mealDoc.data();
+    const firebaseStorageUrl = mealData?.imageUrl;
+    
+    if (!firebaseStorageUrl) {
+      throw new Error(`No image URL found for meal ${mealId}`);
+    }
+    
+    console.log('Loading and downsizing image from Firebase Storage for facts extraction:', firebaseStorageUrl);
+    
+    // Download and resize image to reduce API costs
+    const resizedImage = await ImageResizer.createResizedImage(
+      firebaseStorageUrl,
+      800,   // Max width - smaller than original for cost efficiency
+      600,   // Max height 
+      'JPEG',
+      80,    // Quality - good balance of quality vs size
+      0,     // No rotation
+      undefined, // Output path (will be generated)
+      false, // Keep metadata
+      {
+        mode: 'contain',
+        onlyScaleDown: true
+      }
+    );
+    
+    console.log('Image downsized successfully for facts extraction:', {
+      originalUrl: firebaseStorageUrl,
+      resizedUri: resizedImage.uri,
+      width: resizedImage.width,
+      height: resizedImage.height
+    });
     
     // Create FormData
     const formData = new FormData();
     
-    // Add the image
+    // Add the downsized image
     formData.append('image', {
-      uri: imageUri,
+      uri: resizedImage.uri,
       type: 'image/jpeg',
-      name: 'meal.jpg',
+      name: 'meal_facts_downsized.jpg',
     } as any);
     
     // Add required dish context from quick criteria

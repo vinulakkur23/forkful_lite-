@@ -31,8 +31,8 @@ import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterCom
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
 import MapView, { Marker, Callout } from 'react-native-maps';
-// Import achievement service
-import { getUserAchievements } from '../services/achievementService';
+// Import achievement service - DISABLED
+// import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
@@ -279,9 +279,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             // Get total cheers for the user
             const totalCheers = await getTotalCheersForUser(targetUserId);
 
-            // Get badge count
-            const userAchievements = await getUserAchievements(targetUserId);
-            const badgeCount = userAchievements.length;
+            // DISABLED: Get badge count
+            // const userAchievements = await getUserAchievements(targetUserId);
+            const badgeCount = 0; // DISABLED achievements
 
             // Get follower count
             const followCounts = await getFollowCounts(targetUserId);

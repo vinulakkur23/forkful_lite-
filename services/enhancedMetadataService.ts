@@ -2,6 +2,8 @@
 import { API_CONFIG } from '../config/api';
 import { Platform } from 'react-native';
 import RNFetchBlob from 'rn-fetch-blob';
+import ImageResizer from 'react-native-image-resizer';
+import { firestore } from '../firebaseConfig';
 
 /**
  * Enhanced metadata types from simple enhanced metadata service
@@ -28,38 +30,69 @@ export interface EnhancedMetadata {
 }
 
 /**
- * Extract enhanced metadata from a meal photo
+ * Extract enhanced metadata from a meal by loading image from Firebase Storage
  * 
- * @param photoUri The URI of the photo to process
+ * @param mealId The Firestore document ID to load the meal data and image from
  * @param mealName Optional name of the meal provided by user
  * @param restaurantName Optional restaurant name
  * @param cuisineContext Optional cuisine type hint
  * @returns Enhanced metadata with two-tier categorization
  */
 export const extractEnhancedMetadata = async (
-  photoUri: string,
+  mealId: string,
   mealName?: string,
   restaurantName?: string,
   cuisineContext?: string
 ): Promise<EnhancedMetadata | null> => {
   try {
-    console.log('Extracting enhanced metadata for photo:', photoUri);
+    console.log('Extracting enhanced metadata for meal ID:', mealId);
     
-    // Use the image file directly (no extra download needed)
-    console.log(`Using image directly for enhanced metadata: ${photoUri}`);
+    // Load meal data from Firestore to get the image URL
+    const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+    if (!mealDoc.exists) {
+      throw new Error(`Meal document ${mealId} not found`);
+    }
+    
+    const mealData = mealDoc.data();
+    const firebaseStorageUrl = mealData?.imageUrl;
+    
+    if (!firebaseStorageUrl) {
+      throw new Error(`No image URL found for meal ${mealId}`);
+    }
+    
+    console.log('Loading and downsizing image from Firebase Storage:', firebaseStorageUrl);
+    
+    // Download and resize image to reduce API costs
+    const resizedImage = await ImageResizer.createResizedImage(
+      firebaseStorageUrl,
+      800,   // Max width - smaller than original for cost efficiency
+      600,   // Max height 
+      'JPEG',
+      80,    // Quality - good balance of quality vs size
+      0,     // No rotation
+      undefined, // Output path (will be generated)
+      false, // Keep metadata
+      {
+        mode: 'contain',
+        onlyScaleDown: true
+      }
+    );
+    
+    console.log('Image downsized successfully:', {
+      originalUrl: firebaseStorageUrl,
+      resizedUri: resizedImage.uri,
+      width: resizedImage.width,
+      height: resizedImage.height
+    });
     
     // Prepare form data
     const formData = new FormData();
     
-    // Add the image file directly
-    const fileUri = Platform.OS === 'ios' 
-      ? photoUri.replace('file://', '') 
-      : photoUri;
-      
+    // Add the downsized image
     formData.append('image', {
-      uri: fileUri,
+      uri: resizedImage.uri,
       type: 'image/jpeg',
-      name: 'meal_photo.jpg',
+      name: 'meal_photo_downsized.jpg',
     } as any);
     
     // Add optional context

@@ -27,57 +27,29 @@ export interface RatingStatementsResponse {
 
 /**
  * Extract 6 rating statements for immediate display in ResultScreen
+ * OPTIMIZED: Works with dish name only, no image processing needed
  */
 export const extractRatingStatements = async (
-  imageUri: string,
-  mealName?: string
+  mealName: string
 ): Promise<RatingStatementsData | null> => {
-  console.log('🚨 RatingStatementsService: FUNCTION CALLED - extractRatingStatements');
-  console.log('🚨 RatingStatementsService: Parameters received:', { imageUri, mealName });
+  console.log('🚨 RatingStatementsService: FUNCTION CALLED - extractRatingStatements (text-only)');
+  console.log('🚨 RatingStatementsService: Parameters received:', { mealName });
   
   try {
-    console.log('🚀 RatingStatementsService: Starting rating statements extraction');
-    console.log('📸 RatingStatementsService: Image URI:', imageUri);
+    console.log('🚀 RatingStatementsService: Starting rating statements extraction (no image)');
     console.log('🍽️ RatingStatementsService: Meal name:', mealName);
     
-    // Compress image for faster upload and processing
-    console.log('RatingStatementsService: Compressing image for speed...');
-    const compressedImage = await ImageResizer.createResizedImage(
-      imageUri,
-      400, // Small width for speed
-      400, // Small height for speed
-      'JPEG',
-      60,  // Low quality for speed
-      0,   // No rotation
-      undefined, // Output path (will be generated)
-      false, // Keep metadata
-      {
-        mode: 'contain',
-        onlyScaleDown: true
-      }
-    );
+    if (!mealName || mealName.trim().length === 0) {
+      console.error('❌ RatingStatementsService: No meal name provided');
+      return null;
+    }
     
-    console.log('✅ RatingStatementsService: Image compressed successfully:', {
-      originalUri: imageUri,
-      compressedUri: compressedImage.uri,
-      width: compressedImage.width,
-      height: compressedImage.height
-    });
-    
-    // Create FormData
+    // No image compression needed - text-only request
+    // Create FormData for text-only request
     const formData = new FormData();
     
-    // Add the compressed image
-    formData.append('image', {
-      uri: compressedImage.uri,
-      type: 'image/jpeg',
-      name: 'meal.jpg',
-    } as any);
-    
-    // Add optional meal name
-    if (mealName) {
-      formData.append('meal_name', mealName);
-    }
+    // Add meal name (required for text-only mode)
+    formData.append('meal_name', mealName);
     
     console.log('🌐 RatingStatementsService: Making API call to extract-rating-statements');
     console.log('🌐 RatingStatementsService: URL:', `${BASE_URL}/extract-rating-statements`);

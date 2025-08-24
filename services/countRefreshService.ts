@@ -1,5 +1,12 @@
 import { firebase, firestore, auth } from '../firebaseConfig';
-import { extractCityFromMeal, extractCuisineFromMeal, isSushiMeal, isTakeoutMeal } from './achievementService';
+// DISABLED: Achievement service imports
+// import { extractCityFromMeal, extractCuisineFromMeal, isSushiMeal, isTakeoutMeal } from './achievementService';
+
+// Stub functions to replace achievement service functions
+const extractCityFromMeal = (meal: any) => null;
+const extractCuisineFromMeal = (meal: any) => null;
+const isSushiMeal = (meal: any) => false;
+const isTakeoutMeal = (meal: any) => false;
 
 // Manual function to refresh all counts for the current user
 export const refreshUserCounts = async (userId?: string): Promise<{

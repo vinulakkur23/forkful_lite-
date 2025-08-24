@@ -68,6 +68,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [activeChallenges, setActiveChallenges] = useState<UserChallenge[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
+  const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
+  const [emojisLoading, setEmojisLoading] = useState(true);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
 
@@ -93,13 +95,21 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   };
 
   useEffect(() => {
-    loadAchievements();
-    loadTopRatedPhotos();
-    loadCities();
+    // DISABLED: Achievements/stamps feature
+    // loadAchievements();
+    // DISABLED: Top rated photos and cities to reduce Firestore calls
+    // loadTopRatedPhotos();
+    // loadCities();
     loadActiveChallenges();
+    loadPixelArtEmojis();
   }, [userId]);
 
+  // DISABLED: Achievements/stamps feature
   const loadAchievements = async () => {
+    setLoading(false);
+    setAchievementItems([]);
+    return;
+    /*
     try {
       setLoading(true);
       
@@ -136,9 +146,13 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     } finally {
       setLoading(false);
     }
+    */
   };
 
+  // DISABLED: Top rated photos feature to reduce Firestore calls
   const loadTopRatedPhotos = async () => {
+    // Commenting out to reduce Firestore calls
+    /*
     try {
       setPhotosLoading(true);
       
@@ -173,9 +187,15 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     } finally {
       setPhotosLoading(false);
     }
+    */
+    setPhotosLoading(false);
+    setTopRatedPhotos([]);
   };
 
+  // DISABLED: Cities feature to reduce Firestore calls
   const loadCities = async () => {
+    // Commenting out to reduce Firestore calls
+    /*
     try {
       setCitiesLoading(true);
       
@@ -225,6 +245,9 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     } finally {
       setCitiesLoading(false);
     }
+    */
+    setCitiesLoading(false);
+    setCities([]);
   };
 
   const loadActiveChallenges = async () => {
@@ -240,6 +263,41 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       console.error('Error loading challenges:', error);
     } finally {
       setChallengesLoading(false);
+    }
+  };
+
+  const loadPixelArtEmojis = async () => {
+    try {
+      setEmojisLoading(true);
+      const targetUserId = userId || auth().currentUser?.uid;
+      if (!targetUserId) return;
+      
+      console.log(`🎨 Loading pixel art emojis for user: ${targetUserId}`);
+      
+      // Query user's meals that have pixel art
+      const mealsQuery = await firestore()
+        .collection('mealEntries')
+        .where('userId', '==', targetUserId)
+        .where('pixel_art_url', '!=', null)
+        .orderBy('pixel_art_url') // Need this for the != query
+        .orderBy('createdAt', 'desc')
+        .limit(50) // Limit to last 50 emojis
+        .get();
+      
+      const emojiUrls: string[] = [];
+      mealsQuery.forEach((doc) => {
+        const data = doc.data();
+        if (data.pixel_art_url) {
+          emojiUrls.push(data.pixel_art_url);
+        }
+      });
+      
+      console.log(`🎨 Found ${emojiUrls.length} pixel art emojis`);
+      setPixelArtEmojis(emojiUrls);
+    } catch (error) {
+      console.error('Error loading pixel art emojis:', error);
+    } finally {
+      setEmojisLoading(false);
     }
   };
 
@@ -344,7 +402,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
               const result = await clearUserStamps();
               if (result.success) {
                 Alert.alert('Success', result.message, [
-                  { text: 'OK', onPress: () => loadAchievements() }
+                  { text: 'OK', onPress: () => {} /* loadAchievements() disabled */ }
                 ]);
               } else {
                 Alert.alert('Error', result.message);
@@ -377,9 +435,9 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                     text: 'OK', 
                     onPress: () => {
                       // Reload all data
-                      loadAchievements();
+                      // loadAchievements(); // DISABLED
                       loadActiveChallenges();
-                      loadCities();
+                      // loadCities(); // DISABLED to reduce Firestore calls
                     }
                   }
                 ]);
@@ -447,6 +505,16 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     </TouchableOpacity>
   );
 
+  const renderEmojiItem = ({ item }: { item: string }) => (
+    <View style={styles.emojiItem}>
+      <Image 
+        source={{ uri: item }} 
+        style={styles.emojiImage}
+        resizeMode="contain"
+      />
+    </View>
+  );
+
   const renderChallengeItem = ({ item }: { item: UserChallenge }) => (
     <TouchableOpacity
       style={[
@@ -488,19 +556,34 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Loading achievements...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       ) : (
         <>
-          {/* Empty state - when no challenges, cities, or photos */}
-          {!challengesLoading && !citiesLoading && !photosLoading && 
-           activeChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 ? (
+          {/* Empty state - when no challenges, cities, photos, or emojis */}
+          {!challengesLoading && !citiesLoading && !photosLoading && !emojisLoading &&
+           activeChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 && pixelArtEmojis.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>Add meals to get and win challenges!</Text>
             </View>
           ) : (
             <>
-              {/* Active Challenges Section */}
+              {/* I've Eaten Section */}
+          {!emojisLoading && pixelArtEmojis.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>I've Eaten:</Text>
+              <FlatList
+                data={pixelArtEmojis}
+                renderItem={renderEmojiItem}
+                keyExtractor={(item, index) => `emoji_${index}`}
+                numColumns={6}
+                contentContainerStyle={styles.emojisList}
+                scrollEnabled={false}
+              />
+            </>
+          )}
+
+          {/* Active Challenges Section */}
               {!challengesLoading && activeChallenges.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Challenge: What to Eat Next</Text>
@@ -515,8 +598,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             </>
           )}
 
-          {/* Cities Section */}
-          {!citiesLoading && cities.length > 0 && (
+          {/* Cities Section - DISABLED to reduce Firestore calls */}
+          {/* {!citiesLoading && cities.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Cities</Text>
               
@@ -529,10 +612,10 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                 scrollEnabled={false}
               />
             </>
-          )}
+          )} */}
 
-          {/* Top Rated Photos Section */}
-          {!photosLoading && topRatedPhotos.length > 0 && (
+          {/* Top Rated Photos Section - DISABLED to reduce Firestore calls */}
+          {/* {!photosLoading && topRatedPhotos.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Wall Hangers</Text>
               
@@ -545,7 +628,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                 scrollEnabled={false}
               />
             </>
-          )}
+          )} */}
 
           {/* DEBUG BUTTONS - COMMENTED OUT FOR NOW
           <TouchableOpacity 
@@ -1166,6 +1249,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
+  },
+  emojisList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  emojiItem: {
+    width: (width - 100) / 6, // 6 per row to make them tiny
+    height: (width - 100) / 6,
+    marginHorizontal: 2,
+    marginVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emojiImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 4,
   },
 });
 
