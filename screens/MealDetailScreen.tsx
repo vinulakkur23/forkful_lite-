@@ -812,9 +812,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         {/* Quick Ratings Section - only show rated statements */}
-        {quickRatings && meal.quick_criteria_result?.rating_statements && (
+        {quickRatings && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
           <View style={styles.quickRatingsSection}>
-            {meal.quick_criteria_result.rating_statements
+            {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)
               .filter(statement => quickRatings[statement] !== undefined)
               .map((statement, index) => (
                 <View key={index} style={styles.ratedStatementItem}>

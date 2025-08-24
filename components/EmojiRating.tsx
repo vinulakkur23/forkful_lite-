@@ -17,6 +17,7 @@ interface Props {
   size?: number;
   interactive?: boolean;
   style?: any;
+  maxEmojis?: number; // New prop to limit number of emojis shown
 }
 
 const EmojiRating: React.FC<Props> = ({ 
@@ -24,7 +25,8 @@ const EmojiRating: React.FC<Props> = ({
   onRatingChange, 
   size = 40, 
   interactive = true,
-  style 
+  style,
+  maxEmojis = 6 // Default to showing all 6 emojis
 }) => {
   const handleEmojiPress = (emojiId: number) => {
     if (interactive && onRatingChange) {
@@ -32,9 +34,12 @@ const EmojiRating: React.FC<Props> = ({
     }
   };
 
+  // Filter emojis based on maxEmojis prop
+  const emojisToShow = EMOJI_RATINGS.slice(0, maxEmojis);
+
   return (
     <View style={[styles.container, style]}>
-      {EMOJI_RATINGS.map((emoji) => (
+      {emojisToShow.map((emoji) => (
         <TouchableOpacity
           key={emoji.id}
           onPress={() => handleEmojiPress(emoji.id)}

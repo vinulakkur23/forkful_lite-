@@ -13,15 +13,15 @@ import EmojiDisplay from '../components/EmojiDisplay';
 import { firebase, auth, firestore, storage, firebaseStorage } from '../firebaseConfig';
 // Import AI metadata service
 import { processImageMetadata } from '../services/aiMetadataService';
-// Import enhanced metadata service for background processing
-import { extractEnhancedMetadata } from '../services/enhancedMetadataService';
+// Enhanced metadata service removed - now handled by Cloud Functions
 // Import dish criteria service
 import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaService';
 // Import achievement service - DISABLED
 // import { checkAchievements } from '../services/achievementService';
 // import { Achievement } from '../types/achievements';
 // Enhanced metadata facts service for background processing
-import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
+// REMOVED: Facts service no longer used
+// import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Import rating statements service for fresh API calls when background data is stale
 import { extractRatingStatements } from '../services/ratingStatementsService';
 // Import restaurant pairing service with separate drink and dessert functions
@@ -29,6 +29,10 @@ import {
   getDrinkPairings,
   DrinkPairingData 
 } from '../services/restaurantPairingService';
+// Import dish rating criteria service
+import { extractDishRatingCriteria, DishRatingCriteriaData } from '../services/dishRatingCriteriaService';
+// Import dish insights service
+import { extractDishInsights, DishInsightsData } from '../services/dishInsightsService';
 // Removed meal enhancement service - no longer used
 
 type ResultScreenNavigationProp = CompositeNavigationProp<
@@ -110,6 +114,16 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loadingPairings, setLoadingPairings] = useState(false);
   const [pairingsLoaded, setPairingsLoaded] = useState(false);
   
+  // Dish rating criteria state
+  const [dishRatingCriteriaData, setDishRatingCriteriaData] = useState<DishRatingCriteriaData | null>(null);
+  const [loadingRatingCriteria, setLoadingRatingCriteria] = useState(false);
+  const [ratingCriteriaLoaded, setRatingCriteriaLoaded] = useState(false);
+  
+  // Dish insights state  
+  const [dishInsightsData, setDishInsightsData] = useState<DishInsightsData | null>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [insightsLoaded, setInsightsLoaded] = useState(false);
+  
   // Expansion state for pairing details
   const [beerExpanded, setBeerExpanded] = useState(false);
   const [wineExpanded, setWineExpanded] = useState(false);
@@ -119,59 +133,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
 
-  // Background processing function for enhanced metadata and facts
-  const processEnhancedMetadataInBackground = async (
-    mealId: string,
-    mealIdForImage: string, // Now the same as mealId, used to load image from Firebase Storage
-    mealName: string,
-    restaurantName: string,
-    mealDataForContext?: any // Optional meal data for city context
-  ) => {
-    try {
-      console.log('🎆 Starting background enhanced metadata extraction for meal ID:', mealId);
-      
-      // Step 1: Enhanced metadata extraction using meal ID
-      const metadata = await extractEnhancedMetadata(mealId, mealName, restaurantName);
-      
-      if (metadata) {
-        console.log('✅ Background enhanced metadata completed:', metadata.dish_specific);
-        
-        // Save enhanced metadata to Firestore
-        await firestore().collection('mealEntries').doc(mealId).update({
-          metadata_enriched: metadata,
-          metadata_updated_at: firestore.FieldValue.serverTimestamp()
-        });
-        
-        console.log('🎆 Starting background facts extraction...');
-        
-        // Step 2: Enhanced facts extraction using the metadata and meal ID
-        const factsData = await extractEnhancedMetadataFacts(
-          mealId,
-          metadata.dish_specific,
-          metadata.dish_general,
-          metadata.cuisine_type,
-          mealName,
-          restaurantName,
-          mealDataForContext?.location?.city || mealDataForContext?.city
-        );
-        
-        if (factsData) {
-          console.log('✅ Background facts extraction completed');
-          
-          // Save facts to Firestore
-          await firestore().collection('mealEntries').doc(mealId).update({
-            enhanced_facts: factsData,
-            facts_updated_at: firestore.FieldValue.serverTimestamp()
-          });
-          
-          console.log('🎉 Background processing completed successfully!');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Background processing error:', error);
-      // Don't throw - this is background processing
-    }
-  };
+  // Enhanced metadata processing removed - now handled by Cloud Functions
 
 
 
@@ -292,6 +254,96 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Load dish rating criteria 
+  const loadDishRatingCriteria = async () => {
+    // Prevent multiple simultaneous calls
+    if (loadingRatingCriteria || ratingCriteriaLoaded) {
+      console.log('🚀 ResultScreen: Skipping rating criteria - already loading/loaded');
+      return;
+    }
+
+    // Only load if we have meal data
+    if (!mealData || !meal) {
+      console.log('🚀 ResultScreen: Skipping rating criteria - missing meal data');
+      return;
+    }
+    
+    console.log('🚀 ResultScreen: Loading dish rating criteria...');
+    setLoadingRatingCriteria(true);
+    
+    try {
+      const criteriaData = await extractDishRatingCriteria(meal);
+      
+      if (criteriaData) {
+        console.log('✅ ResultScreen: Dish rating criteria loaded successfully');
+        setDishRatingCriteriaData(criteriaData);
+        setRatingCriteriaLoaded(true);
+        
+        // Save to Firestore for future use
+        await firestore().collection('mealEntries').doc(routeMealId).update({
+          dish_rating_criteria: criteriaData,
+          rating_criteria_updated_at: firestore.FieldValue.serverTimestamp()
+        });
+        console.log('✅ ResultScreen: Rating criteria saved to Firestore');
+      } else {
+        console.log('❌ ResultScreen: Failed to load dish rating criteria');
+        setRatingCriteriaLoaded(true); // Mark as attempted even if failed
+      }
+    } catch (error) {
+      console.error('🚨 ResultScreen: Error loading dish rating criteria:', error);
+      setRatingCriteriaLoaded(true); // Mark as attempted even if error
+    } finally {
+      setLoadingRatingCriteria(false);
+    }
+  };
+
+  // Load dish insights (history, restaurant fact, cultural insight)
+  const loadDishInsights = async () => {
+    // Prevent multiple simultaneous calls
+    if (loadingInsights || insightsLoaded) {
+      console.log('🚀 ResultScreen: Skipping dish insights - already loading/loaded');
+      return;
+    }
+
+    // Only load if we have meal data
+    if (!mealData || !meal) {
+      console.log('🚀 ResultScreen: Skipping dish insights - missing meal data');
+      return;
+    }
+    
+    console.log('🚀 ResultScreen: Loading dish insights...');
+    setLoadingInsights(true);
+    
+    try {
+      const insightsData = await extractDishInsights(
+        meal,
+        restaurant || undefined,
+        mealData.location?.city || undefined
+      );
+      
+      if (insightsData) {
+        console.log('✅ ResultScreen: Dish insights loaded successfully');
+        setDishInsightsData(insightsData);
+        setInsightsLoaded(true);
+        
+        // Save to Firestore for future use
+        await firestore().collection('mealEntries').doc(routeMealId).update({
+          dish_insights: insightsData,
+          insights_updated_at: firestore.FieldValue.serverTimestamp()
+        });
+        console.log('✅ ResultScreen: Dish insights saved to Firestore');
+      } else {
+        console.log('❌ ResultScreen: Failed to load dish insights');
+        setInsightsLoaded(true); // Mark as attempted even if failed
+      }
+    } catch (error) {
+      console.error('🚨 ResultScreen: Error loading dish insights:', error);
+      setInsightsLoaded(true); // Mark as attempted even if error
+    } finally {
+      setLoadingInsights(false);
+    }
+  };
+
   // Initialization effect - runs only once per instance
   useEffect(() => {
     console.log("ResultScreen mounted with key:", instanceKey, "mealId:", routeMealId);
@@ -377,42 +429,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     console.log("✅ Pixel art handled in RatingScreen2");
   }, [instanceKey]);
 
-  // Process enhanced metadata and facts when screen loads (if not already done)
-  useEffect(() => {
-    // Check if data already exists or is being processed
-    if (mealData && meal && routeMealId && !loadingMealData) {
-      const hasMetadata = mealData.metadata_enriched;
-      const hasFacts = mealData.enhanced_facts;
-      
-      // Only run if we don't have the data yet
-      if (!hasMetadata || !hasFacts) {
-        const globalKey = `enhancedMetadata_${routeMealId}`;
-        
-        // Check if already processing
-        if ((global as any)[globalKey]) {
-          console.log('⚠️ Enhanced metadata already processing for meal:', routeMealId);
-          return;
-        }
-        
-        console.log('🎆 Starting enhanced metadata processing (missing data)...');
-        (global as any)[globalKey] = true; // Mark as processing
-        
-        // Run the processing
-        processEnhancedMetadataInBackground(
-          routeMealId,
-          routeMealId,
-          meal,
-          restaurant || '',
-          mealData // Pass meal data for context
-        ).finally(() => {
-          // Clear the flag after processing completes
-          delete (global as any)[globalKey];
-        });
-      } else {
-        console.log('✅ Enhanced metadata and facts already exist, skipping processing');
-      }
-    }
-  }, [routeMealId, loadingMealData]); // Run when meal loads
+  // Enhanced metadata processing removed - now handled by Cloud Functions running 3x daily
 
   // Load restaurant pairings after meal data is loaded (only once per meal)
   useEffect(() => {
@@ -421,6 +438,22 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       loadRestaurantPairings();
     }
   }, [mealData, loadingMealData, pairingsLoaded, loadingPairings]);
+
+  // Load dish rating criteria after meal data is loaded (only once per meal)
+  useEffect(() => {
+    if (mealData && !loadingMealData && !ratingCriteriaLoaded && !loadingRatingCriteria) {
+      console.log('🚀 ResultScreen: Meal data ready, attempting to load dish rating criteria...');
+      loadDishRatingCriteria();
+    }
+  }, [mealData, loadingMealData, ratingCriteriaLoaded, loadingRatingCriteria]);
+
+  // Load dish insights after meal data is loaded (only once per meal)
+  useEffect(() => {
+    if (mealData && !loadingMealData && !insightsLoaded && !loadingInsights) {
+      console.log('🚀 ResultScreen: Meal data ready, attempting to load dish insights...');
+      loadDishInsights();
+    }
+  }, [mealData, loadingMealData, insightsLoaded, loadingInsights]);
 
   // Track if we've already triggered the background APIs (reset per meal)
   const [backgroundAPIsTriggered, setBackgroundAPIsTriggered] = useState(false);
@@ -432,6 +465,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     setPairingsLoaded(false);
     setLoadingPairings(false);
     setDrinkPairingData(null);
+    setRatingCriteriaLoaded(false);
+    setLoadingRatingCriteria(false);
+    setDishRatingCriteriaData(null);
+    setInsightsLoaded(false);
+    setLoadingInsights(false);
+    setDishInsightsData(null);
     setSaved(false);
     setSavedMealId(null);
     setPhotoUrl(null);
@@ -463,35 +502,45 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         if (actualMealName && actualCriteria && actualCriteria.length > 0) {
           console.log('🍽️ Starting background challenge generation on mount for:', actualMealName);
           
-          import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-            // Map criteria to expected format
-            const criteria = actualCriteria.map(c => ({
-              title: c.name || c.title || 'Unknown Criteria',
-              description: c.criteria || c.description || c.what_to_look_for || 'No description available'
-            }));
+          // Check challenge limit before generating
+          import('../services/userChallengesService').then(({ hasReachedChallengeLimit }) => {
+            return hasReachedChallengeLimit();
+          }).then((reachedLimit) => {
+            if (reachedLimit) {
+              console.log('🍽️ User has reached challenge limit (6), skipping background generation');
+              return;
+            }
             
-            const dishGeneral = mealData?.cuisine_type || "Dish";
-            
-            // Generate and store challenge
-            const challengePromise = generateNextDishChallenge(
-              actualMealName,
-              dishGeneral,
-              criteria,
-              mealData.location?.city || mealData.city,
-              [] // Previous challenges
-            );
-            
-            // Store globally for other screens
-            (global as any).pendingChallengePromise = challengePromise;
-            
-            challengePromise.then(challenge => {
-              if (challenge) {
-                console.log('✅ Background challenge generated:', challenge.recommended_dish_name);
-                (global as any).pendingChallenge = challenge;
-              }
-            }).catch(error => {
-              console.error('❌ Background challenge generation failed:', error);
-              (global as any).pendingChallengePromise = null;
+            return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+              // Map criteria to expected format
+              const criteria = actualCriteria.map(c => ({
+                title: c.name || c.title || 'Unknown Criteria',
+                description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+              }));
+              
+              const dishGeneral = mealData?.cuisine_type || "Dish";
+              
+              // Generate and store challenge
+              const challengePromise = generateNextDishChallenge(
+                actualMealName,
+                dishGeneral,
+                criteria,
+                mealData.location?.city || mealData.city,
+                [] // Previous challenges
+              );
+              
+              // Store globally for other screens
+              (global as any).pendingChallengePromise = challengePromise;
+              
+              challengePromise.then(challenge => {
+                if (challenge) {
+                  console.log('✅ Background challenge generated:', challenge.recommended_dish_name);
+                  (global as any).pendingChallenge = challenge;
+                }
+              }).catch(error => {
+                console.error('❌ Background challenge generation failed:', error);
+                (global as any).pendingChallengePromise = null;
+              });
             });
           });
         }
@@ -1159,47 +1208,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         // CLEAN SEQUENTIAL PROCESSING: Make fresh API calls tied to this specific meal ID
         console.log("🧹 CLEAN APPROACH: Starting fresh API calls for meal ID:", docRef.id);
 
-        // Enhanced metadata and facts processing handled in RatingScreen2 sequentially
-        console.log("Enhanced metadata and facts processing handled in RatingScreen2 for meal:", docRef.id);
-        
-        /* COMMENTED OUT - Using combined service instead
-        extractEnhancedMetadata(photo.uri, meal, restaurant, undefined)
-          .then(async (enhancedMetadata) => {
-            if (enhancedMetadata) {
-              console.log("Enhanced metadata extracted successfully:", enhancedMetadata);
-              // Update the document with enhanced metadata
-              try {
-                await firestore().collection('mealEntries').doc(docRef.id).update({
-                  metadata_enriched: enhancedMetadata
-                });
-                console.log("Enhanced metadata saved to Firestore");
-                
-                // Extract dish criteria based on enhanced metadata
-                console.log("Extracting dish criteria for mindful eating...");
-                const dishCriteria = await getDishCriteria(
-                  enhancedMetadata.dish_specific,
-                  enhancedMetadata.dish_general,
-                  enhancedMetadata.cuisine_type
-                );
-                
-                if (dishCriteria) {
-                  console.log("Dish criteria extracted successfully:", dishCriteria);
-                  // Link criteria to the meal
-                  await linkCriteriaToMeal(docRef.id, dishCriteria);
-                  console.log("Dish criteria linked to meal");
-                } else {
-                  console.log("No dish criteria could be generated");
-                }
-                
-              } catch (error) {
-                console.error("Error saving enhanced metadata or dish criteria:", error);
-              }
-            }
-          })
-          .catch(error => {
-            console.error("Error extracting enhanced metadata:", error);
-          });
-        */
+        // Enhanced metadata processing removed - now handled by Cloud Functions
+        console.log("Enhanced metadata processing handled by Cloud Functions for meal:", docRef.id);
         
         // Process regular metadata - TEMPORARILY DISABLED to debug duplicate API calls
         /* processImageMetadata(docRef.id, imageUrl, {
@@ -1416,39 +1426,50 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       
       if (actualMealName && actualCriteria && actualCriteria.length > 0) {
         console.log("🍽️ Starting background challenge generation for:", actualMealName);
-        import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-          // Map criteria to expected format
-          const criteria = actualCriteria.map(c => ({
-            title: c.name || c.title || 'Unknown Criteria',
-            description: c.criteria || c.description || c.what_to_look_for || 'No description available'
-          }));
+        
+        // Check challenge limit before generating
+        import('../services/userChallengesService').then(({ hasReachedChallengeLimit }) => {
+          return hasReachedChallengeLimit();
+        }).then((reachedLimit) => {
+          if (reachedLimit) {
+            console.log('🍽️ User has reached challenge limit (6), skipping background generation');
+            return;
+          }
           
-          // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
-          const dishGeneral = mealData?.cuisine_type || "Dish";
-          
-          // Store the promise so EditMealScreen can wait for it if needed
-          const challengePromise = generateNextDishChallenge(
-            actualMealName,  // Use actual meal name
-            dishGeneral,     // Use cuisine type or fallback
-            criteria,
-            mealData.location?.city || mealData.city,
-            [] // Previous challenges - can be loaded if needed
-          );
-          
-          // Store the promise immediately
-          (global as any).pendingChallengePromise = challengePromise;
-          
-          // Also store the result when it completes
-          challengePromise.then(challenge => {
-            if (challenge) {
-              console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
-              // Store the completed challenge
-              (global as any).pendingChallenge = challenge;
-            }
-          }).catch(error => {
-            console.error("🍽️ Background challenge generation failed:", error);
-            // Clear the promise on error
-            (global as any).pendingChallengePromise = null;
+          return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+            // Map criteria to expected format
+            const criteria = actualCriteria.map(c => ({
+              title: c.name || c.title || 'Unknown Criteria',
+              description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+            }));
+            
+            // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
+            const dishGeneral = mealData?.cuisine_type || "Dish";
+            
+            // Store the promise so EditMealScreen can wait for it if needed
+            const challengePromise = generateNextDishChallenge(
+              actualMealName,  // Use actual meal name
+              dishGeneral,     // Use cuisine type or fallback
+              criteria,
+              mealData.location?.city || mealData.city,
+              [] // Previous challenges - can be loaded if needed
+            );
+            
+            // Store the promise immediately
+            (global as any).pendingChallengePromise = challengePromise;
+            
+            // Also store the result when it completes
+            challengePromise.then(challenge => {
+              if (challenge) {
+                console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
+                // Store the completed challenge
+                (global as any).pendingChallenge = challenge;
+              }
+            }).catch(error => {
+              console.error("🍽️ Background challenge generation failed:", error);
+              // Clear the promise on error
+              (global as any).pendingChallengePromise = null;
+            });
           });
         });
       }
@@ -1509,39 +1530,50 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     
     if (actualMealName && actualCriteria && actualCriteria.length > 0) {
       console.log("🍽️ Starting background challenge generation for:", actualMealName);
-      import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-        // Map criteria to expected format
-        const criteria = actualCriteria.map(c => ({
-          title: c.name || c.title || 'Unknown Criteria',
-          description: c.criteria || c.description || c.what_to_look_for || 'No description available'
-        }));
+      
+      // Check challenge limit before generating
+      import('../services/userChallengesService').then(({ hasReachedChallengeLimit }) => {
+        return hasReachedChallengeLimit();
+      }).then((reachedLimit) => {
+        if (reachedLimit) {
+          console.log('🍽️ User has reached challenge limit (6), skipping background generation');
+          return;
+        }
         
-        // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
-        const dishGeneral = mealData?.cuisine_type || "Dish";
-        
-        // Store the promise so EditMealScreen can wait for it if needed
-        const challengePromise = generateNextDishChallenge(
-          actualMealName,  // Use actual meal name
-          dishGeneral,     // Use cuisine type or fallback
-          criteria,
-          mealData.location?.city || mealData.city,
-          [] // Previous challenges - can be loaded if needed
-        );
-        
-        // Store the promise immediately
-        (global as any).pendingChallengePromise = challengePromise;
-        
-        // Also store the result when it completes
-        challengePromise.then(challenge => {
-          if (challenge) {
-            console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
-            // Store the completed challenge
-            (global as any).pendingChallenge = challenge;
-          }
-        }).catch(error => {
-          console.error("🍽️ Background challenge generation failed:", error);
-          // Clear the promise on error
-          (global as any).pendingChallengePromise = null;
+        return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+          // Map criteria to expected format
+          const criteria = actualCriteria.map(c => ({
+            title: c.name || c.title || 'Unknown Criteria',
+            description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+          }));
+          
+          // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
+          const dishGeneral = mealData?.cuisine_type || "Dish";
+          
+          // Store the promise so EditMealScreen can wait for it if needed
+          const challengePromise = generateNextDishChallenge(
+            actualMealName,  // Use actual meal name
+            dishGeneral,     // Use cuisine type or fallback
+            criteria,
+            mealData.location?.city || mealData.city,
+            [] // Previous challenges - can be loaded if needed
+          );
+          
+          // Store the promise immediately
+          (global as any).pendingChallengePromise = challengePromise;
+          
+          // Also store the result when it completes
+          challengePromise.then(challenge => {
+            if (challenge) {
+              console.log("🍽️ Background challenge generated:", challenge.recommended_dish_name);
+              // Store the completed challenge
+              (global as any).pendingChallenge = challenge;
+            }
+          }).catch(error => {
+            console.error("🍽️ Background challenge generation failed:", error);
+            // Clear the promise on error
+            (global as any).pendingChallengePromise = null;
+          });
         });
       });
     }
@@ -1564,7 +1596,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.criteriaLoadingContainer}>
-          <ActivityIndicator size="large" color="#2C5530" />
+          <ActivityIndicator size="large" color="#1a2b49" />
           <Text style={styles.criteriaLoadingText}>Loading your meal data...</Text>
         </View>
       </SafeAreaView>
@@ -1586,15 +1618,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
 
-        {/* Loading screen when rating statements aren't loaded yet */}
-        {(!ratingStatementsResult || !ratingStatementsResult.rating_statements) && (
-          <View style={styles.criteriaLoadingContainer}>
-            <ActivityIndicator size="large" color="#2C5530" />
-            <Text style={styles.criteriaLoadingText}>Getting specific things to look for in your meal!</Text>
-          </View>
-        )}
-
-        {/* Pixel Art Emoji - Now displayed above statements */}
+        {/* Pixel Art Emoji - ALWAYS stays on top */}
         <View style={styles.pixelArtContainer}>
           {pixelArtUrl ? (
             <Image 
@@ -1611,13 +1635,21 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             />
           ) : (
             <View style={styles.pixelArtLoadingContainer}>
-              <ActivityIndicator size="large" color="#001f3f" />
+              <ActivityIndicator size="large" color="#1a2b49" />
               <Text style={styles.pixelArtLoadingText}>
                 Stick around for your custom {meal || 'dish'} emoji
               </Text>
             </View>
           )}
         </View>
+
+        {/* Loading for taste tips only */}
+        {(!ratingStatementsResult || !ratingStatementsResult.rating_statements) && (
+          <View style={styles.criteriaLoadingContainer}>
+            <ActivityIndicator size="large" color="#1a2b49" />
+            <Text style={styles.criteriaLoadingText}>Loading taste tips</Text>
+          </View>
+        )}
 
         {/* Rating Statements Section - Main content */}
         {ratingStatementsResult && ratingStatementsResult.rating_statements && ratingStatementsResult.rating_statements.length > 0 && (
@@ -1713,6 +1745,14 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* Loading for beer/wine pairings - appears at bottom */}
+        {mealType === 'Restaurant' && restaurant && (!drinkPairingData || loadingPairings) && (
+          <View style={styles.criteriaLoadingContainer}>
+            <ActivityIndicator size="large" color="#1a2b49" />
+            <Text style={styles.criteriaLoadingText}>Loading beer/wine pairings</Text>
+          </View>
+        )}
+
         {/* Bottom Message */}
         <View style={styles.bottomMessageContainer}>
           <Text style={styles.bottomMessage}>Enjoy your meal!</Text>
@@ -1797,10 +1837,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   criteriaLoadingText: {
-    color: '#2C5530',
+    color: '#1a2b49',
     marginTop: 20,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '400',
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },

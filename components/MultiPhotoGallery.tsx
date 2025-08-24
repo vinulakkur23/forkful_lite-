@@ -26,6 +26,7 @@ interface MultiPhotoGalleryProps {
   onAddPhoto?: () => void;
   onRemovePhoto?: (index: number) => void;
   onSetFlagship?: (index: number) => void;
+  onPhotoPress?: (index: number, photo: PhotoItem) => void; // New prop for photo tap
   editable?: boolean;
   maxPhotos?: number;
   aspectRatio?: 'square' | 'wide'; // New prop to control aspect ratio
@@ -36,6 +37,7 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
   onAddPhoto,
   onRemovePhoto,
   onSetFlagship,
+  onPhotoPress,
   editable = false,
   maxPhotos = 5
 }) => {
@@ -161,11 +163,26 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
         style={styles.mainPhotoContainer}
         {...panResponder.panHandlers}
       >
-        <Image
-          source={{ uri: currentPhoto.url }}
-          style={styles.mainPhoto}
-          resizeMode="cover"
-        />
+        <TouchableOpacity 
+          onPress={() => onPhotoPress?.(selectedIndex, currentPhoto)}
+          activeOpacity={onPhotoPress ? 0.8 : 1}
+          style={styles.mainPhotoTouchable}
+        >
+          <Image
+            source={{ uri: currentPhoto.url }}
+            style={styles.mainPhoto}
+            resizeMode="cover"
+          />
+          
+          {/* Click to Crop and Edit overlay - only show if onPhotoPress is provided */}
+          {onPhotoPress && (
+            <View style={styles.editOverlay}>
+              <View style={styles.editOverlayBackground}>
+                <Text style={styles.editOverlayText}>Click to Crop and Edit</Text>
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
         
         {/* Flagship badge removed - users don't need to see this */}
 
@@ -268,6 +285,10 @@ const styles = StyleSheet.create({
     aspectRatio: 1, // Square aspect ratio
     position: 'relative',
   },
+  mainPhotoTouchable: {
+    width: '100%',
+    height: '100%',
+  },
   mainPhoto: {
     width: '100%',
     height: '100%',
@@ -365,6 +386,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 36,
   },
+  // Edit overlay styles
+  editOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  editOverlayBackground: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  editOverlayText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  }
 });
 
 export default MultiPhotoGallery;

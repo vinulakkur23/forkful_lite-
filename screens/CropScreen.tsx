@@ -173,7 +173,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         navigation.navigate('EditMeal', {
           mealId: existingMealId,
           meal: {}, // This will be refreshed by EditMealScreen
-          processedPhotoUri: finalImageUri
+          processedPhotoUri: finalImageUri,
+          editingPhotoIndex: route.params.editingPhotoIndex // Pass back the photo index if editing
         });
         
         return;

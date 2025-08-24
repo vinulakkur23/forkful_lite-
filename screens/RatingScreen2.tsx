@@ -43,8 +43,9 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 import { extractRatingStatements, RatingStatementsData } from '../services/ratingStatementsService';
 import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
-import { extractEnhancedMetadata, EnhancedMetadata } from '../services/enhancedMetadataService';
-import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
+// Enhanced metadata service removed - now handled by Cloud Functions
+// REMOVED: Facts service no longer used
+// import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 import Geolocation from '@react-native-community/geolocation';
 // Import Firebase for saving meal data
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
@@ -1092,70 +1093,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           logWithSession('Rating statements failed - skipping enhanced metadata');
           return null;
         }
-      }).then(async (metadata) => {
-        if (metadata) {
-          console.log('✅ Enhanced metadata completed:', metadata.dish_specific);
-          logWithSession(`Enhanced metadata completed: ${metadata.dish_specific}`);
-          
-          // Update the meal document with enhanced metadata
-          try {
-            const metadataUpdate = {
-              metadata_enriched: metadata,
-              metadata_updated_at: firestore.FieldValue.serverTimestamp()
-            };
-            
-            await firestore().collection('mealEntries').doc(mealId).update(metadataUpdate);
-            console.log('🎉 Enhanced metadata saved, starting facts extraction...');
-            logWithSession(`Enhanced metadata saved: ${metadata.dish_specific}`);
-            
-            // NOW start enhanced metadata facts extraction using enhanced metadata dish info
-            return extractEnhancedMetadataFacts(
-              freshPhoto.uri,
-              metadata.dish_specific,
-              metadata.dish_general, 
-              metadata.cuisine_type,
-              mealName,
-              restaurant,
-              location?.city // Pass the city from location data
-            );
-            
-          } catch (firestoreError) {
-            console.error('❌ Error saving enhanced metadata:', firestoreError);
-            logWithSession(`Enhanced metadata save error: ${firestoreError}`);
-            throw firestoreError;
-          }
-        } else {
-          console.warn('⚠️ Enhanced metadata returned null');
-          logWithSession('Enhanced metadata failed - skipping facts extraction');
-          return null;
-        }
-      }).then(async (factsData) => {
-        if (factsData) {
-          console.log('✅ Enhanced metadata facts completed');
-          logWithSession(`Enhanced metadata facts completed`);
-          
-          // Update the meal document with facts data
-          try {
-            const factsUpdate = {
-              enhanced_facts: factsData,
-              facts_updated_at: firestore.FieldValue.serverTimestamp()
-            };
-            
-            await firestore().collection('mealEntries').doc(mealId).update(factsUpdate);
-            console.log('🎉 All sequential API calls completed successfully');
-            logWithSession(`All metadata and facts extraction completed`);
-            
-          } catch (firestoreError) {
-            console.error('❌ Error saving enhanced facts:', firestoreError);
-            logWithSession(`Enhanced facts save error: ${firestoreError}`);
-          }
-        }
-      }).catch(error => {
-        console.error('🚨 RatingScreen2: Sequential API call failed:', error);
-        console.error('🚨 RatingScreen2: Error type:', typeof error);
-        console.error('🚨 RatingScreen2: Error stringified:', JSON.stringify(error));
-        console.error('🚨 RatingScreen2: Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
-        logWithSession(`Sequential API error: ${error}`);
+      // Enhanced metadata processing removed - now handled by Cloud Functions
       });
       
       // Handle pixel art generation in background
@@ -1245,22 +1183,21 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // API call completed synchronously above - no need for background call
       
-      // CLEAN APPROACH: Navigate with meal ID instead of all meal data
-      const cropNavParams = {
-        photo: freshPhoto,
+      // DIRECT APPROACH: Navigate straight to Result screen, skipping Crop/Edit
+      const resultParams = {
+        photo: freshPhoto, // Pass original unprocessed photo
         location: location ? {
           latitude: location.latitude,
           longitude: location.longitude,
           source: location.source
         } : null,
-        photoSource: route.params.photoSource || 'unknown',
-        // CLEAN: Pass meal ID instead of meal data - screens will load from Firestore
+        // CLEAN: Pass meal ID - ResultScreen will load data from Firestore
         mealId: mealId,
         _uniqueKey: sessionId
       };
       
-      // Navigating to Crop with cleaned params
-      navigation.navigate('Crop', cropNavParams);
+      // Navigating directly to Result screen
+      navigation.navigate('Result', resultParams);
     } catch (error) {
       logWithSession(`Error preparing image for Result screen: ${error}`);
       Alert.alert('Error', 'Failed to save rating. Please try again.');
@@ -1572,7 +1509,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             {isProcessing ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text style={styles.saveButtonText}>Crop and Edit</Text>
+              <Text style={styles.saveButtonText}>Save Meal</Text>
             )}
           </TouchableOpacity>
         </View>

@@ -599,6 +599,15 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         />
       </TouchableOpacity>
       
+      {/* Upload from Library button - top center */}
+      <TouchableOpacity style={styles.uploadButton} onPress={selectFromGallery}>
+        <Image 
+          source={require('../assets/icons/upload-inactive.png')} 
+          style={styles.uploadIcon}
+        />
+        <Text style={styles.uploadButtonText}>Upload from Library</Text>
+      </TouchableOpacity>
+
       <View style={styles.buttonContainer}>
         {/* Capture button */}
         <TouchableOpacity
@@ -807,6 +816,28 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#666',
     fontSize: 16,
+  },
+  uploadButton: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  uploadIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 8,
+    tintColor: 'white',
+  },
+  uploadButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   }
 });
 

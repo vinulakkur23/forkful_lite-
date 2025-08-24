@@ -224,6 +224,21 @@ export const hasActiveChallengeForDish = async (dishName: string): Promise<boole
 };
 
 /**
+ * Check if user has reached the maximum number of active challenges (6)
+ */
+export const hasReachedChallengeLimit = async (): Promise<boolean> => {
+  try {
+    const activeChallenges = await getActiveChallenges();
+    const challengeCount = activeChallenges.length;
+    console.log('UserChallengesService: User has', challengeCount, 'active challenges');
+    return challengeCount >= 6;
+  } catch (error) {
+    console.error('UserChallengesService: Error checking challenge limit:', error);
+    return false;
+  }
+};
+
+/**
  * Subscribe to real-time updates for user challenges
  */
 export const subscribeToUserChallenges = (

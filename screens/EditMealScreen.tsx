@@ -75,13 +75,17 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
-  // State for quick rating statements overlay
-  const [showQuickRatingsOverlay, setShowQuickRatingsOverlay] = useState<boolean>(false);
+  // State for quick rating statements inline expansion
+  const [showQuickRatingsExpansion, setShowQuickRatingsExpansion] = useState<boolean>(false);
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number }>({});
   const [currentStatementIndex, setCurrentStatementIndex] = useState<number>(0);
   const [pressedEmojiId, setPressedEmojiId] = useState<number | null>(null);
   const [showIngredientHistory, setShowIngredientHistory] = useState<boolean>(false);
   const [showRestaurantHistory, setShowRestaurantHistory] = useState<boolean>(false);
+  
+  // Double-click detection for emoji rating
+  const [lastClickTime, setLastClickTime] = useState<number>(0);
+  const [lastClickedRating, setLastClickedRating] = useState<number>(0);
   
   // State to track if facts are being loaded
   const [factsLoading, setFactsLoading] = useState<boolean>(false);
@@ -123,7 +127,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       
     } catch (error) {
       console.error('EditMealScreen - Error fetching fresh meal data:', error);
-      Alert.alert('Error', 'Failed to load meal data');
+      // Remove alert - this can happen when returning from deletion
+      console.log('Silenced error alert for meal data fetch');
     }
   };
 
@@ -205,11 +210,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       setPhotos([]);
     }
 
-    // Only reset overlay state when NOT from listener or when overlay is not active
+    // Only reset expansion state when NOT from listener or when expansion is not active
     // This prevents the listener from interfering with active quick rating sessions
-    if (!isFromListener || !showQuickRatingsOverlay) {
+    if (!isFromListener || !showQuickRatingsExpansion) {
       setCurrentStatementIndex(0);
-      setShowQuickRatingsOverlay(false);
+      setShowQuickRatingsExpansion(false);
       // Don't reset quickRatings here - they should persist from Firestore data loaded above
     }
   };
@@ -229,9 +234,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             if (documentSnapshot.exists) {
               const freshMealData = { id: documentSnapshot.id, ...documentSnapshot.data() };
               
-              // Skip processing if quick ratings overlay is active to prevent interference
-              if (showQuickRatingsOverlay) {
-                console.log('EditMealScreen - Skipping listener update while quick ratings overlay is active');
+              // Skip processing if quick ratings expansion is active to prevent interference
+              if (showQuickRatingsExpansion) {
+                console.log('EditMealScreen - Skipping listener update while quick ratings expansion is active');
                 return;
               }
               
@@ -260,31 +265,50 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         unsubscribe();
       }
     };
-  }, [mealId, showQuickRatingsOverlay]); // Added showQuickRatingsOverlay dependency
+  }, [mealId, showQuickRatingsExpansion]); // Added showQuickRatingsExpansion dependency
   
   // Handle processed photo returned from CropScreen
-  const handleProcessedPhotoReturn = useCallback(async (processedImageUri: string) => {
+  const handleProcessedPhotoReturn = useCallback(async (processedImageUri: string, editingPhotoIndex?: number) => {
     try {
       setUploadingPhoto(true);
       
       // Upload the processed photo to storage
       const downloadURL = await uploadPhotoToStorage(processedImageUri);
       
-      // Add to photos array
-      const newPhoto: PhotoItem = {
-        url: downloadURL,
-        isFlagship: photos.length === 0, // First photo becomes flagship
-        order: photos.length,
-        uploadedAt: new Date()
-      };
-      
-      setPhotos(prev => [...prev, newPhoto]);
-      
-      console.log('EditMealScreen: Added processed photo to meal:', downloadURL);
+      if (editingPhotoIndex !== undefined && editingPhotoIndex >= 0) {
+        // REPLACE existing photo at specific index
+        console.log('EditMealScreen: Replacing photo at index', editingPhotoIndex, 'with:', downloadURL);
+        
+        setPhotos(prev => {
+          const updatedPhotos = [...prev];
+          if (editingPhotoIndex < updatedPhotos.length) {
+            // Keep the same isFlagship status and order, just update URL and timestamp
+            updatedPhotos[editingPhotoIndex] = {
+              ...updatedPhotos[editingPhotoIndex],
+              url: downloadURL,
+              uploadedAt: new Date()
+            };
+          }
+          return updatedPhotos;
+        });
+        
+        console.log('EditMealScreen: Successfully replaced photo at index', editingPhotoIndex);
+      } else {
+        // ADD new photo (existing behavior)
+        const newPhoto: PhotoItem = {
+          url: downloadURL,
+          isFlagship: photos.length === 0, // First photo becomes flagship
+          order: photos.length,
+          uploadedAt: new Date()
+        };
+        
+        setPhotos(prev => [...prev, newPhoto]);
+        console.log('EditMealScreen: Added new processed photo to meal:', downloadURL);
+      }
       
     } catch (error) {
-      console.error('Error adding processed photo:', error);
-      Alert.alert('Error', 'Failed to add photo. Please try again.');
+      console.error('Error processing photo:', error);
+      Alert.alert('Error', 'Failed to process photo. Please try again.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -297,10 +321,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       const params = route.params as any;
       if (params?.processedPhotoUri) {
         console.log('EditMealScreen: Received processed photo from CropScreen:', params.processedPhotoUri);
-        handleProcessedPhotoReturn(params.processedPhotoUri);
+        console.log('EditMealScreen: Editing photo index:', params.editingPhotoIndex);
+        handleProcessedPhotoReturn(params.processedPhotoUri, params.editingPhotoIndex);
         
-        // Clear the parameter to prevent reprocessing
-        navigation.setParams({ processedPhotoUri: undefined });
+        // Clear the parameters to prevent reprocessing
+        navigation.setParams({ 
+          processedPhotoUri: undefined,
+          editingPhotoIndex: undefined 
+        });
       }
     });
 
@@ -375,15 +403,32 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleRating = (selectedRating: number): void => {
     Keyboard.dismiss();
-    setRating(selectedRating);
+    
+    const currentTime = Date.now();
+    const timeDiff = currentTime - lastClickTime;
+    
+    // Check for double-click (within 500ms and same rating)
+    if (timeDiff < 500 && selectedRating === lastClickedRating && selectedRating === rating) {
+      console.log('EditMealScreen - Double-click detected, opening quick ratings expansion');
+      handleOpenQuickRatings();
+    } else {
+      // Single click - just set the rating
+      setRating(selectedRating);
+    }
+    
+    // Update click tracking
+    setLastClickTime(currentTime);
+    setLastClickedRating(selectedRating);
   };
 
   // Handle quick ratings overlay
   const handleOpenQuickRatings = (): void => {
     Keyboard.dismiss();
-    if (meal.quick_criteria_result?.rating_statements && meal.quick_criteria_result.rating_statements.length > 0) {
-      const statements = meal.quick_criteria_result.rating_statements;
-      
+    
+    // Get statements from either new or old data structure
+    const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+    
+    if (statements && statements.length > 0) {
       // Find the first unrated statement
       let nextUnratedIndex = 0;
       for (let i = 0; i < statements.length; i++) {
@@ -395,21 +440,22 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       
       console.log('EditMealScreen - Opening quick ratings at index:', nextUnratedIndex, 'Total rated:', Object.keys(quickRatings).length);
       setCurrentStatementIndex(nextUnratedIndex);
-      setShowQuickRatingsOverlay(true);
+      setShowQuickRatingsExpansion(true);
     } else {
       Alert.alert('No Rating Statements', 'No rating statements are available for this meal.');
     }
   };
 
   const handleQuickRating = async (rating: number): Promise<void> => {
-    if (!meal.quick_criteria_result?.rating_statements) return;
+    // Get statements from either new or old data structure
+    const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+    if (!statements) return;
     
     // Show press feedback briefly
     setPressedEmojiId(rating);
     
     // Brief delay to show the press feedback
     setTimeout(async () => {
-      const statements = meal.quick_criteria_result.rating_statements;
       const currentStatement = statements[currentStatementIndex];
       
       // Save the rating for this statement
@@ -437,12 +483,12 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         setCurrentStatementIndex(currentStatementIndex + 1);
       } else {
         // All statements rated, show ingredient history if available
-        if (meal.enhanced_facts?.food_facts?.ingredient_history) {
-          setShowQuickRatingsOverlay(false);
+        if (meal.dish_insights?.restaurant_fact || meal.enhanced_facts?.food_facts?.ingredient_history) {
+          setShowQuickRatingsExpansion(false);
           setShowIngredientHistory(true);
         } else {
           // No ingredient history, just close
-          setShowQuickRatingsOverlay(false);
+          setShowQuickRatingsExpansion(false);
           setCurrentStatementIndex(0);
         }
       }
@@ -450,7 +496,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleCloseQuickRatings = (): void => {
-    setShowQuickRatingsOverlay(false);
+    setShowQuickRatingsExpansion(false);
     setCurrentStatementIndex(0);
   };
 
@@ -670,6 +716,61 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
+  const handlePhotoPress = async (index: number, photo: PhotoItem) => {
+    console.log('Photo pressed:', index, photo.url);
+    
+    try {
+      setUploadingPhoto(true);
+      
+      // Download the Firebase Storage image to local device first
+      console.log('Downloading image for cropping:', photo.url);
+      
+      // Use ImageResizer to download and create a local copy
+      const localImage = await ImageResizer.createResizedImage(
+        photo.url,
+        2000, // Max width - keep high resolution for editing
+        2000, // Max height
+        'JPEG',
+        100,  // Full quality
+        0,    // No rotation
+        undefined, // Let it generate temp path
+        false, // Don't keep metadata (can cause issues)
+        {
+          mode: 'contain',
+          onlyScaleDown: false // Allow downloading
+        }
+      );
+      
+      console.log('Image downloaded to local path:', localImage.uri);
+      
+      // Navigate directly to CropScreen with local file path
+      navigation.navigate('Crop', {
+        photo: {
+          uri: localImage.uri, // Use local file path
+          width: localImage.width,
+          height: localImage.height,
+          originalUri: photo.url, // Keep reference to original
+          fromGallery: true
+        },
+        location: null,
+        photoSource: 'edit',
+        _navigationKey: `edit_photo_${Date.now()}`,
+        // Parameters to indicate this is editing an existing meal photo
+        isAddingToExistingMeal: true,
+        existingMealId: mealId,
+        returnToEditMeal: true,
+        // Pass the photo index to replace instead of add
+        editingPhotoIndex: index
+      });
+      
+    } catch (error) {
+      console.error('Error downloading image for crop:', error);
+      Alert.alert('Error', 'Failed to download image for editing. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleRemovePhoto = (index: number) => {
     const photoToRemove = photos[index];
     
@@ -753,6 +854,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       const hasExistingChallenge = await hasActiveChallengeForDish(dishSpecific);
       if (hasExistingChallenge) {
         console.log('EditMealScreen: User already has an active challenge for this dish');
+        return;
+      }
+
+      // Check if user has reached the maximum number of active challenges (6)
+      const { hasReachedChallengeLimit } = await import('../services/userChallengesService');
+      const reachedLimit = await hasReachedChallengeLimit();
+      if (reachedLimit) {
+        console.log('EditMealScreen: User has reached the maximum number of challenges (6), skipping challenge generation');
         return;
       }
 
@@ -997,7 +1106,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       handlePendingChallenge();
 
       // Show restaurant history overlay or go to meal detail
-      if (meal.enhanced_facts?.food_facts?.restaurant_history) {
+      if (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) {
         setShowRestaurantHistory(true);
       } else {
         // No restaurant history, go straight to meal detail
@@ -1063,6 +1172,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             onAddPhoto={handleAddPhoto}
             onRemovePhoto={handleRemovePhoto}
             onSetFlagship={handleSetFlagship}
+            onPhotoPress={handlePhotoPress}
             editable={true}
             maxPhotos={5}
           />
@@ -1076,35 +1186,56 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* Meal details */}
         <View style={styles.detailsCard}>
-          <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
-
-          {meal.restaurant && (
-            <View style={styles.infoRow}>
-              <Image
-                source={require('../assets/icons/restaurant-icon.png')}
-                style={styles.restaurantIcon}
-              />
-              <Text style={styles.restaurantName}>{meal.restaurant}</Text>
-            </View>
-          )}
-
-          {/* Overall Rating Section */}
+          {/* Rating Section - shows either main rating or detailed expansion */}
           <View style={styles.ratingSection}>
-            <Text style={styles.sectionTitle}>Overall Rating:</Text>
-            <EmojiRating 
-              rating={rating} 
-              onRatingChange={handleRating}
-              size={40}
-              style={styles.interactiveRating}
-            />
-            
-            {/* Rating Description */}
-            {rating > 0 && (
-              <View style={styles.ratingDescriptionContainer}>
-                <Text style={styles.ratingDescription}>
-                  {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
-                </Text>
-              </View>
+            {!showQuickRatingsExpansion ? (
+              // Main Rating Mode
+              <>
+                <View style={styles.sectionTitleContainer}>
+                  <Text style={styles.sectionTitle}>Rate Your Meal!</Text>
+                  <Text style={styles.sectionSubtitle}>(double click emoji for more)</Text>
+                </View>
+                <EmojiRating 
+                  rating={rating} 
+                  onRatingChange={handleRating}
+                  size={40}
+                  style={styles.interactiveRating}
+                />
+                
+                {/* Rating Description */}
+                {rating > 0 && (
+                  <View style={styles.ratingDescriptionContainer}>
+                    <Text style={styles.ratingDescription}>
+                      {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              // Detailed Rating Mode - same styling as main rating
+              (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
+                <>
+                  <Text style={styles.ratingStatementText}>
+                    {renderTextWithBold(
+                      (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''
+                    )}
+                  </Text>
+                  <EmojiRating 
+                    rating={quickRatings[(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''] || 0}
+                    onRatingChange={handleQuickRating}
+                    size={40}
+                    style={styles.interactiveRating}
+                    maxEmojis={3}
+                  />
+                  
+                  {/* Progress indicator in same style as rating description */}
+                  <View style={styles.ratingDescriptionContainer}>
+                    <Text style={styles.ratingDescription}>
+                      {currentStatementIndex + 1} of {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0}
+                    </Text>
+                  </View>
+                </>
+              )
             )}
           </View>
 
@@ -1127,23 +1258,16 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             </Text>
           </View>
 
-          {/* Dish Specific Ratings Button */}
-          {meal.quick_criteria_result?.rating_statements && meal.quick_criteria_result.rating_statements.length > 0 && (
-            <View style={styles.quickRatingsSection}>
-              <TouchableOpacity style={styles.quickRatingsButton} onPress={handleOpenQuickRatings}>
-                <Text style={styles.quickRatingsButtonText}>Click to Rate More!</Text>
-                <Text style={styles.quickRatingsCount}>
-                  {Object.keys(quickRatings).length}/{meal.quick_criteria_result.rating_statements.length}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
           {/* Dish City History */}
-          {meal.enhanced_facts?.food_facts?.dish_city_history && (
+          {(meal.dish_insights?.cultural_insight || meal.enhanced_facts?.food_facts?.dish_city_history) && (
             <View style={styles.cityHistorySection}>
               <Text style={styles.cityHistoryTitle}>Fun Fact!</Text>
               <Text style={styles.cityHistoryText}>
-                {renderTextWithBold(meal.enhanced_facts.food_facts.dish_city_history)}
+                {renderTextWithBold(
+                  meal.dish_insights?.cultural_insight || 
+                  meal.enhanced_facts?.food_facts?.dish_city_history || 
+                  'Delicious!'
+                )}
               </Text>
             </View>
           )}
@@ -1168,59 +1292,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* Quick Ratings Overlay */}
-      {showQuickRatingsOverlay && meal.quick_criteria_result?.rating_statements && (
-        <View style={styles.overlayContainer}>
-          <View style={styles.overlayContent}>
-            <View style={styles.overlayHeader}>
-              <TouchableOpacity onPress={handleCloseQuickRatings} style={styles.overlayCloseButton}>
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.statementContainer}>
-              <Text style={styles.statementText}>
-                {renderTextWithBold(meal.quick_criteria_result.rating_statements[currentStatementIndex])}
-              </Text>
-            </View>
-            
-            <View style={styles.overlayEmojiContainer}>
-              <View style={styles.customEmojiRating}>
-                {[
-                  { id: 1, name: 'bad', active: require('../assets/emojis/emoji-bad-inactive.png'), inactive: require('../assets/emojis/emoji-bad-active.png') },
-                  { id: 2, name: 'ok', active: require('../assets/emojis/emoji-ok-inactive.png'), inactive: require('../assets/emojis/emoji-ok-active.png') },
-                  { id: 3, name: 'good', active: require('../assets/emojis/emoji-good-inactive.png'), inactive: require('../assets/emojis/emoji-good-active.png') },
-                  { id: 4, name: 'great', active: require('../assets/emojis/emoji-great-inactive.png'), inactive: require('../assets/emojis/emoji-great-active.png') },
-                  { id: 5, name: 'amazing', active: require('../assets/emojis/emoji-amazing-inactive.png'), inactive: require('../assets/emojis/emoji-amazing-active.png') },
-                  { id: 6, name: 'thebest', active: require('../assets/emojis/emoji-thebest-inactive.png'), inactive: require('../assets/emojis/emoji-thebest-active.png') },
-                ].map((emoji) => (
-                  <TouchableOpacity
-                    key={emoji.id}
-                    onPress={() => handleQuickRating(emoji.id)}
-                    style={styles.overlayEmojiButton}
-                    activeOpacity={0.7}
-                  >
-                    <Image
-                      source={pressedEmojiId === emoji.id ? emoji.inactive : emoji.active}
-                      style={styles.overlayEmojiImage}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            
-            <View style={styles.overlayProgress}>
-              <Text style={styles.progressText}>
-                {currentStatementIndex + 1} of {meal.quick_criteria_result.rating_statements.length}
-              </Text>
-            </View>
-          </View>
-        </View>
-      )}
 
       {/* Ingredient History Overlay */}
-      {showIngredientHistory && meal.enhanced_facts?.food_facts?.ingredient_history && (
+      {showIngredientHistory && (meal.dish_insights?.restaurant_fact || meal.enhanced_facts?.food_facts?.ingredient_history) && (
         <View style={styles.overlayContainer}>
           <View style={styles.overlayContent}>
             <View style={styles.overlayHeader}>
@@ -1232,7 +1306,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.factContainer}>
               <Text style={styles.factTitle}>Fun Fact!</Text>
               <Text style={styles.factText}>
-                {renderTextWithBold(meal.enhanced_facts.food_facts.ingredient_history)}
+                {renderTextWithBold(
+                  meal.dish_insights?.restaurant_fact || 
+                  meal.enhanced_facts?.food_facts?.ingredient_history || 
+                  'Great choice!'
+                )}
               </Text>
             </View>
           </View>
@@ -1240,7 +1318,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       )}
 
       {/* Restaurant History Success Overlay */}
-      {showRestaurantHistory && meal.enhanced_facts?.food_facts?.restaurant_history && (
+      {showRestaurantHistory && (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) && (
         <View style={styles.overlayContainer}>
           <View style={styles.overlayContent}>
             <View style={styles.overlayHeader}>
@@ -1253,7 +1331,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.successTitle}>Your Meal has been Saved!</Text>
               <Text style={styles.factTitle}>Fun Fact!</Text>
               <Text style={styles.factText}>
-                {renderTextWithBold(meal.enhanced_facts.food_facts.restaurant_history)}
+                {renderTextWithBold(
+                  meal.dish_insights?.dish_history || 
+                  meal.enhanced_facts?.food_facts?.restaurant_history || 
+                  'Enjoy your meal!'
+                )}
               </Text>
             </View>
           </View>
@@ -1366,30 +1448,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  mealName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  restaurantIcon: {
-    width: 18,
-    height: 18,
-    tintColor: '#666',
-    resizeMode: 'contain',
-    marginRight: 8,
-  },
-  restaurantName: {
-    fontSize: 16,
-    fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
   ratingSection: {
     marginBottom: 20,
   },
@@ -1399,16 +1457,27 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18, // Increased from 16 to 18 for larger font
     fontWeight: '600',
-    marginBottom: 10, // Increased from 4 to 10 for better spacing
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10, // Total spacing for both title and subtitle
+  },
+  ratingStatementText: {
+    fontSize: 15, // Font size for rating statements
+    fontWeight: '400', // Reduced font weight
+    marginBottom: 10,
     color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   sectionSubtitle: {
     fontSize: 12,
     color: '#1a2b49',
-    marginBottom: 10,
     fontStyle: 'italic',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginLeft: 8, // Space from the main title
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -1495,37 +1564,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  // Quick Ratings Button Styles
-  quickRatingsSection: {
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  quickRatingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#1a2b49',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginHorizontal: 20,
-  },
-  quickRatingsButtonText: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  quickRatingsCount: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
   // Overlay Styles
   overlayContainer: {
     position: 'absolute',
@@ -1541,7 +1579,9 @@ const styles = StyleSheet.create({
   overlayContent: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
     marginHorizontal: 12,
     maxWidth: '95%',
     minWidth: '80%',
@@ -1572,35 +1612,15 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  overlayEmojiContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   customEmojiRating: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 10,
   },
-  overlayEmojiButton: {
-    marginHorizontal: 8,
-    padding: 4,
-  },
-  overlayEmojiImage: {
-    width: 32,
-    height: 32,
-  },
   boldText: {
     fontWeight: 'bold',
     color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  overlayProgress: {
-    alignItems: 'center',
-  },
-  progressText: {
-    fontSize: 14,
-    color: '#666',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // City History Styles
@@ -1656,7 +1676,16 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  // Simple inline close button styles
+  inlineCloseButton: {
+    // No additional styling needed - uses text styling
+  },
+  inlineCloseText: {
+    color: '#1a2b49',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
 

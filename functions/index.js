@@ -6,6 +6,7 @@ const {getFirestore} = require('firebase-admin/firestore');
 const {getStorage} = require('firebase-admin/storage');
 const sharp = require('sharp');
 const fetch = require('node-fetch');
+const FormData = require('form-data');
 
 // Initialize Firebase Admin
 initializeApp();
@@ -408,159 +409,159 @@ const normalizeCityName = (city) => {
   return city.trim().toLowerCase().replace(/\s+/g, '-');
 };
 
-// Monitor user updates to detect new cities
-exports.detectNewCities = onDocumentUpdated('users/{userId}', async (event) => {
-  const before = event.data.before.data();
-  const after = event.data.after.data();
-  
-  // Check if uniqueCities was updated
-  const beforeCities = before.uniqueCities || [];
-  const afterCities = after.uniqueCities || [];
-  
-  // Find new cities
-  const newCities = afterCities.filter(city => !beforeCities.includes(city));
-  
-  if (newCities.length > 0) {
-    console.log(`Found ${newCities.length} new cities for user ${event.params.userId}:`, newCities);
-    
-    // Check each new city and generate image if needed
-    for (const city of newCities) {
-      const normalizedCity = normalizeCityName(city);
-      if (!normalizedCity) continue;
-      
-      try {
-        // Check if city already has a completed image
-        const cityDoc = await db.collection('cityImages').doc(normalizedCity).get();
-        
-        if (cityDoc.exists) {
-          const cityData = cityDoc.data();
-          if (cityData.status === 'completed' && cityData.imageUrl) {
-            console.log(`City ${city} already has an image, skipping generation`);
-            continue;
-          }
-          // If it exists but isn't completed, we'll regenerate it
-          console.log(`City ${city} exists but needs image generation (status: ${cityData.status})`);
-        }
-        
-        // Generate image immediately
-        console.log(`Generating image for new city: ${city}`);
-        
-        // First, create or update the document to mark it as in progress
-        await db.collection('cityImages').doc(normalizedCity).set({
-          originalName: city,
-          normalizedName: normalizedCity,
-          status: 'generating',
-          requestedAt: new Date(),
-          requestedBy: event.params.userId
-        });
-        
-        // Call our backend to generate the actual image
-        const imageResponse = await fetch('https://dishitout-imageinhancer.onrender.com/city-image/generate-image', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: `city_name=${encodeURIComponent(city)}`
-        });
-        
-        if (!imageResponse.ok) {
-          throw new Error(`Image generation failed: ${imageResponse.status}`);
-        }
-        
-        const imageData = await imageResponse.json();
-        
-        // Download and store the image permanently in Firebase Storage
-        let permanentImageUrl = null;
-        
-        if (imageData.image_url) {
-          try {
-            console.log(`Downloading image for ${city} from DALL-E...`);
-            
-            // Download the image from DALL-E's temporary URL
-            const imageDownloadResponse = await fetch(imageData.image_url);
-            if (!imageDownloadResponse.ok) {
-              throw new Error(`Failed to download image: ${imageDownloadResponse.status}`);
-            }
-            
-            const imageBuffer = await imageDownloadResponse.arrayBuffer();
-            
-            // Resize image to 350x350 using Sharp for faster loading
-            const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
-              .resize(350, 350, {
-                fit: 'cover',
-                position: 'center'
-              })
-              .png()
-              .toBuffer();
-            
-            // Create a file reference in Firebase Storage
-            const fileName = `city-images/${normalizedCity}-${Date.now()}.png`;
-            const file = bucket.file(fileName);
-            
-            // Upload the resized image to Firebase Storage
-            await file.save(resizedImageBuffer, {
-              metadata: {
-                contentType: 'image/png',
-                metadata: {
-                  city: city,
-                  normalizedCity: normalizedCity,
-                  generator: 'dall-e-3',
-                  generatedAt: new Date().toISOString()
-                }
-              }
-            });
-            
-            // Make the file publicly accessible
-            await file.makePublic();
-            
-            // Get the permanent public URL
-            permanentImageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-            console.log(`✅ Uploaded image to Firebase Storage: ${permanentImageUrl}`);
-            
-          } catch (uploadError) {
-            console.error(`❌ Error uploading image to Firebase Storage: ${uploadError}`);
-            // Fallback to temporary URL if upload fails
-            permanentImageUrl = imageData.image_url;
-          }
-        }
-        
-        // Update city document with image data
-        await db.collection('cityImages').doc(normalizedCity).set({
-          originalName: city,
-          normalizedName: normalizedCity,
-          status: 'completed',
-          imageUrl: permanentImageUrl || imageData.image_data,
-          temporaryUrl: imageData.image_url, // Keep the original URL for reference
-          prompt: imageData.prompt,
-          revisedPrompt: imageData.revised_prompt,
-          generator: imageData.generator || 'dall-e-3',
-          imageFormat: 'png',
-          width: 350,
-          height: 350,
-          generatedAt: new Date(),
-          requestedBy: event.params.userId
-        });
-        
-        console.log(`✅ Successfully generated image for ${city}`);
-        
-      } catch (error) {
-        console.error(`❌ Error generating image for city ${city}:`, error);
-        
-        // Mark as failed in the database
-        await db.collection('cityImages').doc(normalizedCity).set({
-          originalName: city,
-          normalizedName: normalizedCity,
-          status: 'failed',
-          error: error.message,
-          failedAt: new Date(),
-          requestedBy: event.params.userId
-        });
-      }
-    }
-  }
-  
-  return null;
-});
+// Monitor user updates to detect new cities - TEMPORARILY DISABLED due to Python backend syntax error
+// // exports.detectNewCities = onDocumentUpdated('users/{userId}', async (event) => {
+//   const before = event.data.before.data();
+//   const after = event.data.after.data();
+//   
+//   // Check if uniqueCities was updated
+//   const beforeCities = before.uniqueCities || [];
+//   const afterCities = after.uniqueCities || [];
+//   
+//   // Find new cities
+//   const newCities = afterCities.filter(city => !beforeCities.includes(city));
+//   
+//   if (newCities.length > 0) {
+//     console.log(`Found ${newCities.length} new cities for user ${event.params.userId}:`, newCities);
+//     
+//     // Check each new city and generate image if needed
+//     for (const city of newCities) {
+//       const normalizedCity = normalizeCityName(city);
+//       if (!normalizedCity) continue;
+//       
+//       try {
+//         // Check if city already has a completed image
+//         const cityDoc = await db.collection('cityImages').doc(normalizedCity).get();
+//         
+//         if (cityDoc.exists) {
+//           const cityData = cityDoc.data();
+//           if (cityData.status === 'completed' && cityData.imageUrl) {
+//             console.log(`City ${city} already has an image, skipping generation`);
+//             continue;
+//           }
+//           // If it exists but isn't completed, we'll regenerate it
+//           console.log(`City ${city} exists but needs image generation (status: ${cityData.status})`);
+//         }
+//         
+//         // Generate image immediately
+//         console.log(`Generating image for new city: ${city}`);
+//         
+//         // First, create or update the document to mark it as in progress
+//         await db.collection('cityImages').doc(normalizedCity).set({
+//           originalName: city,
+//           normalizedName: normalizedCity,
+//           status: 'generating',
+//           requestedAt: new Date(),
+//           requestedBy: event.params.userId
+//         });
+//         
+//         // Call our backend to generate the actual image
+//         const imageResponse = await fetch('https://dishitout-imageinhancer.onrender.com/city-image/generate-image', {
+//           method: 'POST',
+//           headers: {
+//             'Content-Type': 'application/x-www-form-urlencoded',
+//           },
+//           body: `city_name=${encodeURIComponent(city)}`
+//         });
+//         
+//         if (!imageResponse.ok) {
+//           throw new Error(`Image generation failed: ${imageResponse.status}`);
+//         }
+//         
+//         const imageData = await imageResponse.json();
+//         
+//         // Download and store the image permanently in Firebase Storage
+//         let permanentImageUrl = null;
+//         
+//         if (imageData.image_url) {
+//           try {
+//             console.log(`Downloading image for ${city} from DALL-E...`);
+//             
+//             // Download the image from DALL-E's temporary URL
+//             const imageDownloadResponse = await fetch(imageData.image_url);
+//             if (!imageDownloadResponse.ok) {
+//               throw new Error(`Failed to download image: ${imageDownloadResponse.status}`);
+//             }
+//             
+//             const imageBuffer = await imageDownloadResponse.arrayBuffer();
+//             
+//             // Resize image to 350x350 using Sharp for faster loading
+//             const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
+//               .resize(350, 350, {
+//                 fit: 'cover',
+//                 position: 'center'
+//               })
+//               .png()
+//               .toBuffer();
+//             
+//             // Create a file reference in Firebase Storage
+//             const fileName = `city-images/${normalizedCity}-${Date.now()}.png`;
+//             const file = bucket.file(fileName);
+//             
+//             // Upload the resized image to Firebase Storage
+//             await file.save(resizedImageBuffer, {
+//               metadata: {
+//                 contentType: 'image/png',
+//                 metadata: {
+//                   city: city,
+//                   normalizedCity: normalizedCity,
+//                   generator: 'dall-e-3',
+//                   generatedAt: new Date().toISOString()
+//                 }
+//               }
+//             });
+//             
+//             // Make the file publicly accessible
+//             await file.makePublic();
+//             
+//             // Get the permanent public URL
+//             permanentImageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+//             console.log(`✅ Uploaded image to Firebase Storage: ${permanentImageUrl}`);
+//             
+//           } catch (uploadError) {
+//             console.error(`❌ Error uploading image to Firebase Storage: ${uploadError}`);
+//             // Fallback to temporary URL if upload fails
+//             permanentImageUrl = imageData.image_url;
+//           }
+//         }
+//         
+//         // Update city document with image data
+//         await db.collection('cityImages').doc(normalizedCity).set({
+//           originalName: city,
+//           normalizedName: normalizedCity,
+//           status: 'completed',
+//           imageUrl: permanentImageUrl || imageData.image_data,
+//           temporaryUrl: imageData.image_url, // Keep the original URL for reference
+//           prompt: imageData.prompt,
+//           revisedPrompt: imageData.revised_prompt,
+//           generator: imageData.generator || 'dall-e-3',
+//           imageFormat: 'png',
+//           width: 350,
+//           height: 350,
+//           generatedAt: new Date(),
+//           requestedBy: event.params.userId
+//         });
+//         
+//         console.log(`✅ Successfully generated image for ${city}`);
+//         
+//       } catch (error) {
+//         console.error(`❌ Error generating image for city ${city}:`, error);
+//         
+//         // Mark as failed in the database
+//         await db.collection('cityImages').doc(normalizedCity).set({
+//           originalName: city,
+//           normalizedName: normalizedCity,
+//           status: 'failed',
+//           error: error.message,
+//           failedAt: new Date(),
+//           requestedBy: event.params.userId
+//         });
+//       }
+//     }
+//   }
+//   
+//   return null;
+// });
 
 // Manual function to generate city images
 exports.generateCityImages = onRequest(async (req, res) => {
@@ -1070,5 +1071,292 @@ exports.compressImages = onRequest(async (req, res) => {
   } catch (error) {
     console.error('Error in image compression:', error);
     res.status(500).json({error: `Failed to compress images: ${error.message}`});
+  }
+});
+
+// Enhanced Metadata Processing - Scheduled to run 3 times daily
+exports.processEnhancedMetadata = onSchedule('0 2,10,18 * * *', async (event) => {
+  console.log('Starting enhanced metadata processing...');
+  
+  try {
+    // Query for meals without enhanced metadata (in batches to avoid memory issues)
+    const unprocessedMealsQuery = await db.collection('mealEntries')
+      .where('metadata_enriched', '==', null)
+      .limit(20) // Process 20 meals at a time to avoid timeouts
+      .get();
+
+    if (unprocessedMealsQuery.empty) {
+      console.log('No meals found needing enhanced metadata processing');
+      return null;
+    }
+
+    console.log(`Found ${unprocessedMealsQuery.docs.length} meals to process`);
+    
+    let processedCount = 0;
+    let errorCount = 0;
+    const results = [];
+
+    // Process each meal
+    for (const mealDoc of unprocessedMealsQuery.docs) {
+      const mealId = mealDoc.id;
+      const mealData = mealDoc.data();
+      
+      try {
+        console.log(`Processing enhanced metadata for meal: ${mealId}`);
+        
+        // Check if meal has imageUrl
+        if (!mealData.imageUrl) {
+          console.log(`Skipping meal ${mealId} - no image URL`);
+          continue;
+        }
+        
+        // Download and resize image from Firebase Storage
+        console.log(`Downloading image: ${mealData.imageUrl}`);
+        
+        const imageResponse = await fetch(mealData.imageUrl);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download image: ${imageResponse.status}`);
+        }
+        
+        const imageBuffer = await imageResponse.buffer();
+        
+        // Resize image to reduce API costs (same as your mobile app)
+        const resizedImageBuffer = await sharp(imageBuffer)
+          .resize(800, 600, {
+            fit: 'contain',
+            withoutEnlargement: true
+          })
+          .jpeg({
+            quality: 80
+          })
+          .toBuffer();
+          
+        console.log('Image downloaded and resized successfully');
+        
+        // Prepare form data for API call
+        const formData = new FormData();
+        formData.append('image', resizedImageBuffer, {
+          filename: 'meal_photo_downsized.jpg',
+          contentType: 'image/jpeg'
+        });
+        
+        // Add context if available
+        if (mealData.meal) {
+          formData.append('meal_name', mealData.meal);
+        }
+        if (mealData.restaurant) {
+          formData.append('restaurant_name', mealData.restaurant);
+        }
+        
+        console.log('Calling enhanced metadata API...');
+        
+        // Call your existing enhanced metadata API
+        const apiResponse = await fetch('https://dishitout-imageinhancer.onrender.com/extract-enhanced-metadata', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            ...formData.getHeaders(),
+          }
+        });
+        
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`API Error: ${apiResponse.status} - ${errorText}`);
+        }
+        
+        const apiResult = await apiResponse.json();
+        console.log('Enhanced metadata API response:', apiResult);
+        
+        if (apiResult.success && apiResult.metadata) {
+          // Save enhanced metadata to Firestore (same structure as your app)
+          await db.collection('mealEntries').doc(mealId).update({
+            metadata_enriched: apiResult.metadata,
+            metadata_updated_at: new Date()
+          });
+          
+          console.log(`✅ Successfully processed enhanced metadata for meal ${mealId}`);
+          processedCount++;
+          
+          results.push({
+            mealId,
+            status: 'success',
+            dishSpecific: apiResult.metadata.dish_specific,
+            cuisineType: apiResult.metadata.cuisine_type
+          });
+        } else {
+          throw new Error('API returned invalid response format');
+        }
+        
+      } catch (error) {
+        console.error(`❌ Error processing meal ${mealId}:`, error);
+        errorCount++;
+        
+        results.push({
+          mealId,
+          status: 'error',
+          error: error.message
+        });
+        
+        // Continue processing other meals
+        continue;
+      }
+      
+      // Small delay between API calls to be respectful
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const summary = {
+      totalFound: unprocessedMealsQuery.docs.length,
+      processed: processedCount,
+      errors: errorCount,
+      results: results
+    };
+    
+    console.log('Enhanced metadata processing completed:', summary);
+    return summary;
+    
+  } catch (error) {
+    console.error('Error in enhanced metadata processing:', error);
+    throw error;
+  }
+});
+
+// Manual trigger for enhanced metadata processing (for testing)
+exports.processEnhancedMetadataManual = onRequest(async (req, res) => {
+  console.log('Manual enhanced metadata processing triggered');
+  
+  try {
+    // Get specific meal ID if provided, or process batch
+    const mealId = req.query.mealId || req.body.mealId;
+    const batchSize = parseInt(req.query.batchSize || req.body.batchSize || '10');
+    
+    let queryRef;
+    
+    if (mealId) {
+      // Process specific meal
+      queryRef = await db.collection('mealEntries').doc(mealId).get();
+      if (!queryRef.exists) {
+        return res.status(404).json({ error: 'Meal not found' });
+      }
+    } else {
+      // Process batch of unprocessed meals
+      queryRef = await db.collection('mealEntries')
+        .where('metadata_enriched', '==', null)
+        .limit(batchSize)
+        .get();
+    }
+    
+    const mealsToProcess = mealId ? [queryRef] : queryRef.docs;
+    
+    if (mealsToProcess.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No meals found needing enhanced metadata processing',
+        processed: 0,
+        errors: 0
+      });
+    }
+    
+    console.log(`Processing ${mealsToProcess.length} meals manually`);
+    
+    let processedCount = 0;
+    let errorCount = 0;
+    const results = [];
+    
+    // Process each meal (similar logic to scheduled function)
+    for (const mealDoc of mealsToProcess) {
+      const docId = mealId || mealDoc.id;
+      const mealData = mealId ? mealDoc.data() : mealDoc.data();
+      
+      try {
+        console.log(`Manually processing meal: ${docId}`);
+        
+        if (!mealData.imageUrl) {
+          console.log(`Skipping meal ${docId} - no image URL`);
+          continue;
+        }
+        
+        // Same processing logic as scheduled function
+        const imageResponse = await fetch(mealData.imageUrl);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download image: ${imageResponse.status}`);
+        }
+        
+        const imageBuffer = await imageResponse.buffer();
+        const resizedImageBuffer = await sharp(imageBuffer)
+          .resize(800, 600, { fit: 'contain', withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+          
+        const formData = new FormData();
+        formData.append('image', resizedImageBuffer, {
+          filename: 'meal_photo_downsized.jpg',
+          contentType: 'image/jpeg'
+        });
+        
+        if (mealData.meal) formData.append('meal_name', mealData.meal);
+        if (mealData.restaurant) formData.append('restaurant_name', mealData.restaurant);
+        
+        const apiResponse = await fetch('https://dishitout-imageinhancer.onrender.com/extract-enhanced-metadata', {
+          method: 'POST',
+          body: formData,
+          headers: { ...formData.getHeaders() }
+        });
+        
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`API Error: ${apiResponse.status} - ${errorText}`);
+        }
+        
+        const apiResult = await apiResponse.json();
+        
+        if (apiResult.success && apiResult.metadata) {
+          await db.collection('mealEntries').doc(docId).update({
+            metadata_enriched: apiResult.metadata,
+            metadata_updated_at: new Date()
+          });
+          
+          console.log(`✅ Successfully processed meal ${docId}`);
+          processedCount++;
+          
+          results.push({
+            mealId: docId,
+            status: 'success',
+            dishSpecific: apiResult.metadata.dish_specific,
+            cuisineType: apiResult.metadata.cuisine_type
+          });
+        } else {
+          throw new Error('API returned invalid response format');
+        }
+        
+      } catch (error) {
+        console.error(`❌ Error processing meal ${docId}:`, error);
+        errorCount++;
+        results.push({
+          mealId: docId,
+          status: 'error',
+          error: error.message
+        });
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const summary = {
+      totalProcessed: mealsToProcess.length,
+      successful: processedCount,
+      errors: errorCount,
+      results: results
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      message: `Processed ${processedCount} meals successfully`
+    });
+    
+  } catch (error) {
+    console.error('Error in manual enhanced metadata processing:', error);
+    res.status(500).json({ error: error.message });
   }
 });

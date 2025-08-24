@@ -28,9 +28,6 @@ import MealDetailScreen from './screens/MealDetailScreen';
 import EditMealScreen from './screens/EditMealScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
-import * as ImagePicker from 'react-native-image-picker';
-import Geolocation from '@react-native-community/geolocation';
-import { Alert } from 'react-native';
 
 // Define the types for our navigation parameters
 export type RootStackParamList = {
@@ -250,7 +247,6 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
 const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
-  const [showPhotoMenu, setShowPhotoMenu] = useState(false);
   
   // Pre-load and cache all tab bar icons using React.useMemo
   const tabIcons = React.useMemo(() => ({
@@ -262,10 +258,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
       active: require('./assets/icons/camera-active.png'),
       inactive: require('./assets/icons/camera-inactive.png')
     },
-    upload: {
-      active: require('./assets/icons/upload-active.png'),
-      inactive: require('./assets/icons/upload-inactive.png')
-    },
     passport: {
       active: require('./assets/icons/passport-active.png'),
       inactive: require('./assets/icons/passport-inactive.png')
@@ -275,81 +267,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
     }
   }), []);
 
-  // Updated Image Picker function to use PhotoGPSModule
-    const openImagePicker = async () => {
-      try {
-        console.log("Opening gallery from tab bar using PhotoGPSModule");
-        
-        // Clear any previously cached data before selecting a new photo
-        if ((global as any).prefetchedSuggestions) {
-          console.log('!!! CLEARING PREVIOUS PREFETCHED SUGGESTIONS BEFORE NEW GALLERY SELECTION !!!');
-          (global as any).prefetchedSuggestions = null;
-          delete (global as any).prefetchedSuggestions;
-        }
-        if ((global as any).prefetchedPhotoUri) {
-          console.log('!!! CLEARING PREVIOUS PREFETCHED PHOTO URI !!!');
-          (global as any).prefetchedPhotoUri = null;
-          delete (global as any).prefetchedPhotoUri;
-        }
-        if ((global as any).currentPhotoUri) {
-          (global as any).currentPhotoUri = null;
-          delete (global as any).currentPhotoUri;
-        }
-        
-        // Use our enhanced photo library service that gets GPS metadata
-        const photoAsset = await getPhotoWithMetadata();
-        
-        if (!photoAsset) {
-          console.log("No photo selected or selection was cancelled");
-          return;
-        }
-        
-        console.log("Selected photo with metadata:", {
-          uri: photoAsset.uri,
-          hasLocation: !!photoAsset.location,
-          location: photoAsset.location,
-        });
-        
-        // Add a timestamp to create a unique navigation key
-        const timestamp = new Date().getTime();
-        const navigationKey = `gallery_photo_${timestamp}`;
-        
-        // Navigate directly to RatingScreen2 with the selected photo and location data
-        navigation.navigate('RatingScreen2', {
-          photo: {
-            uri: photoAsset.uri,
-            width: photoAsset.width,
-            height: photoAsset.height,
-            originalUri: photoAsset.originalUri,
-            fromGallery: true,
-            assetId: photoAsset.assetId,
-          },
-          location: photoAsset.location || null,
-          exifData: photoAsset.exifData,
-          _uniqueKey: navigationKey,
-          photoSource: 'gallery',
-          rating: 0,
-          likedComment: '',
-          dislikedComment: ''
-        });
-      } catch (error: any) {
-        console.error('Error selecting photo from gallery:', error);
-        Alert.alert(
-          "Gallery Error", 
-          `There was a problem accessing your photo library: ${error.message || 'Unknown error'}`
-        );
-      }
-    };
-
-    const openCamera = () => {
-      setShowPhotoMenu(false);
-      navigation.navigate('Camera');
-    };
-
-    const handleUploadPhoto = () => {
-      setShowPhotoMenu(false);
-      openImagePicker();
-    };
 
     const mainTabs = [
       { 
@@ -417,7 +334,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         {/* Center button - Add Photo */}
         <View style={styles.centerButtonContainer}>
           <TouchableOpacity
-            onPress={() => setShowPhotoMenu(true)}
+            onPress={() => navigation.navigate('Camera')}
             style={styles.centerButton}
             activeOpacity={0.9}
           >
@@ -461,40 +378,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         })()}
       </View>
       
-      {/* Photo selection menu */}
-      {showPhotoMenu && (
-        <TouchableOpacity 
-          style={styles.photoMenuOverlay} 
-          onPress={() => setShowPhotoMenu(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.photoMenuContainer}>
-            <TouchableOpacity
-              style={styles.photoMenuItem}
-              onPress={openCamera}
-              activeOpacity={0.8}
-            >
-              <Image 
-                source={tabIcons.camera.inactive} 
-                style={{ width: 32, height: 32 }}
-              />
-            </TouchableOpacity>
-            
-            <View style={styles.photoMenuDivider} />
-            
-            <TouchableOpacity
-              style={styles.photoMenuItem}
-              onPress={handleUploadPhoto}
-              activeOpacity={0.8}
-            >
-              <Image 
-                source={tabIcons.upload.inactive} 
-                style={{ width: 32, height: 32 }}
-              />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      )}
     </>
   );
 });
@@ -634,8 +517,6 @@ const App: React.FC = () => {
       require('./assets/icons/place-inactive.png'),
       require('./assets/icons/camera-active.png'),
       require('./assets/icons/camera-inactive.png'),
-      require('./assets/icons/upload-active.png'),
-      require('./assets/icons/upload-inactive.png'),
       require('./assets/icons/passport-active.png'),
       require('./assets/icons/passport-inactive.png'),
       // Preload rating stars too since they have disappearance issues
@@ -873,39 +754,6 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     lineHeight: 100,
     marginTop: -15,
-  },
-  photoMenuOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  photoMenuContainer: {
-    backgroundColor: 'white',
-    marginBottom: Platform.OS === 'ios' ? 95 : 85,
-    marginHorizontal: 'auto',
-    width: 80,
-    alignSelf: 'center',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  photoMenuItem: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-  },
-  photoMenuDivider: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginHorizontal: 8,
   },
   tabLabel: {
     fontSize: 11,

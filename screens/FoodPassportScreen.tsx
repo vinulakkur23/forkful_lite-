@@ -413,7 +413,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             console.error('Error fetching meal entries:', err);
             if (isMountedRef.current) {
                 setError(`Failed to load meals: ${err.message}`);
-                Alert.alert('Error', 'Failed to load your food passport entries');
+                // Remove alert when returning from deletion - just log the error
+                console.log('Silenced error alert for food passport entries');
             }
         } finally {
             if (isMountedRef.current) {
@@ -1229,7 +1230,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}> eating experience</Text>
                                             <Text>.</Text>
                                         </Text>
-                                        <Text style={styles.tryItOutText}>Try it out!</Text>
+                                        <Text style={styles.tryItOutText}>Capture or upload a meal you're eating!</Text>
                                         <Text style={styles.downArrow}>↓</Text>
                                     </>
                                 ) : (
@@ -1566,10 +1567,10 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     tryItOutText: {
-        fontSize: 16,
+        fontSize: 14,
         color: '#1a2b49', // Navy blue
         textAlign: 'center',
-        fontWeight: 'bold',
+        fontWeight: '400',
         marginTop: 100, // Move down from subtitle
         marginBottom: 0, // No gap with arrow
     },
