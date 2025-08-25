@@ -887,7 +887,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Generate the challenge (fallback mode)
       const challenge = await generateNextDishChallenge(
         dishSpecific,
-        dishGeneral,
         criteria,
         userCity,
         previousChallenges

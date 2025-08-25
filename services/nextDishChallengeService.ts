@@ -14,8 +14,7 @@ export interface DishChallenge {
   challenge_id: string;
   generated_timestamp: string;
   source_dish: {
-    dish_specific: string;
-    dish_general: string;
+    user_dish_name: string;
     criteria_count: number;
   };
   challenge_type: string;
@@ -54,21 +53,19 @@ export interface ChallengeCompletionResponse {
  * Uses the original combined service (text + image generation)
  */
 export const generateNextDishChallenge = async (
-  dishSpecific: string,
-  dishGeneral: string,
+  userDishName: string,
   dishCriteria: Array<{ title: string; description: string }>,
   userCity?: string,
   previousChallenges?: string[]
 ): Promise<DishChallenge | null> => {
   try {
-    console.log('NextDishChallengeService: Generating challenge for:', dishSpecific);
+    console.log('NextDishChallengeService: Generating challenge for:', userDishName);
     
     // Create FormData
     const formData = new FormData();
     
     // Add required fields
-    formData.append('dish_specific', dishSpecific);
-    formData.append('dish_general', dishGeneral);
+    formData.append('user_dish_name', userDishName);
     formData.append('dish_criteria', JSON.stringify(dishCriteria));
     
     // Add optional context

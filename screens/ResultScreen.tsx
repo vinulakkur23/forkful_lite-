@@ -93,9 +93,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const dishCriteria = mealData?.dish_criteria || null;
   const enhancedMetadata = mealData?.metadata_enriched || null;
   const combinedResult = mealData?.combined_result || null;
-  // NEW: Pixel art icon data (updated to use URL from Firebase Storage)
+  // NEW: Pixel art icon data (check both URL and base64 data)
   const pixelArtUrl = mealData?.pixel_art_url || null;
-  const pixelArtGenerated = mealData?.pixel_art_generated_at || null;
+  const pixelArtData = mealData?.pixel_art_data || null;
+  const pixelArtGenerated = mealData?.pixel_art_generated_at || mealData?.pixel_art_updated_at || null;
   // NEW: Restaurant pairing data from RatingScreen2 (already loaded)
   const firestoreDrinkPairings = mealData?.drink_pairings || null;
   const [saving, setSaving] = useState(false);
@@ -523,7 +524,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               // Generate and store challenge
               const challengePromise = generateNextDishChallenge(
                 actualMealName,
-                dishGeneral,
                 criteria,
                 mealData.location?.city || mealData.city,
                 [] // Previous challenges
@@ -610,7 +610,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
                   // Generate and store challenge
                   const challengePromise = generateNextDishChallenge(
                     actualMealName,
-                    dishGeneral,
                     criteria,
                     data.location?.city || data.city,
                     [] // Previous challenges
@@ -1583,7 +1582,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             // Store the promise so EditMealScreen can wait for it if needed
             const challengePromise = generateNextDishChallenge(
               actualMealName,  // Use actual meal name
-              dishGeneral,     // Use cuisine type or fallback
               criteria,
               mealData.location?.city || mealData.city,
               [] // Previous challenges - can be loaded if needed
@@ -1687,7 +1685,6 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           // Store the promise so EditMealScreen can wait for it if needed
           const challengePromise = generateNextDishChallenge(
             actualMealName,  // Use actual meal name
-            dishGeneral,     // Use cuisine type or fallback
             criteria,
             mealData.location?.city || mealData.city,
             [] // Previous challenges - can be loaded if needed
@@ -1754,13 +1751,13 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* Pixel Art Emoji - ALWAYS stays on top */}
         <View style={styles.pixelArtContainer}>
-          {pixelArtUrl ? (
+          {pixelArtUrl || pixelArtData ? (
             <Image 
-              source={{ uri: pixelArtUrl }} 
+              source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }} 
               style={styles.pixelArtEmojiLarge}
               resizeMode="contain"
               onError={(error) => {
-                console.error('❌ Pixel art failed to load');
+                console.error('❌ Pixel art failed to load from:', pixelArtUrl ? 'URL' : 'base64 data');
                 console.error('❌ Error:', JSON.stringify(error.nativeEvent));
               }}
               onLoad={() => {

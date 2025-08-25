@@ -110,9 +110,18 @@ const ChallengeNotification: React.FC<ChallengeNotificationProps> = ({
       </View>
       
       <View style={styles.textContainer}>
-        <Text style={styles.title}>New Challenge!</Text>
-        <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
-        <Text style={styles.description}>Try this {challenge.cuisine_type} dish next</Text>
+        {(challenge as any).justCompleted ? (
+          <>
+            <Text style={styles.completedTitle}>Challenge Complete!</Text>
+            <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
+            <Text style={styles.cheersText}>+ 5 Cheers</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.title}>We think you'd enjoy this dish next!</Text>
+            <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
+          </>
+        )}
       </View>
 
       <TouchableOpacity style={styles.closeButton} onPress={dismiss}>
@@ -145,8 +154,7 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10000,
     overflow: 'visible',
-    borderWidth: 2,
-    borderColor: '#e0e7ff',
+    borderWidth: 0,
   },
   iconContainer: {
     width: 80,
@@ -166,14 +174,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#ff6b6b',
     marginBottom: 3,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
+  completedTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ff6b6b', // Keep consistent with main app colors
+    marginBottom: 3,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  cheersText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a2b49', // Navy blue for the cheers reward
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   challengeName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1a2b49',
     marginBottom: 5,

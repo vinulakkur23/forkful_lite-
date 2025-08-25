@@ -21,7 +21,7 @@ import { clearAllUserData } from '../services/clearAllUserData';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import { FilterItem } from '../components/SimpleFilterComponent';
-import { getActiveChallenges, UserChallenge } from '../services/userChallengesService';
+import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge } from '../services/userChallengesService';
 
 const { width } = Dimensions.get('window');
 const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
@@ -65,7 +65,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [selectedPhoto, setSelectedPhoto] = useState<TopRatedPhoto | null>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(true);
-  const [activeChallenges, setActiveChallenges] = useState<UserChallenge[]>([]);
+  const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
   const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
@@ -102,7 +102,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     // DISABLED: Top rated photos and cities to reduce Firestore calls
     // loadTopRatedPhotos();
     // loadCities();
-    loadActiveChallenges();
+    loadAllChallenges();
     loadPixelArtEmojis();
   }, [userId]);
 
@@ -252,15 +252,22 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     setCities([]);
   };
 
-  const loadActiveChallenges = async () => {
+  const loadAllChallenges = async () => {
     try {
       setChallengesLoading(true);
       const targetUserId = userId || auth().currentUser?.uid;
-      console.log(`🍽️ Loading active challenges for user: ${targetUserId}`);
+      console.log(`🍽️ Loading all challenges for user: ${targetUserId}`);
       
-      const challenges = await getActiveChallenges();
-      console.log(`🍽️ Found ${challenges.length} active challenges`);
-      setActiveChallenges(challenges);
+      // Only show challenges if viewing own profile
+      const currentUserId = auth().currentUser?.uid;
+      if (targetUserId === currentUserId) {
+        const challenges = await getUserChallenges();
+        console.log(`🍽️ Found ${challenges.length} total challenges for own profile`);
+        setAllChallenges(challenges);
+      } else {
+        console.log(`🍽️ Not showing challenges for other user's profile`);
+        setAllChallenges([]);
+      }
     } catch (error) {
       console.error('Error loading challenges:', error);
     } finally {
@@ -276,21 +283,23 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       
       console.log(`🎨 Loading pixel art emojis for user: ${targetUserId}`);
       
-      // Query user's meals that have pixel art
+      // Query user's meals that have pixel art (check both URL and data fields)
       const mealsQuery = await firestore()
         .collection('mealEntries')
         .where('userId', '==', targetUserId)
-        .where('pixel_art_url', '!=', null)
-        .orderBy('pixel_art_url') // Need this for the != query
         .orderBy('createdAt', 'desc')
-        .limit(50) // Limit to last 50 emojis
+        .limit(100) // Get more meals to check
         .get();
       
       const emojiUrls: string[] = [];
       mealsQuery.forEach((doc) => {
         const data = doc.data();
+        // Check for both pixel_art_url and pixel_art_data
         if (data.pixel_art_url) {
           emojiUrls.push(data.pixel_art_url);
+        } else if (data.pixel_art_data) {
+          // If it's base64 data, convert to data URI
+          emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
         }
       });
       
@@ -438,7 +447,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                     onPress: () => {
                       // Reload all data
                       // loadAchievements(); // DISABLED
-                      loadActiveChallenges();
+                      loadAllChallenges();
                       // loadCities(); // DISABLED to reduce Firestore calls
                     }
                   }
@@ -517,37 +526,63 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     </View>
   );
 
-  const renderChallengeItem = ({ item }: { item: UserChallenge }) => (
-    <TouchableOpacity
-      style={[
-        styles.stampItem,
-        styles.earnedStamp
-      ]}
-      onPress={() => setSelectedChallenge(item)}
-    >
-      <View style={styles.stampIconContainer}>
-        {item.image_data ? (
-          <Image
-            source={{ uri: item.image_data }}
-            style={styles.challengeEmojiImage}
-            resizeMode="contain"
-          />
-        ) : (
-          <Icon name="restaurant" size={40} color="#ff6b6b" />
-        )}
-      </View>
-      
-      <Text 
+  const renderChallengeItem = ({ item }: { item: UserChallenge }) => {
+    const isCompleted = item.status === 'completed';
+    
+    return (
+      <TouchableOpacity
         style={[
-          styles.stampName, 
-          styles.earnedStampText
+          styles.stampItem,
+          styles.challengeItem,
+          isCompleted && styles.completedChallengeItem
         ]}
-        numberOfLines={2}
+        onPress={() => setSelectedChallenge(item)}
       >
-        {item.recommended_dish_name}
-      </Text>
-    </TouchableOpacity>
-  );
+        {/* Completion status indicator */}
+        {isCompleted && (
+          <View style={styles.challengeStatusIndicator}>
+            <Text style={styles.checkmarkText}>✓</Text>
+          </View>
+        )}
+
+        <View style={styles.stampIconContainer}>
+          {item.image_data ? (
+            <Image
+              source={{ uri: item.image_data }}
+              style={[
+                styles.challengeEmojiImage,
+                isCompleted && styles.completedChallengeImage
+              ]}
+              resizeMode="contain"
+            />
+          ) : (
+            <Icon 
+              name="restaurant" 
+              size={40} 
+              color={isCompleted ? "#999" : "#ff6b6b"} 
+            />
+          )}
+        </View>
+        
+        <Text 
+          style={[
+            styles.stampName, 
+            styles.earnedStampText,
+            isCompleted && styles.completedChallengeText
+          ]}
+          numberOfLines={2}
+        >
+          {item.recommended_dish_name}
+        </Text>
+
+        {isCompleted && item.completedWithDish && (
+          <Text style={styles.completedWithText} numberOfLines={1}>
+            ✓ {item.completedWithDish}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <>
@@ -564,7 +599,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
         <>
           {/* Empty state - when no challenges, cities, photos, or emojis */}
           {!challengesLoading && !citiesLoading && !photosLoading && !emojisLoading &&
-           activeChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 && pixelArtEmojis.length === 0 ? (
+           allChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 && pixelArtEmojis.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>Add meals to get and win challenges!</Text>
             </View>
@@ -585,12 +620,12 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             </>
           )}
 
-          {/* Active Challenges Section */}
-              {!challengesLoading && activeChallenges.length > 0 && (
+          {/* All Challenges Section */}
+              {!challengesLoading && allChallenges.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>Challenge: What to Eat Next</Text>
+              <Text style={styles.sectionTitle}>My Food Challenges</Text>
               <FlatList
-                data={activeChallenges}
+                data={allChallenges}
                 renderItem={renderChallengeItem}
                 keyExtractor={item => item.challenge_id}
                 numColumns={3}
@@ -866,7 +901,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,
-    backgroundColor: '#ffffff', // White background for consistency
+    backgroundColor: '#FFFFFF', // Solid white background
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -885,7 +920,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: 'transparent', // Back to transparent - let card background show through
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -1192,14 +1227,48 @@ const styles = StyleSheet.create({
     minHeight: 24, // Reduced height for tighter spacing
   },
   challengeItem: {
-    width: 150,
-    marginRight: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
+    position: 'relative', // For absolute positioning of status indicator
+  },
+  completedChallengeItem: {
+    backgroundColor: '#FFFFFF', // Keep white background like active challenges
+    borderColor: '#ccc',
     borderWidth: 2,
-    borderColor: '#e0e7ff',
+  },
+  challengeStatusIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    zIndex: 1,
+  },
+  activeChallengeIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ff6b6b',
+    backgroundColor: 'transparent',
+  },
+  completedChallengeImage: {
+    opacity: 0.5, // More faded for grey "completed" look
+  },
+  completedChallengeText: {
+    color: '#999', // Grey color for completed challenge text
+    textDecorationLine: 'line-through',
+  },
+  completedWithText: {
+    fontSize: 9,
+    color: '#4CAF50', // Keep green for the checkmark and completed dish text
+    marginTop: 2,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  checkmarkText: {
+    fontSize: 18,
+    color: '#4CAF50', // Green checkmark
+    fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   challengeContent: {
     alignItems: 'center',

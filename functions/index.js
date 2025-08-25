@@ -1074,15 +1074,19 @@ exports.compressImages = onRequest(async (req, res) => {
   }
 });
 
-// Enhanced Metadata Processing - Scheduled to run 3 times daily
-exports.processEnhancedMetadata = onSchedule('0 2,10,18 * * *', async (event) => {
+// Enhanced Metadata Processing - Scheduled to run every 15 minutes with staggered API calls
+exports.processEnhancedMetadata = onSchedule('*/15 * * * *', async (event) => {
   console.log('Starting enhanced metadata processing...');
   
   try {
-    // Query for meals without enhanced metadata (in batches to avoid memory issues)
+    // Only process meals that are at least 5 minutes old to avoid immediate processing
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    // Query for meals without any metadata processing
     const unprocessedMealsQuery = await db.collection('mealEntries')
       .where('metadata_enriched', '==', null)
-      .limit(20) // Process 20 meals at a time to avoid timeouts
+      .where('timestamp', '<', fiveMinutesAgo)
+      .limit(3) // Process only 3 meals every 15 minutes
       .get();
 
     if (unprocessedMealsQuery.empty) {
@@ -1201,8 +1205,11 @@ exports.processEnhancedMetadata = onSchedule('0 2,10,18 * * *', async (event) =>
         continue;
       }
       
-      // Small delay between API calls to be respectful
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Stagger API calls with 2-minute delays to avoid overloading Gemini API
+      if (processedCount < unprocessedMealsQuery.docs.length) {
+        console.log('Waiting 2 minutes before next API call to avoid rate limits...');
+        await new Promise(resolve => setTimeout(resolve, 2 * 60 * 1000)); // 2 minute delay
+      }
     }
     
     const summary = {

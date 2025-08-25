@@ -1032,33 +1032,87 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Document updated with image URL
       
       // Start with rating statements first, then enhanced metadata sequentially
-      // Starting rating statements extraction
-      logWithSession('Starting parallel API calls - rating statements, pixel art, AND restaurant pairings');
+      // Starting staggered API calls to avoid overwhelming backend
+      logWithSession('Starting STAGGERED API calls - drink pairings, then pixel art, then rating statements with small delays');
       
-      // Start all API calls in parallel for better performance
-      // Starting parallel API calls
+      // STAGGERED API calls to avoid overwhelming the backend service
       
-      // Start pixel art generation in parallel (don't wait for it)
-      const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
-      
-      // Start drink pairings in parallel if we have restaurant data
-      let drinkPairingPromise: Promise<DrinkPairingData | null> | null = null;
-      
+      // Step 1: Start drink pairings first (if available)
       if (restaurant && restaurant.trim() && mealName && mealName.trim()) {
-        console.log('🍺🍷 Starting drink pairings in parallel...');
-        drinkPairingPromise = getDrinkPairings(
+        console.log('🍺🍷 Starting drink pairings first...');
+        const drinkPairingPromise = getDrinkPairings(
           freshPhoto.uri,
           mealName,
           restaurant,
           location?.city || cityInfo
         );
+        
+        // Handle drink pairings in background
+        drinkPairingPromise.then(async (drinkData) => {
+          if (drinkData) {
+            try {
+              const pairingUpdate = {
+                drink_pairings: drinkData,
+                drink_pairings_updated_at: firestore.FieldValue.serverTimestamp()
+              };
+              console.log('🍺🍷 Drink pairings ready:', drinkData.beer_pairing.style, '&', drinkData.wine_pairing.style);
+              await firestore().collection('mealEntries').doc(mealId).update(pairingUpdate);
+              console.log('🎉 Drink pairings saved to Firestore!');
+            } catch (pairingError) {
+              console.error('❌ Error saving drink pairings:', pairingError);
+            }
+          }
+        }).catch(error => {
+          console.error('❌ Error with drink pairings:', error);
+        });
       } else {
         console.log('⚠️ Skipping drink pairings - missing restaurant or meal name');
       }
       
-      extractRatingStatements(
-        mealName
-      ).then(async (result) => {
+      // Step 2: Start pixel art after 500ms delay
+      setTimeout(() => {
+        console.log('🎨 Starting pixel art generation after 500ms delay...');
+        const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
+        
+        // Handle pixel art result
+        pixelArtPromise.then(async (pixelArtResult) => {
+          if (pixelArtResult && pixelArtResult.image_data) {
+            console.log('✅ Pixel art generation completed');
+            logWithSession('Pixel art completed successfully');
+            
+            // Update meal with pixel art data
+            try {
+              await firestore()
+                .collection('mealEntries')
+                .doc(mealId)
+                .update({
+                  pixel_art_data: pixelArtResult.image_data,
+                  pixel_art_prompt: pixelArtResult.prompt_used,
+                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+                });
+              
+              console.log('✅ Pixel art saved to Firestore');
+              logWithSession('Pixel art saved successfully');
+            } catch (firestoreError) {
+              console.error('❌ Error saving pixel art:', firestoreError);
+              logWithSession(`Pixel art save error: ${firestoreError}`);
+            }
+          } else {
+            console.warn('⚠️ Pixel art generation failed');
+            logWithSession('Pixel art generation failed');
+          }
+        }).catch(error => {
+          console.error('❌ Pixel art generation error:', error);
+          logWithSession(`Pixel art error: ${error}`);
+        });
+      }, 500);
+      
+      // Step 3: Start rating statements after 1000ms delay
+      setTimeout(() => {
+        console.log('📝 Starting rating statements after 1000ms delay...');
+        extractRatingStatements(
+          mealName
+        ).then(async (result) => {
         // Rating statements API call completed
         if (result) {
           // Rating statements completed successfully
@@ -1081,28 +1135,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             // Meal updated with rating statements
             logWithSession(`Rating statements saved, starting enhanced metadata extraction`);
             
-            // Handle drink pairings in background (don't block save process)
-            if (drinkPairingPromise) {
-              // Drink pairings running in background
-              // Let them complete in background and save to Firestore when done
-              drinkPairingPromise.then(async (drinkData) => {
-                if (drinkData) {
-                  try {
-                    const pairingUpdate = {
-                      drink_pairings: drinkData,
-                      drink_pairings_updated_at: firestore.FieldValue.serverTimestamp()
-                    };
-                    console.log('🍺🍷 Drink pairings ready:', drinkData.beer_pairing.style, '&', drinkData.wine_pairing.style);
-                    await firestore().collection('mealEntries').doc(mealId).update(pairingUpdate);
-                    console.log('🎉 Drink pairings saved to Firestore!');
-                  } catch (pairingError) {
-                    console.error('❌ Error saving drink pairings:', pairingError);
-                  }
-                }
-              }).catch(error => {
-                console.error('❌ Error with drink pairings:', error);
-              });
-            }
+            // Drink pairings are now handled in staggered approach above
             
             // MOVED TO BACKGROUND - NO LONGER BLOCKING USER EXPERIENCE
             // Rating statements saved, navigation can proceed
@@ -1119,66 +1152,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           return null;
         }
       // Enhanced metadata processing removed - now handled by Cloud Functions
-      });
-      
-      // Handle pixel art generation in background
-      pixelArtPromise.then(async (pixelArtResult) => {
-        if (pixelArtResult) {
-          console.log('✅ Pixel art generation completed:', {
-            dish: pixelArtResult.dish_name,
-            service: pixelArtResult.service,
-            imageSize: pixelArtResult.image_data?.length || 0
-          });
-          
-          // SHOW THE PIXEL ART IMMEDIATELY (before uploading to storage)
-          const pixelArtDataUri = createImageDataUri(pixelArtResult.image_data, pixelArtResult.mime_type);
-          console.log('🎨 Displaying pixel art locally:', pixelArtDataUri.substring(0, 50) + '...');
-          
-          // TODO: Add state to show this image in the UI if needed
-          
-          // Save pixel art to Firebase Storage and update Firestore with URL
-          try {
-            console.log('📤 Uploading pixel art to Firebase Storage...');
-            
-            // Create data URI for upload (React Native Firebase Storage handles base64 data URIs)
-            const pixelArtDataUri = `data:${pixelArtResult.mime_type || 'image/png'};base64,${pixelArtResult.image_data}`;
-            console.log(`📦 Pixel art data length: ${pixelArtResult.image_data.length} characters`);
-            
-            // Create storage reference
-            const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
-            const pixelArtRef = storage().ref(`pixel_art/${pixelArtFileName}`);
-            
-            // Upload the pixel art using putString with base64 format
-            await pixelArtRef.putString(pixelArtResult.image_data, 'base64', {
-              contentType: pixelArtResult.mime_type || 'image/png'
-            });
-            
-            // Get download URL
-            const pixelArtUrl = await pixelArtRef.getDownloadURL();
-            console.log('✅ Pixel art uploaded successfully:', pixelArtUrl);
-            
-            // Update Firestore with just the URL and metadata
-            await firestore().collection('mealEntries').doc(mealId).update({
-              pixel_art_url: pixelArtUrl,
-              pixel_art_mime_type: pixelArtResult.mime_type,
-              pixel_art_generated_at: firestore.FieldValue.serverTimestamp(),
-              pixel_art_service: pixelArtResult.service
-            });
-            
-            console.log('✅ Pixel art metadata saved to Firestore successfully');
-            logWithSession('Pixel art generation, upload, and save completed');
-          } catch (firestoreError) {
-            console.error('❌ Error saving pixel art:', firestoreError);
-            logWithSession(`Pixel art save error: ${firestoreError}`);
-          }
-        } else {
-          console.warn('⚠️ Pixel art generation failed');
-          logWithSession('Pixel art generation failed');
-        }
       }).catch(error => {
-        console.error('❌ Pixel art generation error:', error);
-        logWithSession(`Pixel art error: ${error}`);
+        console.error('❌ Error with rating statements:', error);
+        logWithSession(`Rating statements error: ${error}`);
       });
+      }, 1000); // Close setTimeout for rating statements
+      
+      // Pixel art is now handled in staggered approach above
       
       // Dish criteria API running asynchronously
       logWithSession('Dish criteria API started - continuing with navigation');
