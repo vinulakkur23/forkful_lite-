@@ -33,6 +33,7 @@ import { getFollowing } from '../services/followService';
 import Geolocation from '@react-native-community/geolocation';
 import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
+import TooltipOnboarding from '../components/TooltipOnboarding';
 
 // Map toggle icons
 const MAP_HOME_ICONS = {
@@ -129,6 +130,57 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
   
+  // Tooltip onboarding state
+  const [showTooltips, setShowTooltips] = useState(false);
+  const [feedLayout, setFeedLayout] = useState<any>(null);
+  const [searchLayout, setSearchLayout] = useState<any>(null);
+  const [mapButtonLayout, setMapButtonLayout] = useState<any>(null);
+  
+  // Check if should show tooltips whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🚀 HomeScreen: Screen focused, checking tooltips...');
+      const checkTooltips = async () => {
+        try {
+          const onboardingService = (await import('../services/onboardingService')).default;
+          const shouldShow = await onboardingService.shouldShowDiscoverTooltips();
+          console.log('🔍 HomeScreen: Should show tooltips?', shouldShow);
+          
+          if (shouldShow) {
+            console.log('🎯 HomeScreen: Setting showTooltips to TRUE');
+            // Small delay to let the UI render
+            setTimeout(() => {
+              setShowTooltips(true);
+            }, 1000);
+          } else {
+            console.log('❌ HomeScreen: NOT showing tooltips');
+          }
+        } catch (error) {
+          console.error('Error checking discover tooltips:', error);
+        }
+      };
+      
+      checkTooltips();
+    }, [])
+  );
+
+  // Handle tooltip completion
+  const handleTooltipComplete = async () => {
+    try {
+      const onboardingService = (await import('../services/onboardingService')).default;
+      await onboardingService.markDiscoverTooltipsSeen();
+      setShowTooltips(false);
+    } catch (error) {
+      console.error('Error marking discover tooltips complete:', error);
+      setShowTooltips(false);
+    }
+  };
+
+  // Handle tooltip skip
+  const handleTooltipSkip = () => {
+    handleTooltipComplete();
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1267,6 +1319,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity
           style={styles.mapToggleButton}
           onPress={() => setIndex(index === 0 ? 1 : 0)}
+          onLayout={(event) => {
+            setMapButtonLayout(event.nativeEvent.layout);
+          }}
         >
           <Image 
             source={index === 1 ? MAP_HOME_ICONS.mapActive : MAP_HOME_ICONS.mapInactive} 
@@ -1277,7 +1332,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
       
       {/* Multi Filter Component */}
-      <View style={styles.filterArea}>
+      <View 
+        style={styles.filterArea}
+        onLayout={(event) => {
+          setSearchLayout(event.nativeEvent.layout);
+        }}
+      >
         <CompositeFilterComponent 
           key="home-filter"
           onFilterChange={handleFilterChange}
@@ -1298,7 +1358,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Tab View - Render both components but show/hide based on index */}
       <View style={styles.tabView}>
-        <View style={[styles.tabContent, index !== 0 && styles.hiddenTab]}>
+        <View 
+          style={[styles.tabContent, index !== 0 && styles.hiddenTab]}
+          onLayout={(event) => {
+            if (index === 0) { // Only set layout when feed is visible
+              setFeedLayout(event.nativeEvent.layout);
+            }
+          }}
+        >
           <FeedViewComponent />
         </View>
         <View style={[styles.tabContent, index !== 1 && styles.hiddenTab]}>
@@ -1319,6 +1386,51 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         </View>
       </View>
+      
+      {/* Tooltip Onboarding */}
+      {searchLayout && mapButtonLayout && (
+        <TooltipOnboarding
+          steps={[
+            {
+              id: 'feed',
+              targetPosition: {
+                x: 0,
+                y: 300, // Middle of screen
+                width: width,
+                height: 200,
+              },
+              message: 'See recently posted meals in your area through your feed!'
+              // No arrowDirection = centered tooltip
+            },
+            {
+              id: 'search',
+              targetPosition: {
+                x: searchLayout.x,
+                y: searchLayout.y - 8 + 5, // Move down a few pixels from previous position
+                width: searchLayout.width,
+                height: searchLayout.height,
+              },
+              message: 'Filter meals however you want. Find the best burritos in town or the best vegetarian food near you.',
+              arrowDirection: 'up',
+              fontSize: 14 // Make font smaller
+            },
+            {
+              id: 'map',
+              targetPosition: {
+                x: mapButtonLayout.x + 20 - 30 + 10 + 3, // Move a few pixels more to the right
+                y: mapButtonLayout.y + 50 + 20 - 9 + 3, // Move a few pixels down
+                width: mapButtonLayout.width * 0.8, // Make box a bit smaller
+                height: mapButtonLayout.height * 0.8,
+              },
+              message: 'See all of it on a map so you know where to go!',
+              arrowDirection: 'up'
+            }
+          ]}
+          isVisible={showTooltips}
+          onComplete={handleTooltipComplete}
+          onSkip={handleTooltipSkip}
+        />
+      )}
     </SafeAreaView>
   );
 };

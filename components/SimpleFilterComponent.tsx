@@ -421,7 +421,7 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Filter by dish, cuisine, ingredient, city, or user"
+          placeholder="Filter by dish, cuisine, city, or user"
           value={searchText}
           onChangeText={(text) => {
             setSearchText(text);
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     height: '100%',
     paddingLeft: 5,
     fontFamily: 'Inter-Regular',

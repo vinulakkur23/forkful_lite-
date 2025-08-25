@@ -512,10 +512,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             }
             
             return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-              // Map criteria to expected format
+              // Map criteria to expected format (new format has title/description)
               const criteria = actualCriteria.map(c => ({
-                title: c.name || c.title || 'Unknown Criteria',
-                description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+                title: c.title || c.name || 'Unknown Criteria',
+                description: c.description || c.criteria || c.what_to_look_for || 'No description available'
               }));
               
               const dishGeneral = mealData?.cuisine_type || "Dish";
@@ -549,6 +549,106 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }
     }
   }, [routeMealId, loadingMealData, backgroundAPIsTriggered]); // Use meal ID instead of mealData to prevent loops
+
+  // NEW: Check challenge limit first, then listen for rating_statements_result to trigger challenge generation
+  useEffect(() => {
+    if (!routeMealId) {
+      return;
+    }
+
+    console.log('🎯 Checking if user can receive new challenges for meal:', routeMealId);
+    
+    let unsubscribe: (() => void) | null = null;
+
+    // First check if user has reached challenge limit
+    import('../services/userChallengesService').then(({ hasReachedChallengeLimit }) => {
+      return hasReachedChallengeLimit();
+    }).then((reachedLimit) => {
+      if (reachedLimit) {
+        console.log('🛑 User has reached challenge limit (6), not setting up listener');
+        return;
+      }
+
+      console.log('✅ User can receive challenges, setting up listener for rating_statements_result');
+
+      unsubscribe = firestore()
+        .collection('mealEntries')
+        .doc(routeMealId)
+        .onSnapshot((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            const hasRatingStatements = data?.rating_statements_result?.rating_statements;
+            
+            console.log('🎯 Firestore listener - rating statements available:', !!hasRatingStatements);
+            
+            if (hasRatingStatements && hasRatingStatements.length > 0) {
+              console.log('✅ Rating statements are now available! Triggering challenge generation...');
+              
+              const actualMealName = data.meal || meal;
+              const actualCriteria = hasRatingStatements;
+              
+              // Only generate if we haven't already generated a challenge
+              if (!(global as any).pendingChallengePromise && !(global as any).pendingChallenge) {
+                console.log('🍽️ Starting challenge generation after rating statements loaded');
+                
+                import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
+                  // Map criteria to expected format (new format has title/description)
+                  const criteria = actualCriteria.map(c => ({
+                    title: c.title || c.name || 'Unknown Criteria',
+                    description: c.description || c.criteria || c.what_to_look_for || 'No description available'
+                  }));
+                  
+                  const dishGeneral = data.cuisine_type || "Dish";
+                  
+                  console.log('🍽️ Generating challenge with data:', {
+                    mealName: actualMealName,
+                    dishGeneral,
+                    criteriaCount: criteria.length,
+                    city: data.location?.city || data.city
+                  });
+                  
+                  // Generate and store challenge
+                  const challengePromise = generateNextDishChallenge(
+                    actualMealName,
+                    dishGeneral,
+                    criteria,
+                    data.location?.city || data.city,
+                    [] // Previous challenges
+                  );
+                  
+                  // Store globally for other screens
+                  (global as any).pendingChallengePromise = challengePromise;
+                  
+                  challengePromise.then(challenge => {
+                    if (challenge) {
+                      console.log('✅ Challenge generated after rating statements:', challenge.recommended_dish_name);
+                      (global as any).pendingChallenge = challenge;
+                    }
+                  }).catch(error => {
+                    console.error('❌ Challenge generation failed after rating statements:', error);
+                    (global as any).pendingChallengePromise = null;
+                  });
+                });
+              } else {
+                console.log('⚠️ Challenge already generated, skipping duplicate generation');
+              }
+            }
+          }
+        }, (error) => {
+          console.error('❌ Error in rating statements listener:', error);
+        });
+    }).catch(error => {
+      console.error('❌ Error checking challenge limit:', error);
+    });
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up rating statements listener');
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [routeMealId, meal]); // Listen whenever routeMealId changes
 
   // Process image upload and enhanced metadata after meal data is loaded
   useEffect(() => {
@@ -628,6 +728,40 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       }
     }
   }, [savedMealId, saved, navigateToEditAfterSave]);
+
+  // Schedule meal rating reminder notification when meal is saved
+  useEffect(() => {
+    if (savedMealId && mealData && !saving) {
+      const scheduleMealReminderNotification = async () => {
+        try {
+          const notificationService = (await import('../services/notificationService')).default;
+          
+          // Request permissions if not already granted
+          const hasPermissions = await notificationService.requestPermissions();
+          if (!hasPermissions) {
+            console.log('Notification permissions not granted');
+            return;
+          }
+
+          const dishName = mealData.meal || meal || 'your meal';
+          const restaurantName = mealData.restaurant || restaurant;
+          
+          const result = notificationService.scheduleMealReminder({
+            dishName: dishName,
+            mealId: savedMealId,
+            restaurantName: restaurantName
+          }, 1.5); // 1.5 hour delay
+
+          console.log('🔔 Meal reminder notification scheduled:', result);
+        } catch (error) {
+          console.error('❌ Error scheduling meal reminder notification:', error);
+        }
+      };
+
+      // Start notification scheduling asynchronously
+      scheduleMealReminderNotification();
+    }
+  }, [savedMealId, mealData, saving]);
 
   // REMOVED: Enhanced metadata facts processing - now handled in RatingScreen2 sequentially
 
@@ -1437,10 +1571,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           }
           
           return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-            // Map criteria to expected format
+            // Map criteria to expected format (new format has title/description)
             const criteria = actualCriteria.map(c => ({
-              title: c.name || c.title || 'Unknown Criteria',
-              description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+              title: c.title || c.name || 'Unknown Criteria',
+              description: c.description || c.criteria || c.what_to_look_for || 'No description available'
             }));
             
             // Use actual meal name and derive general category from cuisine or use "Dish" as fallback
@@ -1541,10 +1675,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         }
         
         return import('../services/nextDishChallengeService').then(({ generateNextDishChallenge }) => {
-          // Map criteria to expected format
+          // Map criteria to expected format (new format has title/description)
           const criteria = actualCriteria.map(c => ({
-            title: c.name || c.title || 'Unknown Criteria',
-            description: c.criteria || c.description || c.what_to_look_for || 'No description available'
+            title: c.title || c.name || 'Unknown Criteria',
+            description: c.description || c.criteria || c.what_to_look_for || 'No description available'
           }));
           
           // Use actual meal name and derive general category from cuisine or use "Dish" as fallback

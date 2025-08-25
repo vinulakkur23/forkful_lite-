@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -12,8 +13,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
+import TooltipOnboarding from '../components/TooltipOnboarding';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 type FoodPassportWrapperProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
@@ -128,6 +131,10 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
   const [activeRatingFilters, setActiveRatingFilters] = useState<number[] | null>(null);
   
+  // Tooltip onboarding state
+  const [showTooltips, setShowTooltips] = useState(false);
+  const [tabBarLayout, setTabBarLayout] = useState<any>(null);
+  
   // Handle filter changes from SimpleFilterComponent
   const handleFilterChange = (filters: FilterItem[] | null) => {
     console.log('FoodPassportWrapper: Filters changed to:', JSON.stringify(filters));
@@ -144,6 +151,54 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     console.log('FoodPassportWrapper: Rating filters changed to:', ratings);
     setActiveRatingFilters(ratings);
   };
+
+  // Handle tooltip completion
+  const handleTooltipComplete = async () => {
+    try {
+      const onboardingService = (await import('../services/onboardingService')).default;
+      await onboardingService.markFoodPassportTooltipsSeen();
+      setShowTooltips(false);
+    } catch (error) {
+      console.error('Error marking tooltips complete:', error);
+      setShowTooltips(false);
+    }
+  };
+
+  // Handle tooltip skip
+  const handleTooltipSkip = () => {
+    handleTooltipComplete();
+  };
+
+  // Check if should show tooltips whenever screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🚀 FoodPassport: Screen focused, checking tooltips...');
+      const checkTooltips = async () => {
+        try {
+          const onboardingService = (await import('../services/onboardingService')).default;
+          
+          const shouldShow = await onboardingService.shouldShowFoodPassportTooltips();
+          console.log('🔍 FoodPassport: Should show tooltips?', shouldShow);
+          
+          if (shouldShow) {
+            console.log('🎯 FoodPassport: Setting showTooltips to TRUE');
+            setShowTooltips(true);
+          } else {
+            console.log('❌ FoodPassport: NOT showing tooltips');
+          }
+        } catch (error) {
+          console.error('❌ Error checking tooltips:', error);
+        }
+      };
+      
+      checkTooltips();
+    }, [])
+  );
+  
+  // Debug log whenever showTooltips changes
+  React.useEffect(() => {
+    console.log('🎭 FoodPassport: showTooltips changed to:', showTooltips);
+  }, [showTooltips]);
 
   React.useEffect(() => {
     loadUserProfile();
@@ -349,7 +404,14 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       
       
       {/* Tab navigation */}
-      <View style={styles.tabBarContainer}>
+      <View 
+        style={styles.tabBarContainer}
+        onLayout={(event) => {
+          const layout = event.nativeEvent.layout;
+          console.log('📐 FoodPassport: Tab bar layout detected:', layout);
+          setTabBarLayout(layout);
+        }}
+      >
         {routes.map((route, i) => (
           <TouchableOpacity
             key={route.key}
@@ -418,6 +480,48 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       <View style={styles.contentContainer}>
         {renderScene({ route: routes[tabIndex] })}
       </View>
+      
+      {/* Tooltip Onboarding */}
+      <TooltipOnboarding
+        steps={[
+          {
+            id: 'first-meal',
+            targetPosition: {
+              x: width / 2 - 100, // Center horizontally
+              y: height / 2 - 50, // Center vertically
+              width: 200,
+              height: 100,
+            },
+            message: 'Your meals show up here. You have to rate them for them to be viewed by people!'
+            // No arrowDirection = no blue box, centered tooltip
+          },
+          {
+            id: 'map-tab',
+            targetPosition: {
+              x: (width / 4) * 2 + 20 + 5, // Third tab (My Map) - move a few pixels right
+              y: 150 - 80, // Move up significantly more (80px)
+              width: width / 8, // Much narrower box
+              height: 50,
+            },
+            message: 'The meals\' location is automatically saved on a map you can share with friends!',
+            arrowDirection: 'up'
+          },
+          {
+            id: 'stamps-tab',
+            targetPosition: {
+              x: (width / 4) * 3 + 20 + 5 - 3, // Fourth tab (Accolades) - adjust left to keep center
+              y: 150 - 80, // Move up significantly more (80px)
+              width: width / 8 + 6, // Make box a few pixels wider
+              height: 50,
+            },
+            message: "You'll be given challenges and awards along the way. Don't forget to check!",
+            arrowDirection: 'up'
+          }
+        ]}
+        isVisible={showTooltips}
+        onComplete={handleTooltipComplete}
+        onSkip={handleTooltipSkip}
+      />
     </SafeAreaView>
   );
 };

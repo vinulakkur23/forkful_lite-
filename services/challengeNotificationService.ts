@@ -20,6 +20,17 @@ class ChallengeNotificationService {
     DeviceEventEmitter.emit(ChallengeNotificationService.EVENT_NAME, challenge);
   }
   
+  showChallengeCompleted(challenge: UserChallenge, dishName: string) {
+    console.log('🎉 Emitting challenge completed notification:', challenge.recommended_dish_name);
+    // Add a completed flag to distinguish from new challenges
+    const completedChallenge = {
+      ...challenge,
+      justCompleted: true,
+      completedWithDish: dishName
+    };
+    DeviceEventEmitter.emit(ChallengeNotificationService.EVENT_NAME, completedChallenge);
+  }
+  
   updateChallengeImage(challenge: UserChallenge) {
     console.log('🎨 Updating challenge image:', challenge.recommended_dish_name);
     DeviceEventEmitter.emit(ChallengeNotificationService.UPDATE_EVENT_NAME, challenge);

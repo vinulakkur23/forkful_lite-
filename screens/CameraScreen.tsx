@@ -494,21 +494,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   if (!hasPermission) {
     return (
       <View style={styles.permissionContainer}>
-        <TouchableOpacity
-          style={styles.permissionButton}
-          onPress={async () => {
-            const result = await Camera.requestCameraPermission();
-            setHasPermission(result === 'granted');
-          }}
-        >
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={goBack}
-        >
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        {/* Clean blank screen - permission handled by iOS system alert */}
       </View>
     );
   }
@@ -785,7 +771,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: 'black',
     padding: 20,
   },
   permissionText: {
@@ -793,14 +779,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 20,
-    color: '#333',
+    color: 'white',
   },
   permissionButton: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 25,
     marginTop: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   permissionButtonText: {
     color: 'white',
@@ -814,7 +802,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   backButtonText: {
-    color: '#666',
+    color: 'white',
     fontSize: 16,
   },
   uploadButton: {

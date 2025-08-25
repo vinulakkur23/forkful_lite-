@@ -273,3 +273,73 @@ export const subscribeToUserChallenges = (
 
   return unsubscribe;
 };
+
+/**
+ * Check if a newly saved meal completes any active challenges
+ * Returns the completed challenge if found, null otherwise
+ */
+export const checkIfMealCompletesAnyChallenge = async (
+  mealId: string,
+  dishName: string,
+  cuisine?: string
+): Promise<UserChallenge | null> => {
+  try {
+    console.log('UserChallengesService: Checking if meal completes any challenge:', {
+      mealId,
+      dishName,
+      cuisine
+    });
+
+    // Get all active challenges
+    const activeChallenges = await getActiveChallenges();
+    
+    if (activeChallenges.length === 0) {
+      console.log('UserChallengesService: No active challenges to check');
+      return null;
+    }
+
+    console.log(`UserChallengesService: Checking ${activeChallenges.length} active challenges`);
+
+    // Import the challenge completion checker
+    const { checkChallengeCompletion } = await import('./nextDishChallengeService');
+
+    // Check each active challenge
+    for (const challenge of activeChallenges) {
+      console.log(`UserChallengesService: Checking challenge: ${challenge.recommended_dish_name}`);
+      
+      // Use the existing API-based fuzzy matching
+      const isCompleted = await checkChallengeCompletion(
+        challenge,
+        dishName,
+        cuisine
+      );
+
+      if (isCompleted) {
+        console.log(`UserChallengesService: Challenge completed! ${challenge.recommended_dish_name}`);
+        
+        // Mark the challenge as completed
+        const success = await completeChallengeWithMeal(
+          challenge.challenge_id,
+          mealId,
+          dishName
+        );
+
+        if (success) {
+          console.log('UserChallengesService: Challenge marked as completed in Firebase');
+          
+          // Show celebration notification
+          const challengeNotificationService = (await import('./challengeNotificationService')).default;
+          challengeNotificationService.showChallengeCompleted(challenge, dishName);
+          
+          return challenge;
+        }
+      }
+    }
+
+    console.log('UserChallengesService: No challenges completed by this meal');
+    return null;
+  } catch (error) {
+    console.error('UserChallengesService: Error checking challenge completion:', error);
+    return null;
+  }
+};
