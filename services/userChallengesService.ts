@@ -5,6 +5,7 @@
 
 import { firestore, auth } from '../firebaseConfig';
 import { DishChallenge } from './nextDishChallengeService';
+import { awardCheersForChallengeCompletion } from './cheersService';
 
 export interface UserChallenge extends DishChallenge {
   completedAt?: string;
@@ -132,6 +133,15 @@ export const completeChallengeWithMeal = async (
       .update(updateData);
 
     console.log('UserChallengesService: Challenge completed:', challengeId);
+    
+    // Award 5 cheers points for completing the challenge
+    const cheersAwarded = await awardCheersForChallengeCompletion(currentUser.uid, challengeId);
+    if (cheersAwarded) {
+      console.log('🎉 Awarded 5 cheers points for challenge completion!');
+    } else {
+      console.warn('⚠️ Failed to award cheers points for challenge completion');
+    }
+    
     return true;
   } catch (error) {
     console.error('UserChallengesService: Error completing challenge:', error);
@@ -205,6 +215,77 @@ export const getPreviousChallengeNames = async (): Promise<string[]> => {
   } catch (error) {
     console.error('UserChallengesService: Error getting previous challenge names:', error);
     return [];
+  }
+};
+
+/**
+ * Accept a shared challenge from another user
+ * This bypasses the 6 challenge limit for shared challenges
+ */
+export const acceptSharedChallenge = async (publicChallengeId: string): Promise<boolean> => {
+  try {
+    console.log('🔍 acceptSharedChallenge called with ID:', publicChallengeId);
+    
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      console.error('❌ No authenticated user to accept challenge');
+      return false;
+    }
+    
+    console.log('✅ Current user:', currentUser.uid);
+
+    // Get the public challenge data
+    console.log('📥 Fetching public challenge from Firestore...');
+    const publicChallengeDoc = await firestore()
+      .collection('publicChallenges')
+      .doc(publicChallengeId)
+      .get();
+
+    if (!publicChallengeDoc.exists) {
+      console.error('❌ Public challenge not found:', publicChallengeId);
+      // Debug: Check what's in the publicChallenges collection
+      const allPublicChallenges = await firestore().collection('publicChallenges').limit(5).get();
+      console.log('📋 Sample public challenge IDs:', allPublicChallenges.docs.map(d => d.id));
+      return false;
+    }
+    
+    console.log('✅ Public challenge found');
+    const challengeData = publicChallengeDoc.data();
+    
+    // Check if user already has this exact challenge
+    const existingChallenges = await getUserChallenges();
+    const alreadyHasChallenge = existingChallenges.some(
+      c => c.recommended_dish_name === challengeData.recommended_dish_name
+    );
+
+    if (alreadyHasChallenge) {
+      console.log('User already has this challenge');
+      return false;
+    }
+
+    // Create new challenge for the user
+    const newChallenge: UserChallenge = {
+      ...challengeData,
+      challenge_id: `shared_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: 'active',
+      acceptedFrom: challengeData.sharedBy,
+      acceptedAt: firestore.FieldValue.serverTimestamp(),
+      isSharedChallenge: true
+    };
+
+    // Save to user's challenges (bypasses 6 challenge limit)
+    await firestore()
+      .collection('users')
+      .doc(currentUser.uid)
+      .collection('challenges')
+      .doc(newChallenge.challenge_id)
+      .set(newChallenge);
+
+    console.log('Successfully accepted shared challenge:', newChallenge.challenge_id);
+    return true;
+  } catch (error) {
+    console.error('Error accepting shared challenge:', error);
+    return false;
   }
 };
 

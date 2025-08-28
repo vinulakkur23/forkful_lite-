@@ -277,11 +277,81 @@ export const getTotalCheersForUser = async (userId: string): Promise<number> => 
   }
 };
 
+/**
+ * Award cheers points to user for completing a challenge
+ * Awards 5 cheers points per completed challenge
+ */
+export const awardCheersForChallengeCompletion = async (userId: string, challengeId: string): Promise<boolean> => {
+  try {
+    console.log(`🎉 Awarding 5 cheers points to user ${userId} for completing challenge ${challengeId}`);
+    
+    // Create or update user's cheers document
+    const userCheersRef = firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('rewards')
+      .doc('cheers');
+    
+    // Award 5 points for challenge completion
+    await userCheersRef.set({
+      totalPoints: firestore.FieldValue.increment(5),
+      challengeCompletions: firestore.FieldValue.increment(1),
+      lastUpdated: firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    // Also record this specific challenge completion
+    await firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('rewards')
+      .doc('challengeRewards')
+      .collection('completed')
+      .doc(challengeId)
+      .set({
+        completedAt: firestore.FieldValue.serverTimestamp(),
+        pointsAwarded: 5
+      });
+    
+    console.log('✅ Successfully awarded 5 cheers points for challenge completion');
+    return true;
+  } catch (error) {
+    console.error('Error awarding cheers for challenge:', error);
+    return false;
+  }
+};
+
+/**
+ * Get user's total cheers points (from meals and challenges)
+ */
+export const getUserTotalCheersPoints = async (userId: string): Promise<number> => {
+  try {
+    // Get cheers from meals
+    const mealCheers = await getTotalCheersForUser(userId);
+    
+    // Get cheers from challenge completions
+    const userCheersDoc = await firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('rewards')
+      .doc('cheers')
+      .get();
+    
+    const challengeCheers = userCheersDoc.data()?.totalPoints || 0;
+    
+    return mealCheers + challengeCheers;
+  } catch (error) {
+    console.error('Error getting total cheers points:', error);
+    return 0;
+  }
+};
+
 export default {
   addCheer,
   removeCheer,
   getCheersData,
   toggleCheer,
   subscribeToCheersData,
-  getTotalCheersForUser
+  getTotalCheersForUser,
+  awardCheersForChallengeCompletion,
+  getUserTotalCheersPoints
 };

@@ -10,7 +10,8 @@ import {
   Dimensions,
   Alert,
   ScrollView,
-  Modal
+  Modal,
+  Share
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import { Achievement, UserAchievement } from '../types/achievements';
@@ -21,7 +22,7 @@ import { clearAllUserData } from '../services/clearAllUserData';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import { FilterItem } from '../components/SimpleFilterComponent';
-import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge } from '../services/userChallengesService';
+import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
 
 const { width } = Dimensions.get('window');
 const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
@@ -40,6 +41,7 @@ type Props = {
   navigation?: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
   onFilterChange?: (filters: FilterItem[] | null) => void;
   onTabChange?: (index: number) => void;
+  route?: { params?: { openChallengeModal?: string } };
 };
 
 interface City {
@@ -55,7 +57,7 @@ interface TopRatedPhoto {
   restaurant?: string;
 }
 
-const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onTabChange }) => {
+const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onTabChange, route }) => {
   const [loading, setLoading] = useState(true);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [achievementItems, setAchievementItems] = useState<AchievementDisplayItem[]>([]);
@@ -72,6 +74,76 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [emojisLoading, setEmojisLoading] = useState(true);
 
   console.log('🏆 StampsScreen rendered with userId:', userId);
+  
+  // Handler for sharing a challenge
+  const handleShareChallenge = async (challenge: UserChallenge) => {
+    try {
+      // Create a shareable challenge in public collection
+      const publicChallengeRef = await firestore()
+        .collection('publicChallenges')
+        .add({
+          ...challenge,
+          sharedBy: auth().currentUser?.uid,
+          sharedAt: firestore.FieldValue.serverTimestamp(),
+          originalChallengeId: challenge.challenge_id
+        });
+      
+      // Create a deep link - using app scheme for TestFlight
+      // For TestFlight/development, use the direct app scheme
+      // For production, you'd want to use universal links (https://)
+      const shareableLink = `forkful://challenge/${publicChallengeRef.id}`;
+      const message = `Join me on a food challenge! ${challenge.recommended_dish_name}`;
+      
+      const result = await Share.share({
+        message: `${message}\n${shareableLink}`,
+        title: 'Food Challenge from Forkful',
+        // For iOS, we can also include a URL that will show in share sheet
+        url: shareableLink
+      });
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Challenge shared successfully');
+      }
+    } catch (error) {
+      console.error('Error sharing challenge:', error);
+      Alert.alert('Error', 'Failed to share challenge');
+    }
+  };
+  
+  // Handler for deleting a challenge
+  const handleDeleteChallenge = async (challenge: UserChallenge) => {
+    Alert.alert(
+      'Delete Challenge',
+      `Are you sure you want to delete the challenge "${challenge.recommended_dish_name}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const success = await deleteChallenge(challenge.challenge_id);
+              if (success) {
+                // Refresh challenges list
+                const updatedChallenges = await getUserChallenges();
+                setAllChallenges(updatedChallenges);
+                setSelectedChallenge(null);
+                Alert.alert('Success', 'Challenge deleted');
+              } else {
+                Alert.alert('Error', 'Failed to delete challenge');
+              }
+            } catch (error) {
+              console.error('Error deleting challenge:', error);
+              Alert.alert('Error', 'Failed to delete challenge');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // Function to render text with bold formatting (double asterisks)
   const renderTextWithBold = (text: string) => {
@@ -105,6 +177,20 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     loadAllChallenges();
     loadPixelArtEmojis();
   }, [userId]);
+
+  // Handle deep link to open specific challenge modal
+  useEffect(() => {
+    const challengeToOpen = route?.params?.openChallengeModal;
+    if (challengeToOpen && allChallenges.length > 0 && !challengesLoading) {
+      console.log('🔗 Opening challenge modal from deep link:', challengeToOpen);
+      const challenge = allChallenges.find(c => c.challenge_id === challengeToOpen);
+      if (challenge) {
+        setSelectedChallenge(challenge);
+      } else {
+        console.log('⚠️ Challenge not found:', challengeToOpen);
+      }
+    }
+  }, [route?.params?.openChallengeModal, allChallenges, challengesLoading]);
 
   // DISABLED: Achievements/stamps feature
   const loadAchievements = async () => {
@@ -592,7 +678,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       >
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
+          <ActivityIndicator size="large" color="#1a2b49" />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       ) : (
@@ -845,6 +931,25 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                     selectedChallenge.challenge_description || 
                     `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()
                   )}
+                  
+                  {/* Action buttons for active challenges only */}
+                  {selectedChallenge.status === 'active' && (
+                    <View style={styles.challengeActionButtons}>
+                      <TouchableOpacity 
+                        style={styles.shareButton}
+                        onPress={() => handleShareChallenge(selectedChallenge)}
+                      >
+                        <Text style={styles.shareButtonText}>Challenge Friend</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.deleteButton}
+                        onPress={() => handleDeleteChallenge(selectedChallenge)}
+                      >
+                        <Text style={styles.deleteButtonText}>Delete Challenge</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </>
               )}
             </View>
@@ -1028,13 +1133,13 @@ const styles = StyleSheet.create({
   },
   // New zoomed stamp styles
   zoomedStampContainer: {
-    width: 150, // Full size of the image
-    height: 150, // Full size of the image
+    width: 120, // Slightly smaller than 150
+    height: 120, // Slightly smaller than 150
     borderRadius: 0, // No border radius to show full square image
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25, // Proportionally scaled spacing
+    marginBottom: 20, // Reduced spacing
     overflow: 'hidden',
   },
   zoomedStampImage: {
@@ -1045,6 +1150,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 0,
     width: '100%', // Ensure full width for text
+  },
+  challengeActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    width: '100%',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 0.45,
+    justifyContent: 'center',
+  },
+  shareButtonText: {
+    color: '#1a2b49',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 0.45,
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: '#1a2b49',
+    fontSize: 12,
+    fontWeight: '600',
   },
   detailName: {
     fontSize: 20, // Significantly reduced from 36px to 20px

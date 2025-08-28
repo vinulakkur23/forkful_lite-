@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { UserChallenge } from '../services/userChallengesService';
+import { navigate } from '../services/navigationService';
 
 interface ChallengeNotificationProps {
   challenge: UserChallenge;
@@ -22,7 +23,7 @@ const { width } = Dimensions.get('window');
 
 const ChallengeNotification: React.FC<ChallengeNotificationProps> = ({ 
   challenge, 
-  onDismiss 
+  onDismiss
 }) => {
   const translateY = useRef(new Animated.Value(-200)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -76,6 +77,22 @@ const ChallengeNotification: React.FC<ChallengeNotificationProps> = ({
     });
   };
 
+  const handleChallengePress = () => {
+    console.log('🔘 Challenge notification clicked:', challenge.challenge_id);
+    console.log('🔘 Challenge name:', challenge.recommended_dish_name);
+    
+    // Dismiss the notification first
+    dismiss();
+    
+    // Navigate to stamps screen and open the challenge modal
+    setTimeout(() => {
+      console.log('🔘 Navigating to FoodPassport with challenge:', challenge.challenge_id);
+      navigate('FoodPassport', { 
+        openChallengeModal: challenge.challenge_id
+      });
+    }, 300); // Wait for dismiss animation to complete
+  };
+
   return (
     <Animated.View 
       style={[
@@ -86,43 +103,49 @@ const ChallengeNotification: React.FC<ChallengeNotificationProps> = ({
         }
       ]}
     >
-      <View style={styles.iconContainer}>
-        {challenge.image_data ? (
-          <Image 
-            source={{ uri: challenge.image_data }} 
-            style={styles.challengeEmojiImage} 
-            resizeMode="contain" 
-          />
-        ) : challenge.image_status === 'pending' || challenge.image_status === 'generating' ? (
-          <View style={styles.imageLoadingContainer}>
+      <TouchableOpacity 
+        style={styles.contentContainer}
+        onPress={handleChallengePress}
+        activeOpacity={0.8}
+      >
+        <View style={styles.iconContainer}>
+          {challenge.image_data ? (
+            <Image 
+              source={{ uri: challenge.image_data }} 
+              style={styles.challengeEmojiImage} 
+              resizeMode="contain" 
+            />
+          ) : challenge.image_status === 'pending' || challenge.image_status === 'generating' ? (
+            <View style={styles.imageLoadingContainer}>
+              <Icon name="restaurant" size={40} color="#ff6b6b" />
+              {challenge.image_status === 'generating' && (
+                <ActivityIndicator 
+                  style={styles.imageLoadingIndicator} 
+                  size="small" 
+                  color="#ff6b6b" 
+                />
+              )}
+            </View>
+          ) : (
             <Icon name="restaurant" size={40} color="#ff6b6b" />
-            {challenge.image_status === 'generating' && (
-              <ActivityIndicator 
-                style={styles.imageLoadingIndicator} 
-                size="small" 
-                color="#ff6b6b" 
-              />
-            )}
-          </View>
-        ) : (
-          <Icon name="restaurant" size={40} color="#ff6b6b" />
-        )}
-      </View>
-      
-      <View style={styles.textContainer}>
-        {(challenge as any).justCompleted ? (
-          <>
-            <Text style={styles.completedTitle}>Challenge Complete!</Text>
-            <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
-            <Text style={styles.cheersText}>+ 5 Cheers</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.title}>We think you'd enjoy this dish next!</Text>
-            <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
-          </>
-        )}
-      </View>
+          )}
+        </View>
+        
+        <View style={styles.textContainer}>
+          {(challenge as any).justCompleted ? (
+            <>
+              <Text style={styles.completedTitle}>Challenge Complete!</Text>
+              <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
+              <Text style={styles.cheersText}>+ 5 Cheers</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>You'd enjoy this dish next!</Text>
+              <Text style={styles.challengeName}>{challenge.recommended_dish_name}</Text>
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.closeButton} onPress={dismiss}>
         <Text style={styles.closeButtonX}>×</Text>
@@ -155,6 +178,11 @@ const styles = StyleSheet.create({
     zIndex: 10000,
     overflow: 'visible',
     borderWidth: 0,
+  },
+  contentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   iconContainer: {
     width: 80,

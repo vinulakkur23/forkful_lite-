@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { NavigationContainer, NavigationState } from '@react-navigation/native';
+import { navigationRef } from './services/navigationService';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Icon import was duplicated, removed one. MaterialIcons is conventional.
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Linking, Alert } from 'react-native';
 // Import Firebase from our config file to ensure consistent initialization
 import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -115,6 +116,7 @@ export type RootStackParamList = {
     userName?: string;
     userPhoto?: string;
     tabIndex?: number;
+    openChallengeModal?: string;
   } | undefined; // Can view own passport (undefined) or another user's passport
   MealDetail: {
     mealId: string;
@@ -484,9 +486,7 @@ function TabNavigator() {
 const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
-
-  // Create a navigation reference to access navigation state
-  const navigationRef = useRef(null);
+  const [pendingChallengeId, setPendingChallengeId] = useState<string | null>(null);
   
   // Track previous and current state to identify screen changes
   const routeNameRef = useRef<string | undefined>();
@@ -608,6 +608,123 @@ const App: React.FC = () => {
     return subscriber;
   }, []);
   
+  // Function to accept a shared challenge
+  const handleAcceptChallenge = useCallback(async (challengeId: string) => {
+    try {
+      console.log('Attempting to accept challenge:', challengeId);
+      const { acceptSharedChallenge } = await import('./services/userChallengesService');
+      
+      const success = await acceptSharedChallenge(challengeId);
+      
+      if (success) {
+        Alert.alert(
+          '🎉 Challenge Accepted!',
+          'The food challenge has been added to your profile. Check your Stamps screen to see it!',
+          [
+            {
+              text: 'View Challenge',
+              onPress: () => {
+                // Navigate to FoodPassport/Stamps screen
+                if (navigationRef.current) {
+                  navigationRef.current.navigate('MainTabs', {
+                    screen: 'FoodPassport',
+                    params: {
+                      tabIndex: 1  // Stamps tab
+                    }
+                  });
+                }
+              }
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Challenge Not Accepted',
+          'You may already have this challenge or there was an error. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error accepting challenge:', error);
+      Alert.alert(
+        'Error',
+        'Failed to accept the challenge. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, []);
+
+  // Handle deep link when received
+  const handleDeepLink = useCallback((url: string | null) => {
+    if (!url) return;
+    
+    console.log('Deep link received:', url);
+    
+    // Parse challenge ID from URL
+    // Expected format: https://forkful.app/challenge/[challengeId] or forkful://challenge/[challengeId]
+    const challengeMatch = url.match(/challenge\/([a-zA-Z0-9_-]+)/);
+    
+    if (challengeMatch && challengeMatch[1]) {
+      const challengeId = challengeMatch[1];
+      console.log('Challenge ID extracted:', challengeId);
+      
+      if (user) {
+        // User is logged in, accept the challenge immediately
+        handleAcceptChallenge(challengeId);
+      } else {
+        // User not logged in, save for after login
+        setPendingChallengeId(challengeId);
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to accept this food challenge!',
+          [{ text: 'OK' }]
+        );
+      }
+    } else {
+      console.log('No valid challenge ID found in URL:', url);
+    }
+  }, [user, handleAcceptChallenge]);
+  
+  // Handle deep links for shared challenges
+  useEffect(() => {
+    console.log('🔗 Setting up deep link listeners...');
+    
+    // Check if app was opened with a deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('🚀 App opened with deep link:', url);
+        handleDeepLink(url);
+      } else {
+        console.log('📱 App opened normally (no deep link)');
+      }
+    }).catch(error => {
+      console.error('❌ Error getting initial URL:', error);
+    });
+    
+    // Listen for deep links while app is open
+    const linkingSubscription = Linking.addEventListener('url', (event) => {
+      console.log('🔔 Deep link received while app is open:', event.url);
+      handleDeepLink(event.url);
+    });
+    
+    return () => {
+      linkingSubscription.remove();
+    };
+  }, [handleDeepLink]);
+  
+  // Handle pending challenge after user logs in
+  useEffect(() => {
+    if (user && pendingChallengeId) {
+      console.log('Processing pending challenge after login:', pendingChallengeId);
+      handleAcceptChallenge(pendingChallengeId);
+      setPendingChallengeId(null);
+    }
+  }, [user, pendingChallengeId, handleAcceptChallenge]);
+  
   // Schedule periodic temp file cleanup
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
@@ -670,7 +787,7 @@ const App: React.FC = () => {
   if (initializing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ff6b6b" />
+        <ActivityIndicator size="large" color="#1a2b49" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );

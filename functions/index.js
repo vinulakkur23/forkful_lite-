@@ -1083,25 +1083,36 @@ exports.processEnhancedMetadata = onSchedule('*/15 * * * *', async (event) => {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
     // Query for meals without any metadata processing
-    const unprocessedMealsQuery = await db.collection('mealEntries')
-      .where('metadata_enriched', '==', null)
-      .where('timestamp', '<', fiveMinutesAgo)
-      .limit(3) // Process only 3 meals every 15 minutes
+    // Note: Firestore can't query for "field doesn't exist" directly, so we get all recent meals
+    // and filter in memory for those without metadata_enriched field
+    const allRecentMealsQuery = await db.collection('mealEntries')
+      .where('createdAt', '<', fiveMinutesAgo)
+      .orderBy('createdAt', 'desc')
+      .limit(20) // Get more meals to filter from
       .get();
-
-    if (unprocessedMealsQuery.empty) {
+      
+    // Filter for meals that don't have metadata_enriched field or have it as null
+    const unprocessedMeals = allRecentMealsQuery.docs.filter(doc => {
+      const data = doc.data();
+      return !data.hasOwnProperty('metadata_enriched') || data.metadata_enriched === null;
+    });
+    
+    if (unprocessedMeals.length === 0) {
       console.log('No meals found needing enhanced metadata processing');
       return null;
     }
+    
+    // Limit to 3 meals for processing
+    const mealsToProcess = unprocessedMeals.slice(0, 3);
 
-    console.log(`Found ${unprocessedMealsQuery.docs.length} meals to process`);
+    console.log(`Found ${mealsToProcess.length} meals to process`);
     
     let processedCount = 0;
     let errorCount = 0;
     const results = [];
 
     // Process each meal
-    for (const mealDoc of unprocessedMealsQuery.docs) {
+    for (const mealDoc of mealsToProcess) {
       const mealId = mealDoc.id;
       const mealData = mealDoc.data();
       
@@ -1206,14 +1217,14 @@ exports.processEnhancedMetadata = onSchedule('*/15 * * * *', async (event) => {
       }
       
       // Stagger API calls with 2-minute delays to avoid overloading Gemini API
-      if (processedCount < unprocessedMealsQuery.docs.length) {
+      if (processedCount < mealsToProcess.length) {
         console.log('Waiting 2 minutes before next API call to avoid rate limits...');
         await new Promise(resolve => setTimeout(resolve, 2 * 60 * 1000)); // 2 minute delay
       }
     }
     
     const summary = {
-      totalFound: unprocessedMealsQuery.docs.length,
+      totalFound: mealsToProcess.length,
       processed: processedCount,
       errors: errorCount,
       results: results
@@ -1225,6 +1236,55 @@ exports.processEnhancedMetadata = onSchedule('*/15 * * * *', async (event) => {
   } catch (error) {
     console.error('Error in enhanced metadata processing:', error);
     throw error;
+  }
+});
+
+// Debug function to check meal metadata status
+exports.debugMealMetadata = onRequest(async (req, res) => {
+  console.log('Debug meal metadata check triggered');
+  
+  try {
+    // Get recent meals (last 100) - try without ordering first
+    const recentMealsQuery = await db.collection('mealEntries')
+      .limit(100)
+      .get();
+    
+    const mealsWithMetadata = [];
+    const mealsWithoutMetadata = [];
+    
+    recentMealsQuery.docs.forEach(doc => {
+      const data = doc.data();
+      const mealInfo = {
+        id: doc.id,
+        meal: data.meal || 'Unknown',
+        timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : 'No timestamp',
+        createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : 'No createdAt',
+        hasImageUrl: !!data.imageUrl,
+        hasMetadataEnriched: data.metadata_enriched !== undefined && data.metadata_enriched !== null,
+        allFields: Object.keys(data)
+      };
+      
+      if (mealInfo.hasMetadataEnriched) {
+        mealsWithMetadata.push(mealInfo);
+      } else {
+        mealsWithoutMetadata.push(mealInfo);
+      }
+    });
+    
+    const summary = {
+      totalMeals: recentMealsQuery.docs.length,
+      mealsWithMetadata: mealsWithMetadata.length,
+      mealsWithoutMetadata: mealsWithoutMetadata.length,
+      sampleMealsWithoutMetadata: mealsWithoutMetadata.slice(0, 5),
+      sampleMealsWithMetadata: mealsWithMetadata.slice(0, 3)
+    };
+    
+    console.log('Meal metadata summary:', summary);
+    res.json(summary);
+    
+  } catch (error) {
+    console.error('Error checking meal metadata:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1247,10 +1307,18 @@ exports.processEnhancedMetadataManual = onRequest(async (req, res) => {
       }
     } else {
       // Process batch of unprocessed meals
-      queryRef = await db.collection('mealEntries')
-        .where('metadata_enriched', '==', null)
-        .limit(batchSize)
+      // Get recent meals and filter for those without metadata_enriched
+      const allMealsQuery = await db.collection('mealEntries')
+        .limit(batchSize * 3) // Get more to filter from
         .get();
+        
+      // Filter for meals without metadata_enriched field
+      const unprocessedMeals = allMealsQuery.docs.filter(doc => {
+        const data = doc.data();
+        return !data.hasOwnProperty('metadata_enriched') || data.metadata_enriched === null;
+      });
+      
+      queryRef = { docs: unprocessedMeals.slice(0, batchSize) };
     }
     
     const mealsToProcess = mealId ? [queryRef] : queryRef.docs;

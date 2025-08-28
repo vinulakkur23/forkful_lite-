@@ -283,7 +283,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
       // Show visual indicator in UI
       const loadingIndicator = (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#ff6b6b" />
+          <ActivityIndicator size="small" color="#1a2b49" />
           <Text style={styles.loadingText}>Finding menu for {restaurantName}...</Text>
         </View>
       );
@@ -648,7 +648,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
                   {showAutocomplete && autocompleteRestaurants.length > 0 && (
                     <View style={styles.autocompleteDropdown}>
                       {isSearchingRestaurants && (
-                        <ActivityIndicator size="small" color="#ff6b6b" style={styles.autocompleteLoading} />
+                        <ActivityIndicator size="small" color="#1a2b49" style={styles.autocompleteLoading} />
                       )}
                       <FlatList
                         data={autocompleteRestaurants}
@@ -740,7 +740,7 @@ const RatingScreen: React.FC<Props> = ({ route, navigation }) => {
 
             {isLoadingSuggestions && (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#ff6b6b" />
+                <ActivityIndicator size="small" color="#1a2b49" />
                 <Text style={styles.loadingText}>Getting suggestions...</Text>
               </View>
             )}

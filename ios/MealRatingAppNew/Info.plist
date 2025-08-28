@@ -34,6 +34,16 @@
 				<string>com.googleusercontent.apps.219668861569-qm93jan5voigimfur98slrudb78r6uvp</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.forkful.challenges</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>forkful</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>

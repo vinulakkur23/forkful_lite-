@@ -88,6 +88,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const userPhoto = route.params?.userPhoto;
   const initialTabIndex = route.params?.tabIndex || 0;
   const isOwnProfile = !userId || userId === auth().currentUser?.uid;
+  const openChallengeModal = route.params?.openChallengeModal;
   
   
   const [isLoading, setIsLoading] = useState(true);
@@ -134,6 +135,17 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   // Tooltip onboarding state
   const [showTooltips, setShowTooltips] = useState(false);
   const [tabBarLayout, setTabBarLayout] = useState<any>(null);
+  
+  // Handle route param changes (e.g., when navigating with openChallengeModal)
+  useEffect(() => {
+    if (route.params?.tabIndex !== undefined) {
+      setTabIndex(route.params.tabIndex);
+    }
+    // If openChallengeModal is set, switch to stamps tab
+    if (route.params?.openChallengeModal) {
+      setTabIndex(3); // Stamps tab is index 3
+    }
+  }, [route.params?.tabIndex, route.params?.openChallengeModal]);
   
   // Handle filter changes from SimpleFilterComponent
   const handleFilterChange = (filters: FilterItem[] | null) => {
@@ -322,6 +334,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               navigation={navigation}
               onFilterChange={handleFilterChange}
               onTabChange={setTabIndex}
+              route={{ params: { openChallengeModal: openChallengeModal } }}
             />
           </ErrorBoundary>
         );
@@ -492,7 +505,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               width: 200,
               height: 100,
             },
-            message: 'Your meals show up here. You have to rate them for them to be viewed by people!'
+            message: 'Your meals show up here. Rate them so others can see!'
             // No arrowDirection = no blue box, centered tooltip
           },
           {
@@ -503,7 +516,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               width: width / 8, // Much narrower box
               height: 50,
             },
-            message: 'The meals\' location is automatically saved on a map you can share with friends!',
+            message: 'They are automatically saved on a map you can share with friends.',
             arrowDirection: 'up'
           },
           {

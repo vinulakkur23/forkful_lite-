@@ -24,9 +24,8 @@ import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaSer
 // import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
 // Import rating statements service for fresh API calls when background data is stale
 import { extractRatingStatements } from '../services/ratingStatementsService';
-// Import restaurant pairing service with separate drink and dessert functions
+// Import restaurant pairing service types only (API calls removed - data comes from Firestore)
 import { 
-  getDrinkPairings,
   DrinkPairingData 
 } from '../services/restaurantPairingService';
 // Import dish rating criteria service
@@ -171,6 +170,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
               restaurant: loadedMealData.restaurant,
               hasCriteria: !!loadedMealData.rating_statements_result,
               hasEnhancedFacts: !!loadedMealData.enhanced_metadata_facts,
+              hasDrinkPairings: !!loadedMealData.drink_pairings,
+              drinkPairingsTimestamp: loadedMealData.drink_pairings_updated_at ? new Date(loadedMealData.drink_pairings_updated_at.seconds * 1000).toLocaleTimeString() : 'None',
               criteriaTimestamp: loadedMealData.criteria_updated_at ? new Date(loadedMealData.criteria_updated_at.seconds * 1000).toLocaleTimeString() : 'None'
             });
 
@@ -221,38 +222,10 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
     
-    // If no pre-loaded data and we don't have photo, can't make API call
-    if (!photo?.uri) {
-      console.log('🚀 ResultScreen: No pre-loaded pairings and no photo for API call');
-      return;
-    }
-    
-    console.log('🚀 ResultScreen: No pre-loaded pairings found, making fresh API call...');
-    setLoadingPairings(true);
-    
-    try {
-      const drinkData = await getDrinkPairings(
-        photo.uri,
-        meal,
-        restaurant,
-        mealData.location?.city // Optional location
-      );
-      
-      if (drinkData) {
-        console.log('✅ ResultScreen: Drink pairings loaded successfully via API');
-        setDrinkPairingData(drinkData);
-        console.log('✅ ResultScreen: API drink pairings set');
-        setPairingsLoaded(true);
-      } else {
-        console.log('❌ ResultScreen: Failed to load drink pairings via API');
-        setPairingsLoaded(true); // Mark as attempted even if failed
-      }
-    } catch (error) {
-      console.error('🚨 ResultScreen: Error loading drink pairings via API:', error);
-      setPairingsLoaded(true); // Mark as attempted even if error
-    } finally {
-      setLoadingPairings(false);
-    }
+    // No pre-loaded data found - drink pairings will be loaded when RatingScreen2's background API call completes
+    console.log('🚀 ResultScreen: No pre-loaded pairings found yet, will wait for RatingScreen2 background call to complete');
+    console.log('🚀 ResultScreen: Removed duplicate API call - data will be loaded from Firestore when available');
+    setPairingsLoaded(true); // Mark as attempted - data will come from Firestore updates
   };
 
   // Load dish rating criteria 
@@ -432,13 +405,25 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Enhanced metadata processing removed - now handled by Cloud Functions running 3x daily
 
-  // Load restaurant pairings after meal data is loaded (only once per meal)
+  // Load restaurant pairings after meal data is loaded OR when drink_pairings field becomes available
   useEffect(() => {
-    if (mealData && !loadingMealData && !pairingsLoaded && !loadingPairings) {
-      console.log('🚀 ResultScreen: Meal data ready, attempting to load restaurant pairings...');
-      loadRestaurantPairings();
+    if (mealData && !loadingMealData && !loadingPairings) {
+      // If we already have drink pairings data from Firestore, use it
+      const firestoreDrinkPairings = mealData?.drink_pairings;
+      if (firestoreDrinkPairings && !drinkPairingData) {
+        console.log('🚀 ResultScreen: Found drink pairings in updated meal data, setting them...');
+        setDrinkPairingData(firestoreDrinkPairings);
+        setPairingsLoaded(true);
+        return;
+      }
+      
+      // If no drink pairings yet and we haven't tried loading, try loading
+      if (!pairingsLoaded) {
+        console.log('🚀 ResultScreen: Meal data ready, attempting to load restaurant pairings...');
+        loadRestaurantPairings();
+      }
     }
-  }, [mealData, loadingMealData, pairingsLoaded, loadingPairings]);
+  }, [mealData, loadingMealData, pairingsLoaded, loadingPairings, drinkPairingData]);
 
   // Load dish rating criteria after meal data is loaded (only once per meal)
   useEffect(() => {
@@ -1767,17 +1752,16 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           ) : (
             <View style={styles.pixelArtLoadingContainer}>
               <ActivityIndicator size="large" color="#1a2b49" />
-              <Text style={styles.pixelArtLoadingText}>
-                Stick around for your custom {meal || 'dish'} emoji
+              <Text style={styles.criteriaLoadingText}>
+                Building you a custom meal emoji. Stick around if you want to see it.
               </Text>
             </View>
           )}
         </View>
 
-        {/* Loading for taste tips only */}
+        {/* Loading for taste tips only - no spinner (using main loading circle) */}
         {(!ratingStatementsResult || !ratingStatementsResult.rating_statements) && (
           <View style={styles.criteriaLoadingContainer}>
-            <ActivityIndicator size="large" color="#1a2b49" />
             <Text style={styles.criteriaLoadingText}>Loading taste tips</Text>
           </View>
         )}
@@ -1876,10 +1860,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Loading for beer/wine pairings - appears at bottom */}
+        {/* Loading for beer/wine pairings - no spinner (using main loading circle) */}
         {mealType === 'Restaurant' && restaurant && (!drinkPairingData || loadingPairings) && (
           <View style={styles.criteriaLoadingContainer}>
-            <ActivityIndicator size="large" color="#1a2b49" />
             <Text style={styles.criteriaLoadingText}>Loading beer/wine pairings</Text>
           </View>
         )}
@@ -1970,7 +1953,7 @@ const styles = StyleSheet.create({
   criteriaLoadingText: {
     color: '#1a2b49',
     marginTop: 20,
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: '400',
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
@@ -2267,7 +2250,7 @@ const styles = StyleSheet.create({
   pixelArtLoadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#1a2b49',
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },

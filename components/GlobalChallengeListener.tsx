@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import ChallengeNotification from './ChallengeNotification';
 import challengeNotificationService from '../services/challengeNotificationService';
 import { UserChallenge } from '../services/userChallengesService';
+import { navigate } from '../services/navigationService';
 
 const GlobalChallengeListener: React.FC = () => {
   const [currentChallenge, setCurrentChallenge] = useState<UserChallenge | null>(null);

@@ -1033,13 +1033,52 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // Start with rating statements first, then enhanced metadata sequentially
       // Starting staggered API calls to avoid overwhelming backend
-      logWithSession('Starting STAGGERED API calls - drink pairings, then pixel art, then rating statements with small delays');
+      logWithSession('Starting STAGGERED API calls - rating statements, then drink pairings, then pixel art with small delays');
       
       // STAGGERED API calls to avoid overwhelming the backend service
       
-      // Step 1: Start drink pairings first (if available)
+      // Step 1: Start rating statements/insights first (0ms)
+      console.log('📝 Starting rating statements/insights first...');
+      extractRatingStatements(
+        mealName
+      ).then(async (result) => {
+        // Rating statements API call completed
+        if (result) {
+          // Rating statements completed successfully
+          // Full result logged for debugging if needed
+          logWithSession(`Rating statements completed with ${result.rating_statements?.length || 0} statements`);
+          
+          // Log if this looks like fallback data
+          if (result.extraction_error) {
+            console.warn('⚠️ WARNING: This looks like fallback rating statements!');
+          }
+          
+          // Update the meal document with rating statements
+          try {
+            const statementsUpdate = {
+              rating_statements_result: result,
+              statements_updated_at: firestore.FieldValue.serverTimestamp()
+            };
+            
+            await firestore().collection('mealEntries').doc(mealId).update(statementsUpdate);
+            logWithSession(`Rating statements saved successfully`);
+            
+          } catch (firestoreError) {
+            console.error('❌ Error saving rating statements to Firestore:', firestoreError);
+            logWithSession(`Rating statements save error: ${firestoreError}`);
+          }
+        } else {
+          console.warn('⚠️ Rating statements extraction failed');
+          logWithSession('Rating statements extraction failed');
+        }
+      }).catch(error => {
+        console.error('❌ Error with rating statements:', error);
+        logWithSession(`Rating statements error: ${error}`);
+      });
+      
+      // Step 2: Start drink pairings immediately (parallel processing)
       if (restaurant && restaurant.trim() && mealName && mealName.trim()) {
-        console.log('🍺🍷 Starting drink pairings first...');
+        console.log('🍺🍷 Starting drink pairings IMMEDIATELY (parallel with rating statements)...');
         const drinkPairingPromise = getDrinkPairings(
           freshPhoto.uri,
           mealName,
@@ -1069,94 +1108,43 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         console.log('⚠️ Skipping drink pairings - missing restaurant or meal name');
       }
       
-      // Step 2: Start pixel art after 500ms delay
-      setTimeout(() => {
-        console.log('🎨 Starting pixel art generation after 500ms delay...');
-        const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
-        
-        // Handle pixel art result
-        pixelArtPromise.then(async (pixelArtResult) => {
-          if (pixelArtResult && pixelArtResult.image_data) {
-            console.log('✅ Pixel art generation completed');
-            logWithSession('Pixel art completed successfully');
-            
-            // Update meal with pixel art data
-            try {
-              await firestore()
-                .collection('mealEntries')
-                .doc(mealId)
-                .update({
-                  pixel_art_data: pixelArtResult.image_data,
-                  pixel_art_prompt: pixelArtResult.prompt_used,
-                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
-                });
-              
-              console.log('✅ Pixel art saved to Firestore');
-              logWithSession('Pixel art saved successfully');
-            } catch (firestoreError) {
-              console.error('❌ Error saving pixel art:', firestoreError);
-              logWithSession(`Pixel art save error: ${firestoreError}`);
-            }
-          } else {
-            console.warn('⚠️ Pixel art generation failed');
-            logWithSession('Pixel art generation failed');
-          }
-        }).catch(error => {
-          console.error('❌ Pixel art generation error:', error);
-          logWithSession(`Pixel art error: ${error}`);
-        });
-      }, 500);
+      // Step 3: Start pixel art immediately (parallel processing)
+      console.log('🎨 Starting pixel art generation IMMEDIATELY (parallel with other APIs)...');
+      const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
       
-      // Step 3: Start rating statements after 1000ms delay
-      setTimeout(() => {
-        console.log('📝 Starting rating statements after 1000ms delay...');
-        extractRatingStatements(
-          mealName
-        ).then(async (result) => {
-        // Rating statements API call completed
-        if (result) {
-          // Rating statements completed successfully
-          // Full result logged for debugging if needed
-          logWithSession(`Rating statements completed with ${result.rating_statements?.length || 0} statements`);
+      // Handle pixel art result
+      pixelArtPromise.then(async (pixelArtResult) => {
+        if (pixelArtResult && pixelArtResult.image_data) {
+          console.log('✅ Pixel art generation completed');
+          logWithSession('Pixel art completed successfully');
           
-          // Log if this looks like fallback data
-          if (result.extraction_error) {
-            console.warn('⚠️ WARNING: This looks like fallback rating statements!');
-          }
-          
-          // Update the meal document with rating statements
+          // Update meal with pixel art data
           try {
-            const statementsUpdate = {
-              rating_statements_result: result,
-              statements_updated_at: firestore.FieldValue.serverTimestamp()
-            };
+            await firestore()
+              .collection('mealEntries')
+              .doc(mealId)
+              .update({
+                pixel_art_data: pixelArtResult.image_data,
+                pixel_art_prompt: pixelArtResult.prompt_used,
+                pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+              });
             
-            await firestore().collection('mealEntries').doc(mealId).update(statementsUpdate);
-            // Meal updated with rating statements
-            logWithSession(`Rating statements saved, starting enhanced metadata extraction`);
-            
-            // Drink pairings are now handled in staggered approach above
-            
-            // MOVED TO BACKGROUND - NO LONGER BLOCKING USER EXPERIENCE
-            // Rating statements saved, navigation can proceed
-            return null; // Don't block - enhanced metadata will run later
-            
+            console.log('✅ Pixel art saved to Firestore');
+            logWithSession('Pixel art saved successfully');
           } catch (firestoreError) {
-            console.error('❌ Error saving rating statements to Firestore:', firestoreError);
-            logWithSession(`Rating statements save error: ${firestoreError}`);
-            throw firestoreError;
+            console.error('❌ Error saving pixel art:', firestoreError);
+            logWithSession(`Pixel art save error: ${firestoreError}`);
           }
         } else {
-          console.error('Rating statements extraction failed - returned null');
-          logWithSession('Rating statements failed - skipping enhanced metadata');
-          return null;
+          console.warn('⚠️ Pixel art generation failed');
+          logWithSession('Pixel art generation failed');
         }
-      // Enhanced metadata processing removed - now handled by Cloud Functions
       }).catch(error => {
-        console.error('❌ Error with rating statements:', error);
-        logWithSession(`Rating statements error: ${error}`);
+        console.error('❌ Pixel art generation error:', error);
+        logWithSession(`Pixel art error: ${error}`);
       });
-      }, 1000); // Close setTimeout for rating statements
+      
+      // The rating statements are already handled above - this duplicate call has been removed
       
       // Pixel art is now handled in staggered approach above
       

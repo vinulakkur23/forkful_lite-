@@ -59,50 +59,52 @@ export interface CombinedPairingData {
  * Get drink pairing recommendations for a dish at a specific restaurant
  */
 export const getDrinkPairings = async (
-  imageUri: string,
+  imageUri: string, // Kept for backward compatibility but not used
   dishName: string,
   restaurantName: string,
   restaurantLocation?: string
 ): Promise<DrinkPairingData | null> => {
   console.log('🚨 RestaurantPairingService: FUNCTION CALLED - getDrinkPairings');
   console.log('🚨 RestaurantPairingService: Parameters:', { 
-    imageUri, 
+    // imageUri, // Commented out - not using image for faster processing
     dishName, 
     restaurantName, 
     restaurantLocation 
   });
   
   try {
-    console.log('🚀 RestaurantPairingService: Starting drink pairing recommendations');
+    console.log('🚀 RestaurantPairingService: Starting drink pairing recommendations (meal name only - no image)');
     
-    // Compress image for faster upload and processing
-    console.log('RestaurantPairingService: Compressing image for speed...');
-    const compressedImage = await ImageResizer.createResizedImage(
-      imageUri,
-      512, // Medium size for good image context
-      512, // Medium size for good image context
-      'JPEG',
-      70,  // Good quality for image analysis
-      0,   // No rotation
-      undefined, // Output path (will be generated)
-      false, // Keep metadata
-      {
-        mode: 'contain',
-        onlyScaleDown: true
-      }
-    );
-    
-    console.log('✅ RestaurantPairingService: Image compressed successfully');
+    // COMMENTED OUT FOR FASTER PROCESSING - Can be reverted if needed
+    // // Compress image for faster upload and processing
+    // console.log('RestaurantPairingService: Compressing image for speed...');
+    // const compressedImage = await ImageResizer.createResizedImage(
+    //   imageUri,
+    //   512, // Medium size for good image context
+    //   512, // Medium size for good image context
+    //   'JPEG',
+    //   70,  // Good quality for image analysis
+    //   0,   // No rotation
+    //   undefined, // Output path (will be generated)
+    //   false, // Keep metadata
+    //   {
+    //     mode: 'contain',
+    //     onlyScaleDown: true
+    //   }
+    // );
+    // 
+    // console.log('✅ RestaurantPairingService: Image compressed successfully');
     
     // Create FormData
     const formData = new FormData();
     
-    // Add the compressed image
-    formData.append('image', {
-      uri: compressedImage.uri,
-      type: 'image/jpeg',
-      name: 'dish.jpg',
-    } as any);
+    // COMMENTED OUT - Not sending image for faster processing
+    // // Add the compressed image
+    // formData.append('image', {
+    //   uri: compressedImage.uri,
+    //   type: 'image/jpeg',
+    //   name: 'dish.jpg',
+    // } as any);
     
     // Add required dish and restaurant information
     formData.append('dish_name', dishName);
