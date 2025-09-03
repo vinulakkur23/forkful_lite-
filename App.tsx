@@ -247,6 +247,7 @@ export const ResourceManager = {
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+
 // Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
 const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
   

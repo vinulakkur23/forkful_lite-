@@ -47,6 +47,7 @@ type Props = {
 interface City {
   name: string;
   imageUrl: string;
+  mealCount: number;
 }
 
 interface TopRatedPhoto {
@@ -171,9 +172,9 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     setLoading(false);
     setAchievementItems([]);
     // loadAchievements();
-    // DISABLED: Top rated photos and cities to reduce Firestore calls
+    // DISABLED: Top rated photos to reduce Firestore calls
     // loadTopRatedPhotos();
-    // loadCities();
+    loadCities();
     loadAllChallenges();
     loadPixelArtEmojis();
   }, [userId]);
@@ -280,10 +281,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     setTopRatedPhotos([]);
   };
 
-  // DISABLED: Cities feature to reduce Firestore calls
   const loadCities = async () => {
-    // Commenting out to reduce Firestore calls
-    /*
     try {
       setCitiesLoading(true);
       
@@ -297,8 +295,23 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       const userData = userDoc.data();
       const uniqueCities = userData?.uniqueCities || [];
 
-      // Load city images from cityImages collection
-      const citiesWithImages: City[] = [];
+      // Load city images and count meals per city
+      const citiesWithData: City[] = [];
+      
+      // Get meal counts per city
+      const mealsQuery = await firestore()
+        .collection('mealEntries')
+        .where('userId', '==', targetUserId)
+        .get();
+      
+      const cityMealCounts: { [city: string]: number } = {};
+      mealsQuery.docs.forEach(doc => {
+        const data = doc.data();
+        const city = data.location?.city;
+        if (city) {
+          cityMealCounts[city] = (cityMealCounts[city] || 0) + 1;
+        }
+      });
       
       for (const cityName of uniqueCities) {
         const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
@@ -309,33 +322,37 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
         ).join(' ');
         
+        const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
+        
         if (cityDoc.exists) {
           const cityData = cityDoc.data();
           if (cityData.imageUrl) {
-            citiesWithImages.push({
+            citiesWithData.push({
               name: capitalizedCityName,
-              imageUrl: cityData.imageUrl
+              imageUrl: cityData.imageUrl,
+              mealCount: mealCount
             });
           }
         } else {
           // Use placeholder if no image exists
-          citiesWithImages.push({
+          citiesWithData.push({
             name: capitalizedCityName,
-            imageUrl: 'https://via.placeholder.com/350'
+            imageUrl: 'https://via.placeholder.com/350',
+            mealCount: mealCount
           });
         }
       }
+      
+      // Sort cities by meal count (highest first)
+      citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
 
-      console.log(`🌎 Found ${citiesWithImages.length} cities for user`);
-      setCities(citiesWithImages);
+      console.log(`🌎 Found ${citiesWithData.length} cities for user`);
+      setCities(citiesWithData);
     } catch (error) {
       console.error('Error loading cities:', error);
     } finally {
       setCitiesLoading(false);
     }
-    */
-    setCitiesLoading(false);
-    setCities([]);
   };
 
   const loadAllChallenges = async () => {
@@ -349,7 +366,15 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       if (targetUserId === currentUserId) {
         const challenges = await getUserChallenges();
         console.log(`🍽️ Found ${challenges.length} total challenges for own profile`);
-        setAllChallenges(challenges);
+        
+        // Sort challenges: incomplete first, then completed
+        const sortedChallenges = [...challenges].sort((a, b) => {
+          if (a.status === 'completed' && b.status !== 'completed') return 1;
+          if (a.status !== 'completed' && b.status === 'completed') return -1;
+          return 0;
+        });
+        
+        setAllChallenges(sortedChallenges);
       } else {
         console.log(`🍽️ Not showing challenges for other user's profile`);
         setAllChallenges([]);
@@ -596,8 +621,11 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           resizeMode="cover"
         />
       </View>
-      <Text style={styles.cityName} numberOfLines={2}>
+      <Text style={styles.cityName} numberOfLines={1}>
         {item.name}
+      </Text>
+      <Text style={styles.cityMealCount} numberOfLines={1}>
+        {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
       </Text>
     </TouchableOpacity>
   );
@@ -710,19 +738,23 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
               {!challengesLoading && allChallenges.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>My Food Challenges</Text>
-              <FlatList
-                data={allChallenges}
-                renderItem={renderChallengeItem}
-                keyExtractor={item => item.challenge_id}
-                numColumns={3}
-                contentContainerStyle={styles.stampsList}
-                scrollEnabled={false}
-              />
+              <ScrollView 
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.challengeCarousel}
+                contentContainerStyle={styles.challengeCarouselContent}
+              >
+                {allChallenges.map(item => (
+                  <View key={item.challenge_id} style={styles.carouselItemWrapper}>
+                    {renderChallengeItem({ item, index: 0, separators: null as any })}
+                  </View>
+                ))}
+              </ScrollView>
             </>
           )}
 
-          {/* Cities Section - DISABLED to reduce Firestore calls */}
-          {/* {!citiesLoading && cities.length > 0 && (
+          {/* Cities Section */}
+          {!citiesLoading && cities.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Cities</Text>
               
@@ -735,7 +767,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                 scrollEnabled={false}
               />
             </>
-          )} */}
+          )}
 
           {/* Top Rated Photos Section - DISABLED to reduce Firestore calls */}
           {/* {!photosLoading && topRatedPhotos.length > 0 && (
@@ -1336,11 +1368,11 @@ const styles = StyleSheet.create({
   },
   cityItem: {
     width: STAMP_SIZE,
-    height: STAMP_SIZE + 10, // Reduced extra space for text
+    height: STAMP_SIZE + 25, // More reasonable space for text
     margin: 5,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start', // Start from top
     padding: 8,
     backgroundColor: '#ffffff',
     elevation: 3,
@@ -1350,15 +1382,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   cityImageContainer: {
-    width: STAMP_SIZE - 16, // Use even more of the stamp width
-    height: STAMP_SIZE - 25, // Leave less room for text at bottom
+    width: STAMP_SIZE - 16,
+    height: STAMP_SIZE - 50, // Smaller image to make room for text
     borderRadius: 8,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 8,
     overflow: 'hidden',
+    marginBottom: 8, // Add space between image and text
   },
   cityImage: {
     width: '100%',
@@ -1367,15 +1398,33 @@ const styles = StyleSheet.create({
   },
   cityName: {
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginTop: 2,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     color: '#1a2b49',
-    minHeight: 24, // Reduced height for tighter spacing
+    marginBottom: 2,
+    marginTop: -40,
+  },
+  cityMealCount: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginTop: 5,
   },
   challengeItem: {
     position: 'relative', // For absolute positioning of status indicator
+  },
+  challengeCarousel: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  challengeCarouselContent: {
+    paddingHorizontal: 15,
+    paddingRight: 25, // Extra padding at the end
+  },
+  carouselItemWrapper: {
+    marginRight: 10, // Space between carousel items
   },
   completedChallengeItem: {
     backgroundColor: '#FFFFFF', // Keep white background like active challenges

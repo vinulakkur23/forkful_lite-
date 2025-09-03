@@ -28,6 +28,8 @@ import { extractRatingStatements } from '../services/ratingStatementsService';
 import { 
   DrinkPairingData 
 } from '../services/restaurantPairingService';
+// Import dish history service types
+import { DishHistoryResult } from '../services/dishHistoryService';
 // Import dish rating criteria service
 import { extractDishRatingCriteria, DishRatingCriteriaData } from '../services/dishRatingCriteriaService';
 // Import dish insights service
@@ -98,6 +100,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const pixelArtGenerated = mealData?.pixel_art_generated_at || mealData?.pixel_art_updated_at || null;
   // NEW: Restaurant pairing data from RatingScreen2 (already loaded)
   const firestoreDrinkPairings = mealData?.drink_pairings || null;
+  // NEW: Dish history data from RatingScreen2 (already loaded)
+  const firestoreDishHistory = mealData?.dish_history || null;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -129,6 +133,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   const [wineExpanded, setWineExpanded] = useState(false);
   // Expansion state for rating statements
   const [statementExpanded, setStatementExpanded] = useState<{ [key: number]: boolean }>({});
+  // Expansion state for dish history
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   
   // Generate a unique instance key for this specific navigation
   const instanceKey = `${photo?.uri || ''}_${routeMealId || ''}`;
@@ -1734,29 +1740,9 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
 
-        {/* Pixel Art Emoji - ALWAYS stays on top */}
-        <View style={styles.pixelArtContainer}>
-          {pixelArtUrl || pixelArtData ? (
-            <Image 
-              source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }} 
-              style={styles.pixelArtEmojiLarge}
-              resizeMode="contain"
-              onError={(error) => {
-                console.error('❌ Pixel art failed to load from:', pixelArtUrl ? 'URL' : 'base64 data');
-                console.error('❌ Error:', JSON.stringify(error.nativeEvent));
-              }}
-              onLoad={() => {
-                console.log('✅ Pixel art icon loaded successfully!');
-              }}
-            />
-          ) : (
-            <View style={styles.pixelArtLoadingContainer}>
-              <ActivityIndicator size="large" color="#1a2b49" />
-              <Text style={styles.criteriaLoadingText}>
-                Building you a custom meal emoji. Stick around if you want to see it.
-              </Text>
-            </View>
-          )}
+        {/* Top Message with dish name */}
+        <View style={styles.topMessageContainer}>
+          <Text style={styles.topMessage}>Enjoy your {meal || 'meal'}!</Text>
         </View>
 
         {/* Loading for taste tips only - no spinner (using main loading circle) */}
@@ -1867,10 +1853,42 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Bottom Message */}
-        <View style={styles.bottomMessageContainer}>
-          <Text style={styles.bottomMessage}>Enjoy your meal!</Text>
-        </View>
+        {/* Dish History Section */}
+        {firestoreDishHistory && (
+          <View style={styles.pairingCard}>
+            <View style={[styles.pairingItem, { borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: 0, paddingBottom: 0 }]}>
+              <TouchableOpacity 
+                style={styles.pairingItemHeader}
+                onPress={() => setHistoryExpanded(!historyExpanded)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pairingExpandIcon}>
+                  {historyExpanded ? '−' : '+'}
+                </Text>
+                <Text style={styles.pairingItemIcon}>📚</Text>
+                <View style={styles.pairingItemTextContainer}>
+                  {renderTextWithBold(`History: ${firestoreDishHistory.title}`, styles.pairingItemOneLine)}
+                </View>
+              </TouchableOpacity>
+              
+              {historyExpanded && (
+                <View style={styles.pairingItemDetails}>
+                  <Text style={styles.pairingItemReason}>
+                    {renderTextWithBold(firestoreDishHistory.history, styles.pairingItemText)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Loading for dish history - no spinner (using main loading circle) */}
+        {(!firestoreDishHistory) && (
+          <View style={styles.criteriaLoadingContainer}>
+            <Text style={styles.criteriaLoadingText}>Loading dish history</Text>
+          </View>
+        )}
+
         
         {/* Action buttons - DISABLED */}
         {/* Buttons removed to prevent API calls */}
@@ -2254,12 +2272,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
-  bottomMessageContainer: {
+  topMessageContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
-    marginTop: 20,
+    paddingVertical: 20,
+    marginBottom: 20,
   },
-  bottomMessage: {
+  topMessage: {
     fontSize: 24,
     fontWeight: '600',
     color: '#333',

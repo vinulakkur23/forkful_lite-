@@ -1230,7 +1230,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}> eating experience</Text>
                                             <Text>.</Text>
                                         </Text>
-                                        <Text style={styles.tryItOutText}>Capture or upload a meal you're eating!</Text>
+                                        <Text style={styles.tryItOutText}>Upload a meal to try it out!</Text>
                                         <Text style={styles.downArrow}>↓</Text>
                                     </>
                                 ) : (

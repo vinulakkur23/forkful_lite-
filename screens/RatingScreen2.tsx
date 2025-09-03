@@ -42,6 +42,7 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 // import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
 import { extractRatingStatements, RatingStatementsData } from '../services/ratingStatementsService';
 import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
+import { getDishHistory, DishHistoryResult } from '../services/dishHistoryService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
 // Enhanced metadata service removed - now handled by Cloud Functions
 // REMOVED: Facts service no longer used
@@ -1108,9 +1109,46 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         console.log('⚠️ Skipping drink pairings - missing restaurant or meal name');
       }
       
-      // Step 3: Start pixel art immediately (parallel processing)
-      console.log('🎨 Starting pixel art generation IMMEDIATELY (parallel with other APIs)...');
-      const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
+      // Step 2b: Start dish history immediately (parallel with rating statements and drink pairings)
+      if (mealName && mealName.trim()) {
+        console.log('📚 Starting dish history generation IMMEDIATELY (parallel with other APIs)...');
+        const historyStartTime = Date.now();
+        const dishHistoryPromise = getDishHistory(mealName);
+        
+        // Handle dish history in background
+        dishHistoryPromise.then(async (historyData) => {
+          const historyEndTime = Date.now();
+          const historyDuration = (historyEndTime - historyStartTime) / 1000;
+          
+          if (historyData) {
+            try {
+              const historyUpdate = {
+                dish_history: historyData,
+                dish_history_updated_at: firestore.FieldValue.serverTimestamp()
+              };
+              console.log(`📚 Dish history ready in ${historyDuration.toFixed(2)}s:`, historyData.title);
+              console.log('📚 History length:', historyData.history.length, 'characters');
+              await firestore().collection('mealEntries').doc(mealId).update(historyUpdate);
+              console.log('🎉 Dish history saved to Firestore!');
+            } catch (historyError) {
+              console.error('❌ Error saving dish history:', historyError);
+            }
+          } else {
+            console.log(`📚 Dish history failed after ${historyDuration.toFixed(2)}s`);
+          }
+        }).catch(error => {
+          const historyEndTime = Date.now();
+          const historyDuration = (historyEndTime - historyStartTime) / 1000;
+          console.error(`❌ Error with dish history after ${historyDuration.toFixed(2)}s:`, error);
+        });
+      } else {
+        console.log('⚠️ Skipping dish history - missing meal name');
+      }
+      
+      // Step 3: Start pixel art with 1.5 second delay (staggered processing)
+      setTimeout(() => {
+        console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
+        const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
       
       // Handle pixel art result
       pixelArtPromise.then(async (pixelArtResult) => {
@@ -1143,6 +1181,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         console.error('❌ Pixel art generation error:', error);
         logWithSession(`Pixel art error: ${error}`);
       });
+      }, 1500); // 1.5 second delay for pixel art generation
       
       // The rating statements are already handled above - this duplicate call has been removed
       

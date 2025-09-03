@@ -89,6 +89,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // State to track if facts are being loaded
   const [factsLoading, setFactsLoading] = useState<boolean>(false);
   
+  // State for pixel art data from Firestore
+  const [pixelArtUrl, setPixelArtUrl] = useState<string | null>(null);
+  const [pixelArtData, setPixelArtData] = useState<string | null>(null);
+  
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
@@ -191,6 +195,16 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     if (freshMealData.quick_ratings) {
       setQuickRatings(freshMealData.quick_ratings);
       console.log('EditMealScreen - Loaded quick ratings:', freshMealData.quick_ratings);
+    }
+    
+    // Load pixel art data from Firestore
+    if (freshMealData.pixel_art_url) {
+      setPixelArtUrl(freshMealData.pixel_art_url);
+      console.log('EditMealScreen - Loaded pixel art URL from Firestore');
+    }
+    if (freshMealData.pixel_art_data) {
+      setPixelArtData(freshMealData.pixel_art_data);
+      console.log('EditMealScreen - Loaded pixel art data from Firestore');
     }
     
     // Set photos from fresh data
@@ -1195,27 +1209,35 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
       {/* Restaurant History Success Overlay */}
       {showRestaurantHistory && (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) && (
-        <View style={styles.overlayContainer}>
-          <View style={styles.overlayContent}>
-            <View style={styles.overlayHeader}>
-              <TouchableOpacity onPress={handleCloseRestaurantHistory} style={styles.overlayCloseButton}>
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
+        <TouchableOpacity 
+          style={styles.overlayContainer}
+          activeOpacity={1}
+          onPress={handleCloseRestaurantHistory}
+        >
+          <TouchableOpacity 
+            style={styles.overlayContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.factContainer}>
-              <Text style={styles.successTitle}>Your Meal has been Saved!</Text>
-              <Text style={styles.factTitle}>Fun Fact!</Text>
-              <Text style={styles.factText}>
-                {renderTextWithBold(
-                  meal.dish_insights?.dish_history || 
-                  meal.enhanced_facts?.food_facts?.restaurant_history || 
-                  'Enjoy your meal!'
-                )}
-              </Text>
+              <Text style={styles.successTitle}>Your rating has been saved!</Text>
+              
+              {/* Display pixel art emoji if available */}
+              {(pixelArtUrl || pixelArtData) && (
+                <View style={styles.pixelArtContainer}>
+                  <Image 
+                    source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }} 
+                    style={styles.pixelArtEmoji}
+                    resizeMode="contain"
+                    onError={(error) => {
+                      console.error('❌ Pixel art failed to load in EditMealScreen');
+                    }}
+                  />
+                </View>
+              )}
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );
@@ -1455,7 +1477,7 @@ const styles = StyleSheet.create({
   overlayContent: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    paddingTop: 12,
+    paddingTop: 24,
     paddingBottom: 24,
     paddingHorizontal: 24,
     marginHorizontal: 12,
@@ -1562,6 +1584,15 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  // Pixel art styles
+  pixelArtContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  pixelArtEmoji: {
+    width: 40,
+    height: 40,
   },
 });
 

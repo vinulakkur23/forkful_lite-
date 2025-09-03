@@ -7,6 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiDisplay from '../components/EmojiDisplay';
+import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
@@ -40,6 +41,16 @@ type Props = {
 const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Extract the mealId from route params
   const { mealId } = route.params;
+  
+  // Emoji rating descriptions
+  const EMOJI_DESCRIPTIONS = {
+    1: "Not a tasty meal.",
+    2: "Ok, but I won't be getting it again.",
+    3: "Tasty food. I enjoyed it!",
+    4: "Very tasty. I'd order this again if I come back.",
+    5: "Delicious. I plan to make a trip back just for this.",
+    6: "One of the best things I've ever eaten."
+  };
   
   // State to hold the meal data once loaded
   const [meal, setMeal] = useState<any>(null);
@@ -683,7 +694,22 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 )}
               </View>
               <View style={styles.ratingContainer}>
-                <EmojiDisplay rating={meal.rating} size={28} />
+                <View style={styles.emojiRatingWrapper}>
+                  <EmojiRating 
+                    rating={meal.rating} 
+                    onRatingChange={() => {}} // Non-interactive in detail view
+                    size={28}
+                    interactive={false} // Make it non-interactive
+                  />
+                </View>
+                {/* Rating Description */}
+                {meal.rating > 0 && (
+                  <View style={styles.ratingDescriptionContainer}>
+                    <Text style={styles.ratingDescription}>
+                      {EMOJI_DESCRIPTIONS[meal.rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                    </Text>
+                  </View>
+                )}
               </View>
               {meal.restaurant && (
                 <TouchableOpacity 
@@ -1070,7 +1096,10 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={styles.shareButton}
               onPress={handleShare}
             >
-              <Text style={styles.buttonText}>Share</Text>
+              <Image 
+                source={require('../assets/icons/map/share.png')} 
+                style={styles.shareIcon}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1103,7 +1132,10 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               style={[styles.shareButton, styles.wideShareButton]}
               onPress={handleShare}
             >
-              <Text style={styles.buttonText}>Share</Text>
+              <Image 
+                source={require('../assets/icons/map/share.png')} 
+                style={styles.shareIcon}
+              />
             </TouchableOpacity>
           </View>
         )}
@@ -1369,9 +1401,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start', // Left-align instead of center
     marginTop: 8, // Consistent spacing
+    marginBottom: 12, // Add space below the entire rating section
+  },
+  emojiRatingWrapper: {
+    marginLeft: -7, // Negative margin to align emojis with text
+  },
+  ratingDescriptionContainer: {
+    marginTop: 4, // Reduced from 8 to bring it closer to emojis
+    paddingHorizontal: 0, // Remove padding to align with emojis
+  },
+  ratingDescription: {
+    fontSize: 12, // Smaller font to fit on one line
+    color: '#666',
+    textAlign: 'left', // Left-align the text
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   ratingLabel: {
     fontSize: 16,
@@ -1538,17 +1585,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Ensure vertical alignment
   },
   shareButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent', // Changed to transparent background
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    flex: 1, // Make all buttons take equal space
-    maxWidth: '30%', // Limit maximum width
+    backgroundColor: 'transparent',
+    width: 50,
+    height: 50,
     borderWidth: 1,
-    borderColor: '#1a2b49', // Navy blue outline
+    borderColor: '#1a2b49',
+    borderRadius: 5,
+  },
+  shareIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#1a2b49',
   },
   buttonText: {
     color: '#1a2b49', // Navy blue text
@@ -1597,12 +1646,8 @@ const styles = StyleSheet.create({
     borderColor: '#1a2b49', // Navy blue outline
   },
   wideShareButton: {
-    width: '70%', // Make the button wider when it's the only one
-    maxWidth: '70%', // Override the maxWidth constraint from shareButton
-    paddingHorizontal: 40, // Increase horizontal padding
-    paddingVertical: 15, // Make the button taller
-    borderWidth: 1,
-    borderColor: '#1a2b49', // Navy blue outline
+    width: 60,
+    height: 60,
   },
   singleButtonContainer: {
     width: '100%',

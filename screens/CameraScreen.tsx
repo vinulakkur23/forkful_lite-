@@ -585,17 +585,17 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         />
       </TouchableOpacity>
       
-      {/* Upload from Library button - top center */}
-      <TouchableOpacity style={styles.uploadButton} onPress={selectFromGallery}>
+      {/* Upload from Library button - positioned left */}
+      <TouchableOpacity style={styles.uploadButtonLarge} onPress={selectFromGallery}>
         <Image 
           source={require('../assets/icons/upload-inactive.png')} 
-          style={styles.uploadIcon}
+          style={styles.uploadIconLarge}
         />
-        <Text style={styles.uploadButtonText}>Upload from Library</Text>
+        <Text style={styles.uploadButtonTextLarge}>Upload</Text>
       </TouchableOpacity>
 
+      {/* Capture button container - centered */}
       <View style={styles.buttonContainer}>
-        {/* Capture button */}
         <TouchableOpacity
           onPress={takePicture}
           style={styles.captureButton}
@@ -730,7 +730,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   captureButton: {
     width: 70,
@@ -826,7 +825,33 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '500',
-  }
+  },
+  // Large upload button styles for bottom positioning
+  uploadButtonLarge: {
+    position: 'absolute',
+    bottom: 50,
+    left: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 35,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    minWidth: 120,
+    height: 70,
+  },
+  uploadIconLarge: {
+    width: 32,
+    height: 32,
+    marginBottom: 6,
+    tintColor: 'white',
+  },
+  uploadButtonTextLarge: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
 });
 
 export default CameraScreen;

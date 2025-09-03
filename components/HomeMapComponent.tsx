@@ -410,6 +410,7 @@ const HomeMapComponent: React.FC<Props> = ({
   const initialRegion = React.useMemo<Region>(() => {
     const mealsToUse = filteredMealsForMap;
     
+    // If no filtered meals, fall back to user location or default
     if (mealsToUse.length === 0) {
       if (userLocation) {
         return {
@@ -419,6 +420,7 @@ const HomeMapComponent: React.FC<Props> = ({
           longitudeDelta: 0.02,
         };
       }
+      // Default to San Francisco as fallback
       return {
         latitude: 37.78825,
         longitude: -122.4324,
@@ -475,11 +477,31 @@ const HomeMapComponent: React.FC<Props> = ({
   // Effect to handle tab activation
   useEffect(() => {
     if (tabIndex === 1 && mapRef.current) {
-      if (filteredMealsForMap.length > 0) {
-        setTimeout(() => fitMapToMarkers(), 500);
-      }
+      // Always try to fit the map, even with 0 meals
+      setTimeout(() => fitMapToMarkers(), 500);
     }
   }, [tabIndex, filteredMealsForMap.length]);
+
+  // Effect to handle filter mode changes - refit the map when switching modes
+  useEffect(() => {
+    if (tabIndex === 1 && mapRef.current) {
+      console.log(`HomeMapComponent: Filter mode changed to ${filterMode}, refitting map with ${filteredMealsForMap.length} meals`);
+      
+      // If no meals after filter change, center on user location
+      if (filteredMealsForMap.length === 0 && userLocation) {
+        setTimeout(() => {
+          mapRef.current?.animateToRegion({
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }, 1000);
+        }, 300);
+      } else {
+        setTimeout(() => fitMapToMarkers(), 300);
+      }
+    }
+  }, [filterMode, tabIndex, filteredMealsForMap.length, userLocation]);
   
   // When user location becomes available, center the map
   useEffect(() => {
@@ -529,7 +551,20 @@ const HomeMapComponent: React.FC<Props> = ({
   }, [centerOnLocation, tabIndex]);
 
   const fitMapToMarkers = () => {
-    if (!mapRef.current || filteredMealsForMap.length === 0) return;
+    if (!mapRef.current) return;
+    
+    // If no filtered meals, center on user location or default
+    if (filteredMealsForMap.length === 0) {
+      if (userLocation) {
+        mapRef.current.animateToRegion({
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }, 1000);
+      }
+      return;
+    }
     
     const points = filteredMealsForMap
       .filter(meal => meal.location && meal.location.latitude && meal.location.longitude)
@@ -538,7 +573,18 @@ const HomeMapComponent: React.FC<Props> = ({
         longitude: meal.location!.longitude
       }));
     
-    if (points.length === 0) return;
+    if (points.length === 0) {
+      // Fallback to user location if no meals have location data
+      if (userLocation) {
+        mapRef.current.animateToRegion({
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }, 1000);
+      }
+      return;
+    }
     
     if (points.length === 1) {
       mapRef.current.animateToRegion({
@@ -599,47 +645,13 @@ const HomeMapComponent: React.FC<Props> = ({
     );
   }
   
-  if (filteredMealsForMap.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Icon name="place" size={64} color="#ddd" />
-        {filterMode === 'following' ? (
-          <>
-            <Text style={styles.emptyText}>No meals from followed users</Text>
-            <Text style={styles.emptySubtext}>
-              Toggle the filter to see all meals
-            </Text>
-          </>
-        ) : filterMode === 'saved' ? (
-          <>
-            <Text style={styles.emptyText}>No saved meals in this area</Text>
-            <Text style={styles.emptySubtext}>
-              Toggle the filter to see all meals
-            </Text>
-          </>
-        ) : activeFilters && activeFilters.length > 0 ? (
-          <>
-            <Text style={styles.emptyText}>No meals match your filters</Text>
-            <Text style={styles.emptySubtext}>
-              Try different filters or clear your search
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.emptyText}>No meals with location data</Text>
-            <Text style={styles.emptySubtext}>
-              Encourage friends to share their meals with location!
-            </Text>
-          </>
-        )}
-      </View>
-    );
-  }
+  // Don't return early for empty state - always show the map
+  // This allows users to still interact with the map and toggle filters
 
   return (
     <View style={styles.mapContainer}>
       <MapView
-        key="homescreen-mapview"
+        key={`homescreen-mapview-${filterMode}-${filteredMealsForMap.length}`}
         ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
@@ -801,6 +813,22 @@ const HomeMapComponent: React.FC<Props> = ({
           />
         </TouchableOpacity>
       </View>
+      
+      {/* Empty state overlay when no meals */}
+      {filteredMealsForMap.length === 0 && (
+        <View style={styles.emptyStateOverlay} pointerEvents="none">
+          <View style={styles.emptyStateCard}>
+            {filterMode === 'following' ? (
+              <Text style={styles.emptyStateText}>No meals from followed users</Text>
+            ) : filterMode === 'saved' ? (
+              <Text style={styles.emptyStateText}>No saved meals yet</Text>
+            ) : (
+              <Text style={styles.emptyStateText}>No meals to display</Text>
+            )}
+            <Text style={styles.emptyStateSubtext}>Toggle filter to see more</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -1068,6 +1096,40 @@ const styles = StyleSheet.create({
     color: '#1a2b49', // Navy
     fontSize: 9,
     fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Empty state overlay styles
+  emptyStateOverlay: {
+    position: 'absolute',
+    top: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  emptyStateCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a2b49',
+    marginTop: 8,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
