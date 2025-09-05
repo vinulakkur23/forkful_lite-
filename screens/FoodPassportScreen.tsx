@@ -129,8 +129,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const [isUserFollowing, setIsUserFollowing] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
     
-    // Track if viewing own profile
-    const [isOwnProfile, setIsOwnProfile] = useState(true);
+    // Track if viewing own profile  
+    const [isOwnProfile, setIsOwnProfile] = useState(!userId || userId === auth().currentUser?.uid);
     
     // Photo selection menu state
     const [showPhotoMenu, setShowPhotoMenu] = useState(false);
@@ -226,11 +226,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 return;
             }
             
-            const querySnapshot = await firestore()
+            // For other users' profiles, only show rated meals (rating > 0)
+            const isViewingOwnProfile = !userId || userId === auth().currentUser?.uid;
+            let query = firestore()
                 .collection('mealEntries')
-                .where('userId', '==', targetUserId)
-                .orderBy('createdAt', 'desc')
-                .get();
+                .where('userId', '==', targetUserId);
+                
+            if (!isViewingOwnProfile) {
+                // Only show rated meals for other users
+                query = query.where('rating', '>', 0);
+                // Need to add composite index for userId + rating + createdAt
+                query = query.orderBy('rating', 'desc').orderBy('createdAt', 'desc');
+            } else {
+                // Show all meals for own profile
+                query = query.orderBy('createdAt', 'desc');
+            }
+            
+            const querySnapshot = await query.get();
             
             const fetchedMeals: MealEntry[] = [];
             
@@ -306,7 +318,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             }
 
             // Load user profile
-            const isViewingOwnProfile = !userId || userId === auth().currentUser?.uid;
             setIsOwnProfile(isViewingOwnProfile);
             
             if (!isViewingOwnProfile && userId) {

@@ -361,24 +361,18 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       const targetUserId = userId || auth().currentUser?.uid;
       console.log(`🍽️ Loading all challenges for user: ${targetUserId}`);
       
-      // Only show challenges if viewing own profile
-      const currentUserId = auth().currentUser?.uid;
-      if (targetUserId === currentUserId) {
-        const challenges = await getUserChallenges();
-        console.log(`🍽️ Found ${challenges.length} total challenges for own profile`);
-        
-        // Sort challenges: incomplete first, then completed
-        const sortedChallenges = [...challenges].sort((a, b) => {
-          if (a.status === 'completed' && b.status !== 'completed') return 1;
-          if (a.status !== 'completed' && b.status === 'completed') return -1;
-          return 0;
-        });
-        
-        setAllChallenges(sortedChallenges);
-      } else {
-        console.log(`🍽️ Not showing challenges for other user's profile`);
-        setAllChallenges([]);
-      }
+      // Get challenges for the target user (works for both own profile and others)
+      const challenges = await getUserChallenges(targetUserId);
+      console.log(`🍽️ Found ${challenges.length} total challenges for user ${targetUserId}`);
+      
+      // Sort challenges: incomplete first, then completed
+      const sortedChallenges = [...challenges].sort((a, b) => {
+        if (a.status === 'completed' && b.status !== 'completed') return 1;
+        if (a.status !== 'completed' && b.status === 'completed') return -1;
+        return 0;
+      });
+      
+      setAllChallenges(sortedChallenges);
     } catch (error) {
       console.error('Error loading challenges:', error);
     } finally {
@@ -610,11 +604,11 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           // Set the filter
           onFilterChange([cityFilter]);
           
-          // Switch to map tab (index 2)
-          onTabChange(2);
+          // Switch to meals tab (index 0)
+          onTabChange(0);
         } else {
           // Fallback if functions not available
-          Alert.alert('View City', `Showing meals for ${item.name} on map`);
+          Alert.alert('View City', `Showing meals for ${item.name}`);
         }
       }}
     >
@@ -968,8 +962,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                     `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()
                   )}
                   
-                  {/* Action buttons for active challenges only */}
-                  {selectedChallenge.status === 'active' && (
+                  {/* Action buttons for active challenges only - only show on own profile */}
+                  {selectedChallenge.status === 'active' && (!userId || userId === auth().currentUser?.uid) && (
                     <View style={styles.challengeActionButtons}>
                       <TouchableOpacity 
                         style={styles.shareButton}

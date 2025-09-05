@@ -46,19 +46,19 @@ export const saveUserChallenge = async (challenge: DishChallenge): Promise<boole
 };
 
 /**
- * Get all challenges for the current user
+ * Get all challenges for a specific user (or current user if no userId provided)
  */
-export const getUserChallenges = async (): Promise<UserChallenge[]> => {
+export const getUserChallenges = async (userId?: string): Promise<UserChallenge[]> => {
   try {
-    const currentUser = auth().currentUser;
-    if (!currentUser) {
-      console.error('No authenticated user to get challenges for');
+    const targetUserId = userId || auth().currentUser?.uid;
+    if (!targetUserId) {
+      console.error('No user ID provided to get challenges for');
       return [];
     }
 
     const snapshot = await firestore()
       .collection('users')
-      .doc(currentUser.uid)
+      .doc(targetUserId)
       .collection('challenges')
       .orderBy('generated_timestamp', 'desc')
       .get();
@@ -69,7 +69,7 @@ export const getUserChallenges = async (): Promise<UserChallenge[]> => {
       challenges.push({ ...data, challenge_id: doc.id });
     });
 
-    console.log('UserChallengesService: Retrieved', challenges.length, 'challenges');
+    console.log(`UserChallengesService: Retrieved ${challenges.length} challenges for user ${targetUserId}`);
     return challenges;
   } catch (error) {
     console.error('UserChallengesService: Error getting challenges:', error);
@@ -78,11 +78,11 @@ export const getUserChallenges = async (): Promise<UserChallenge[]> => {
 };
 
 /**
- * Get active (uncompleted) challenges for the current user
+ * Get active (uncompleted) challenges for a specific user (or current user if no userId provided)
  */
-export const getActiveChallenges = async (): Promise<UserChallenge[]> => {
+export const getActiveChallenges = async (userId?: string): Promise<UserChallenge[]> => {
   try {
-    const allChallenges = await getUserChallenges();
+    const allChallenges = await getUserChallenges(userId);
     return allChallenges.filter(challenge => challenge.status === 'active');
   } catch (error) {
     console.error('UserChallengesService: Error getting active challenges:', error);
@@ -91,11 +91,11 @@ export const getActiveChallenges = async (): Promise<UserChallenge[]> => {
 };
 
 /**
- * Get completed challenges for the current user
+ * Get completed challenges for a specific user (or current user if no userId provided)
  */
-export const getCompletedChallenges = async (): Promise<UserChallenge[]> => {
+export const getCompletedChallenges = async (userId?: string): Promise<UserChallenge[]> => {
   try {
-    const allChallenges = await getUserChallenges();
+    const allChallenges = await getUserChallenges(userId);
     return allChallenges.filter(challenge => challenge.status === 'completed');
   } catch (error) {
     console.error('UserChallengesService: Error getting completed challenges:', error);

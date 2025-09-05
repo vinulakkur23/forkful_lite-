@@ -278,13 +278,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
     return groupedMarkers;
   }, [filteredMeals]);
 
+  // Force meals view (not wishlist) when in passport context
   useEffect(() => {
-    if (showWishlist) {
+    if (userId && showWishlist) {
+      setShowWishlist(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (showWishlist && !userId) { // Only allow wishlist when not in passport context
       fetchSavedMeals();
     } else {
       fetchMealEntries();
     }
-  }, [showWishlist]); // Re-fetch when toggling between modes
+  }, [showWishlist, userId]); // Re-fetch when toggling between modes or userId changes
 
   const fetchSavedMeals = async () => {
     try {
@@ -979,24 +986,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
         })}
       </MapView>
 
-      {/* Wishlist Toggle Button */}
-      <View style={styles.wishlistToggleContainer}>
-        <TouchableOpacity
-          style={[styles.wishlistToggleButton, showWishlist && styles.wishlistActive]}
-          onPress={() => setShowWishlist(!showWishlist)}
-        >
-          {showWishlist && (
-            <Image
-              source={require('../assets/icons/wishlist-active.png')}
-              style={styles.wishlistButtonIcon}
-              resizeMode="contain"
-            />
-          )}
-          <Text style={styles.wishlistToggleText}>
-            {showWishlist ? `Showing: Wishlist (${filteredMeals.length})` : `Showing: Meals (${filteredMeals.length})`}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Wishlist Toggle Button - Only show in standalone map, not in passport context */}
+      {!userId && (
+        <View style={styles.wishlistToggleContainer}>
+          <TouchableOpacity
+            style={[styles.wishlistToggleButton, showWishlist && styles.wishlistActive]}
+            onPress={() => setShowWishlist(!showWishlist)}
+          >
+            {showWishlist && (
+              <Image
+                source={require('../assets/icons/wishlist-active.png')}
+                style={styles.wishlistButtonIcon}
+                resizeMode="contain"
+              />
+            )}
+            <Text style={styles.wishlistToggleText}>
+              {showWishlist ? `Showing: Wishlist (${filteredMeals.length})` : `Showing: Meals (${filteredMeals.length})`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
       
       {/* Floating buttons */}
       <View style={styles.buttonContainer}>
@@ -1144,7 +1153,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: 120,
     flexDirection: 'column',
     alignItems: 'flex-end',
   },

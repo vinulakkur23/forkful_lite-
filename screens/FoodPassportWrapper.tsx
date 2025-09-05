@@ -112,7 +112,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const routes = React.useMemo<Route[]>(() => [
     { 
       key: 'passport', 
-      title: isOwnProfile ? 'My Meals' : 'Meals', 
+      title: 'Meals', 
       activeIcon: require('../assets/icons/passport_tabs/meals-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/meals-inactive.png')
     },
@@ -124,7 +124,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     },
     { 
       key: 'map', 
-      title: 'My Map', 
+      title: 'Map', 
       activeIcon: require('../assets/icons/passport_tabs/map-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/map-inactive.png')
     },
@@ -134,7 +134,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       activeIcon: require('../assets/icons/passport_tabs/stamps-active.png'), 
       inactiveIcon: require('../assets/icons/passport_tabs/stamps-inactive.png')
     },
-  ], [isOwnProfile]);
+  ], []);
   
   // Shared filter state for both tabs - now an array of filters
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
