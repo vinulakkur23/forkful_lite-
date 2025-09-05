@@ -1137,7 +1137,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    width: '100%',
+    minHeight: 400, // Minimum height to ensure map is visible
   },
   buttonContainer: {
     position: 'absolute',

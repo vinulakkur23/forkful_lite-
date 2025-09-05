@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert } from 'react-native';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
@@ -14,6 +14,8 @@ import { firebase, auth, firestore } from '../firebaseConfig';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
 import TooltipOnboarding from '../components/TooltipOnboarding';
+import ProfileCard from '../components/ProfileCard';
+import { followUser, unfollowUser, isFollowing } from '../services/followService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -97,8 +99,14 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [profileStats, setProfileStats] = useState({
     totalMeals: 0,
     averageRating: 0,
-    badgeCount: 0
+    badgeCount: 0,
+    followersCount: 0,
+    totalCheers: 0
   });
+  
+  // Follow state
+  const [isUserFollowing, setIsUserFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   
   // Always show all 4 tabs for consistency
   const routes = React.useMemo<Route[]>(() => [
@@ -181,6 +189,69 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     handleTooltipComplete();
   };
 
+  const handleSignOut = async () => {
+    console.log("Sign out button pressed");
+    try {
+      // Enhanced sign out that handles Google Sign In properly
+      if (global.GoogleSignin) {
+        try {
+          // First revoke access and sign out from Google
+          await global.GoogleSignin.revokeAccess();
+          await global.GoogleSignin.signOut();
+          console.log("Google Sign In: Signed out successfully");
+        } catch (googleError) {
+          console.log("Error signing out from Google:", googleError);
+          // Continue with Firebase sign out even if Google sign out fails
+        }
+      }
+      
+      // Then sign out from Firebase
+      await auth().signOut();
+      console.log("Firebase Auth: Signed out successfully");
+      
+      // Navigate to Login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error) {
+      console.error("Error signing out:", error);
+      alert("Failed to sign out. Please try again.");
+    }
+  };
+
+  const handleBackPress = () => {
+    navigation.goBack();
+  };
+
+  const handleFollowToggle = async () => {
+    if (!userId || !userProfile) return;
+    
+    setFollowLoading(true);
+    try {
+      if (isUserFollowing) {
+        const result = await unfollowUser(userId);
+        if (result.success) {
+          setIsUserFollowing(false);
+        } else {
+          Alert.alert('Error', result.message);
+        }
+      } else {
+        const result = await followUser(userId, userProfile.displayName, userProfile.photoURL);
+        if (result.success) {
+          setIsUserFollowing(true);
+        } else {
+          Alert.alert('Error', result.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error);
+      Alert.alert('Error', 'Failed to update follow status');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   // Check if should show tooltips whenever screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
@@ -255,6 +326,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         }
         
         setUserProfile(profile);
+        
+        // Check follow status for other user's profile
+        if (userId) {
+          const followStatus = await isFollowing(userId);
+          setIsUserFollowing(followStatus);
+        }
       } else {
         // Own profile
         const currentUser = auth().currentUser;
@@ -356,143 +433,103 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header hidden - sign out moved to profile card */}
-      {false && <View style={styles.headerSection}>
-        {(!isOwnProfile && tabIndex !== 2) ? (
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Image
-              source={require('../assets/icons/back-icon.png')}
-              style={styles.backIcon}
-            />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.headerButton} /> // Empty view for spacing
-        )}
-        
-        <Text style={styles.headerTitle}>Food Passport</Text>
-        
-        {isOwnProfile ? (
-          <TouchableOpacity 
-            onPress={async () => {
-              console.log("Sign out button pressed");
-              try {
-                // Enhanced sign out that handles Google Sign In properly
-                if (global.GoogleSignin) {
-                  try {
-                    // First revoke access and sign out from Google
-                    await global.GoogleSignin.revokeAccess();
-                    await global.GoogleSignin.signOut();
-                    console.log("Google Sign In: Signed out successfully");
-                  } catch (googleError) {
-                    console.log("Error signing out from Google:", googleError);
-                    // Continue with Firebase sign out even if Google sign out fails
-                  }
-                }
-                
-                // Then sign out from Firebase
-                await auth().signOut();
-                console.log("Firebase Auth: Signed out successfully");
-                
-                // Navigate to Login
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
-              } catch (error) {
-                console.error("Error signing out:", error);
-                alert("Failed to sign out. Please try again.");
-              }
-            }} 
-            style={styles.signOutButton}
-          >
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.signOutButton} /> // Empty view for spacing
-        )}
-      </View>}
-      
-      
-      {/* Tab navigation */}
-      <View 
-        style={styles.tabBarContainer}
-        onLayout={(event) => {
-          const layout = event.nativeEvent.layout;
-          console.log('📐 FoodPassport: Tab bar layout detected:', layout);
-          setTabBarLayout(layout);
-        }}
+      <ScrollView 
+        style={styles.scrollContainer} 
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={tabIndex !== 2} // Disable scroll for map tab (index 2)
       >
-        {routes.map((route, i) => (
-          <TouchableOpacity
-            key={route.key}
-            style={[
-              styles.tabButton,
-              { borderBottomWidth: tabIndex === i ? 3 : 0 }
-            ]}
-            onPress={() => setTabIndex(i)}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
-              style={styles.tabIcon}
-              resizeMode="contain"
-            />
-            <Text style={[
-              styles.tabLabel,
-              { color: tabIndex === i ? '#ffc008' : '#1a2b49' }
-            ]}>
-              {route.title}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      
-      {/* Shared filter component */}
-      <View style={styles.filterArea}>
-        <CompositeFilterComponent 
-          key="shared-passport-filter"
-          onFilterChange={handleFilterChange}
-          onRatingFilterChange={handleRatingFilterChange}
-          initialFilters={activeFilters}
-          initialRatings={activeRatingFilters}
-          onUserSelect={(searchUserId, searchUserName, searchUserPhoto) => {
-            console.log('FoodPassport: Switching to user profile:', searchUserName, searchUserId, 'Photo:', searchUserPhoto);
-            
-            // Check if we're already viewing this user
-            if (searchUserId === userId) {
-              console.log('Already viewing this user profile');
-              return;
-            }
-            
-            // If we're on own profile or different user, navigate to the searched user
-            if (!userId || userId === auth().currentUser?.uid) {
-              // From own profile, navigate to other user
-              navigation.navigate('FoodPassport', { 
-                userId: searchUserId, 
-                userName: searchUserName,
-                userPhoto: searchUserPhoto,
-                tabIndex: 0 // Always start on meals tab
-              });
-            } else {
-              // From other user profile, replace with new user
-              navigation.setParams({ 
-                userId: searchUserId, 
-                userName: searchUserName,
-                userPhoto: searchUserPhoto,
-                tabIndex: 0 // Always start on meals tab
-              });
-            }
-          }}
+        {/* Profile Card */}
+        <ProfileCard
+          userProfile={userProfile}
+          profileStats={profileStats}
+          isOwnProfile={isOwnProfile}
+          onSignOut={isOwnProfile ? handleSignOut : undefined}
+          onFollowToggle={!isOwnProfile ? handleFollowToggle : undefined}
+          isFollowing={isUserFollowing}
+          followLoading={followLoading}
         />
-      </View>
-      
-      {/* Content area */}
-      <View style={styles.contentContainer}>
-        {renderScene({ route: routes[tabIndex] })}
-      </View>
+        
+        {/* Tab navigation */}
+        <View 
+          style={styles.tabBarContainer}
+          onLayout={(event) => {
+            const layout = event.nativeEvent.layout;
+            console.log('📐 FoodPassport: Tab bar layout detected:', layout);
+            setTabBarLayout(layout);
+          }}
+        >
+          {routes.map((route, i) => (
+            <TouchableOpacity
+              key={route.key}
+              style={[
+                styles.tabButton,
+                { borderBottomWidth: tabIndex === i ? 3 : 0 }
+              ]}
+              onPress={() => setTabIndex(i)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
+                style={styles.tabIcon}
+                resizeMode="contain"
+              />
+              <Text style={[
+                styles.tabLabel,
+                { color: tabIndex === i ? '#ffc008' : '#1a2b49' }
+              ]}>
+                {route.title}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        
+        {/* Shared filter component */}
+        <View style={styles.filterArea}>
+          <CompositeFilterComponent 
+            key="shared-passport-filter"
+            onFilterChange={handleFilterChange}
+            onRatingFilterChange={handleRatingFilterChange}
+            initialFilters={activeFilters}
+            initialRatings={activeRatingFilters}
+            onUserSelect={(searchUserId, searchUserName, searchUserPhoto) => {
+              console.log('FoodPassport: Switching to user profile:', searchUserName, searchUserId, 'Photo:', searchUserPhoto);
+              
+              // Check if we're already viewing this user
+              if (searchUserId === userId) {
+                console.log('Already viewing this user profile');
+                return;
+              }
+              
+              // If we're on own profile or different user, navigate to the searched user
+              if (!userId || userId === auth().currentUser?.uid) {
+                // From own profile, navigate to other user
+                navigation.navigate('FoodPassport', { 
+                  userId: searchUserId, 
+                  userName: searchUserName,
+                  userPhoto: searchUserPhoto,
+                  tabIndex: 0 // Always start on meals tab
+                });
+              } else {
+                // From other user profile, replace with new user
+                navigation.setParams({ 
+                  userId: searchUserId, 
+                  userName: searchUserName,
+                  userPhoto: searchUserPhoto,
+                  tabIndex: 0 // Always start on meals tab
+                });
+              }
+            }}
+          />
+        </View>
+        
+        {/* Content area */}
+        <View style={[
+          styles.contentContainer,
+          tabIndex === 2 && styles.mapContentContainer // Special styling for map tab
+        ]}>
+          {renderScene({ route: routes[tabIndex] })}
+        </View>
+      </ScrollView>
       
       {/* Tooltip Onboarding */}
       <TooltipOnboarding
@@ -543,6 +580,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FAF9F6',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  mapContentContainer: {
+    height: height - 220, // Fixed height for map (screen height minus profile card and navigation)
   },
   headerSection: {
     flexDirection: 'row',

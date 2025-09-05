@@ -48,7 +48,7 @@ type Props = {
   userId?: string;
   userName?: string;
   userPhoto?: string;
-  onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number }) => void;
+  onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number; followersCount: number }) => void;
   onFilterChange?: (filters: FilterItem[] | null) => void;
   onTabChange?: (tabIndex: number) => void;
 };
@@ -300,7 +300,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 onStatsUpdate({
                     totalMeals,
                     totalCheers,
-                    badgeCount
+                    badgeCount,
+                    followersCount
                 });
             }
 
@@ -1023,185 +1024,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         />
                                     </View>
                                 )}
-                                <View style={styles.profileCard}>
-                                {/* Follow button in top right corner */}
-                                {userId && userId !== auth().currentUser?.uid && (
-                                    <TouchableOpacity 
-                                        style={[styles.followButton, isUserFollowing && styles.followButtonActive]}
-                                        onPress={handleFollowToggle}
-                                        disabled={followLoading}
-                                    >
-                                        <Text style={[styles.followButtonIcon, isUserFollowing && styles.followButtonIconActive]}>
-                                            {followLoading ? '...' : isUserFollowing ? '✓' : '+'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
-                                
-                                {/* Sign Out button for own profile */}
-                                {(!userId || userId === auth().currentUser?.uid) && (
-                                    <TouchableOpacity 
-                                        style={styles.signOutButton}
-                                        onPress={signOut}
-                                    >
-                                        <Text style={styles.signOutText}>Sign Out</Text>
-                                    </TouchableOpacity>
-                                )}
-                                
-                                <View style={styles.profileHeader}>
-                                    <View style={styles.userAvatarContainer}>
-                                        {userProfile?.photoURL ? (
-                                            <Image 
-                                                source={{ uri: userProfile.photoURL }} 
-                                                style={styles.userAvatar}
-                                            />
-                                        ) : (
-                                            <View style={styles.defaultAvatar}>
-                                                <Icon name="person" size={24} color="#666" />
-                                            </View>
-                                        )}
-                                    </View>
-                                    <View style={styles.userDetails}>
-                                        <Text style={styles.userName}>{userProfile?.displayName || 'User'}</Text>
-                                        <View style={styles.statsRow}>
-                                            <Text style={styles.statText}>{profileStats.followersCount} followers</Text>
-                                            <Text style={styles.statSeparator}>•</Text>
-                                            <Text style={styles.statText}>
-                                                {profileStats.totalCheers} cheers
-                                            </Text>
-                                            {profileStats.badgeCount > 0 && (
-                                                <>
-                                                    <Text style={styles.statSeparator}>•</Text>
-                                                    <Text style={styles.statText}>{profileStats.badgeCount} stamps</Text>
-                                                </>
-                                            )}
-                                        </View>
-                                        {/* HIDDEN DEBUG BUTTONS - Functionality preserved but UI removed
-                                        {(!userId || userId === auth().currentUser?.uid) && (
-                                            <View style={styles.debugButtonsContainer}>
-                                                <TouchableOpacity 
-                                                    style={styles.debugButton}
-                                                    onPress={async () => {
-                                                        Alert.alert(
-                                                            "Refresh Counts",
-                                                            "This will recalculate your achievement counts (cities, cuisines, sushi, takeout) based on your actual meals. Continue?",
-                                                            [
-                                                                { text: "Cancel", style: "cancel" },
-                                                                { 
-                                                                    text: "Refresh", 
-                                                                    onPress: async () => {
-                                                                        const result = await refreshUserCounts();
-                                                                        if (result.success && result.counts) {
-                                                                            Alert.alert(
-                                                                                "Counts Refreshed",
-                                                                                `Updated counts:\n• Cities: ${result.counts.cities}\n• Cuisines: ${result.counts.cuisines}\n• Sushi meals: ${result.counts.sushi}\n• Takeout meals: ${result.counts.takeout}`,
-                                                                                [{ text: "OK", onPress: () => fetchMealEntries() }]
-                                                                            );
-                                                                        } else {
-                                                                            Alert.alert("Error", result.error || "Failed to refresh counts");
-                                                                        }
-                                                                    }
-                                                                }
-                                                            ]
-                                                        );
-                                                    }}
-                                                >
-                                                    <Text style={styles.debugButtonText}>🔄 Refresh Counts</Text>
-                                                </TouchableOpacity>
-                                                
-                                                <TouchableOpacity 
-                                                    style={styles.debugButton}
-                                                    onPress={async () => {
-                                                        Alert.alert(
-                                                            "Sync Cities",
-                                                            "This will check all your cities and:\n• Remove cities that no longer exist in the database\n• Request generation for cities without images\n\nContinue?",
-                                                            [
-                                                                { text: "Cancel", style: "cancel" },
-                                                                { 
-                                                                    text: "Sync", 
-                                                                    onPress: async () => {
-                                                                        const currentUserId = auth().currentUser?.uid;
-                                                                        if (!currentUserId) return;
-                                                                        
-                                                                        // First sync cities with database
-                                                                        const syncResult = await syncUserCitiesWithDatabase(currentUserId);
-                                                                        
-                                                                        if (syncResult.success) {
-                                                                            // Then load all cities to ensure generation requests
-                                                                            const loadResult = await loadMultipleCities(uniqueCities);
-                                                                            
-                                                                            let message = '';
-                                                                            if (syncResult.removedCities && syncResult.removedCities.length > 0) {
-                                                                                message += `Removed ${syncResult.removedCities.length} deleted cities: ${syncResult.removedCities.join(', ')}\n\n`;
-                                                                            }
-                                                                            
-                                                                            const needsGeneration = loadResult.loaded.filter(l => !l.result.exists || l.result.status === 'pending');
-                                                                            if (needsGeneration.length > 0) {
-                                                                                message += `Requested generation for ${needsGeneration.length} cities: ${needsGeneration.map(n => n.city).join(', ')}`;
-                                                                            }
-                                                                            
-                                                                            if (!message) {
-                                                                                message = 'All cities are already synced and have images!';
-                                                                            }
-                                                                            
-                                                                            Alert.alert(
-                                                                                "Cities Synced",
-                                                                                message,
-                                                                                [{ text: "OK", onPress: () => fetchMealEntries() }]
-                                                                            );
-                                                                        } else {
-                                                                            Alert.alert("Error", syncResult.error || "Failed to sync cities");
-                                                                        }
-                                                                    }
-                                                                }
-                                                            ]
-                                                        );
-                                                    }}
-                                                >
-                                                    <Text style={styles.debugButtonText}>🏙️ Sync Cities</Text>
-                                                </TouchableOpacity>
-                                                
-                                                <TouchableOpacity 
-                                                    style={styles.debugButton}
-                                                    onPress={async () => {
-                                                        Alert.alert(
-                                                            "Add Paris",
-                                                            "This will add Paris with a completed image.",
-                                                            [
-                                                                { text: "Cancel", style: "cancel" },
-                                                                { 
-                                                                    text: "Add", 
-                                                                    onPress: async () => {
-                                                                        try {
-                                                                            // Directly add Paris as completed with an image URL
-                                                                            await firestore()
-                                                                                .collection('cityImages')
-                                                                                .doc('paris')
-                                                                                .set({
-                                                                                    originalName: 'Paris',
-                                                                                    normalizedName: 'paris',
-                                                                                    status: 'image_generated',
-                                                                                    imageUrl: 'https://ui-avatars.com/api/?name=Paris&size=200&background=ff6b6b&color=fff&rounded=true&bold=true&length=2',
-                                                                                    generatedAt: firestore.FieldValue.serverTimestamp(),
-                                                                                });
-                                                                            
-                                                                            Alert.alert("Success", "Paris added successfully!");
-                                                                        } catch (error) {
-                                                                            Alert.alert("Error", `Failed to add Paris: ${error.message}`);
-                                                                        }
-                                                                    }
-                                                                }
-                                                            ]
-                                                        );
-                                                    }}
-                                                >
-                                                    <Text style={styles.debugButtonText}>🗼 Add Paris</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        )}
-                                        */}
-                                    </View>
-                                </View>
-                            </View>
                             </>
                         )}
                         refreshControl={
@@ -1290,8 +1112,8 @@ const styles = StyleSheet.create({
     },
     logoContainer: {
         alignItems: 'center',
-        paddingTop: 10,
-        paddingBottom: 5,
+        paddingTop: 2,
+        paddingBottom: 8,
         backgroundColor: '#FAF9F6',
     },
     logoText: {
@@ -1326,62 +1148,6 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: '500',
         fontSize: 14,
-    },
-    // Profile Card Styles
-    profileCard: {
-        backgroundColor: '#fff', // White like search bar to match meal cards
-        margin: 10,
-        marginTop: 10,
-        marginBottom: 8,
-        borderRadius: 12,
-        paddingTop: 15,
-        paddingHorizontal: 15,
-        paddingBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    profileHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    profilePhoto: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        marginRight: 12,
-    },
-    profilePhotoPlaceholder: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        backgroundColor: '#ddd',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    profileInfo: {
-        flex: 1,
-    },
-    profileName: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1a2b49',
-        marginBottom: 2,
-    },
-    profileEmail: {
-        fontSize: 14,
-        color: '#666',
-    },
-    profileStats: {
-        flexDirection: 'row',
-        borderTopWidth: 1,
-        borderTopColor: '#FAF3E0',
-        paddingTop: 10,
     },
     filterContainer: {
         marginVertical: 10,
@@ -1586,99 +1352,6 @@ const styles = StyleSheet.create({
         color: '#888',
         textAlign: 'center',
         marginTop: 5,
-    },
-    // Profile card styles
-    userAvatarContainer: {
-        marginRight: 12,
-    },
-    userAvatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-    },
-    defaultAvatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: '#f0f0f0',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    userDetails: {
-        flex: 1,
-    },
-    userName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1a2b49',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        marginTop: 3,
-        marginBottom: 6,
-    },
-    statsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    statText: {
-        fontSize: 13,
-        color: '#666',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    },
-    statSeparator: {
-        marginHorizontal: 12, // Increased from 6 to spread out the stats more
-        color: '#999',
-    },
-    followButton: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        width: 28,
-        height: 28,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderColor: '#1a2b49',
-        borderRadius: 14,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1,
-    },
-    followButtonText: {
-        color: 'white',
-        fontWeight: '600',
-        fontSize: 13,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    },
-    followButtonIcon: {
-        color: '#1a2b49',
-        fontWeight: 'bold',
-        fontSize: 16,
-        textAlign: 'center',
-        lineHeight: 16,
-    },
-    followButtonActive: {
-        backgroundColor: '#1a2b49',
-    },
-    followButtonIconActive: {
-        color: '#FAF3E0',
-    },
-    signOutButton: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        backgroundColor: '#ffffff',
-        borderWidth: 1,
-        borderColor: '#1a2b49',
-        borderRadius: 6,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        zIndex: 1,
-    },
-    signOutText: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        color: '#1a2b49',
-        fontWeight: '500',
-        fontSize: 12,
     },
     debugButtonsContainer: {
         flexDirection: 'row',
