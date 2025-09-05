@@ -405,12 +405,16 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       const emojiUrls: string[] = [];
       mealsQuery.forEach((doc) => {
         const data = doc.data();
-        // Check for both pixel_art_url and pixel_art_data
-        if (data.pixel_art_url) {
-          emojiUrls.push(data.pixel_art_url);
-        } else if (data.pixel_art_data) {
-          // If it's base64 data, convert to data URI
-          emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
+        
+        // Only show pixel art for meals that have been rated (rating > 0)
+        if (data.rating && data.rating > 0) {
+          // Check for both pixel_art_url and pixel_art_data
+          if (data.pixel_art_url) {
+            emojiUrls.push(data.pixel_art_url);
+          } else if (data.pixel_art_data) {
+            // If it's base64 data, convert to data URI
+            emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
+          }
         }
       });
       
@@ -722,7 +726,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
               {/* I've Eaten Section */}
           {!emojisLoading && pixelArtEmojis.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>I've Eaten:</Text>
+              <Text style={styles.sectionTitle}>Meals Eaten:</Text>
               <FlatList
                 data={pixelArtEmojis}
                 renderItem={renderEmojiItem}
@@ -737,7 +741,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {/* All Challenges Section */}
               {!challengesLoading && allChallenges.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>My Food Challenges</Text>
+              <Text style={styles.sectionTitle}>Food Challenges</Text>
               <ScrollView 
                 horizontal
                 showsHorizontalScrollIndicator={false}

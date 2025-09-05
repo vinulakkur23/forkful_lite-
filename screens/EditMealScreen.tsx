@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard
@@ -96,6 +96,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  
+  // Ref for scroll view
+  const scrollViewRef = useRef<any>(null);
+  const textInputRef = useRef<any>(null);
   
   // Function to fetch fresh meal data from Firestore (used for initial load)
   const fetchFreshMealData = async () => {
@@ -1047,13 +1051,16 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
 
       <KeyboardAwareScrollView
+        ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
-        enableAutomaticScroll={false}
+        enableAutomaticScroll={true}
         enableResetScrollToCoords={false}
         keyboardOpeningTime={0}
+        extraScrollHeight={100}
+        extraHeight={130}
       >
         {/* Meal photos */}
         <View style={styles.photosSection}>
@@ -1082,8 +1089,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               // Main Rating Mode
               <>
                 <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionTitle}>Rate Your Meal!</Text>
-                  <Text style={styles.sectionSubtitle}>(double click emoji for more)</Text>
+                  <Text style={styles.sectionTitle}>How was your meal?</Text>
+                  <Text style={styles.sectionSubtitle}></Text>
                 </View>
                 <EmojiRating 
                   rating={rating} 
@@ -1092,13 +1099,23 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                   style={styles.interactiveRating}
                 />
                 
-                {/* Rating Description */}
+                {/* Rating Description and Ask Me More button */}
                 {rating > 0 && (
-                  <View style={styles.ratingDescriptionContainer}>
-                    <Text style={styles.ratingDescription}>
-                      {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
-                    </Text>
-                  </View>
+                  <>
+                    <View style={styles.ratingDescriptionContainer}>
+                      <Text style={styles.ratingDescription}>
+                        {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                      </Text>
+                    </View>
+                    {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
+                      <TouchableOpacity 
+                        style={styles.askMeMoreButton}
+                        onPress={handleOpenQuickRatings}
+                      >
+                        <Text style={styles.askMeMoreButtonText}>Ask Me More!</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
                 )}
               </>
             ) : (
@@ -1106,6 +1123,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
                 <>
                   <Text style={styles.ratingStatementText}>
+                    <Text style={styles.optionalPrefix}>(Optional) </Text>
                     {renderTextWithBold(
                       (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''
                     )}
@@ -1118,11 +1136,38 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                     maxEmojis={3}
                   />
                   
-                  {/* Progress indicator in same style as rating description */}
-                  <View style={styles.ratingDescriptionContainer}>
-                    <Text style={styles.ratingDescription}>
+                  {/* Navigation controls */}
+                  <View style={styles.quickRatingNavigation}>
+                    <TouchableOpacity 
+                      style={[styles.navButton, currentStatementIndex === 0 && styles.navButtonDisabled]}
+                      onPress={() => currentStatementIndex > 0 && setCurrentStatementIndex(currentStatementIndex - 1)}
+                      disabled={currentStatementIndex === 0}
+                    >
+                      <Text style={[styles.navButtonText, currentStatementIndex === 0 && styles.navButtonTextDisabled]}>← Back</Text>
+                    </TouchableOpacity>
+                    
+                    <Text style={styles.navProgress}>
                       {currentStatementIndex + 1} of {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0}
                     </Text>
+                    
+                    <TouchableOpacity 
+                      style={styles.navButton}
+                      onPress={() => {
+                        const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+                        if (statements && currentStatementIndex < statements.length - 1) {
+                          setCurrentStatementIndex(currentStatementIndex + 1);
+                        } else {
+                          // Last statement - close the expansion
+                          handleCloseQuickRatings();
+                        }
+                      }}
+                    >
+                      <Text style={styles.navButtonText}>
+                        {currentStatementIndex === ((meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0) - 1 
+                          ? 'Skip' 
+                          : 'Skip →'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )
@@ -1131,8 +1176,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <Text style={styles.sectionTitle}>What did you think?</Text>
             <TextInput
+              ref={textInputRef}
               key={`thoughts-${mealId}`}
               style={styles.commentInput}
               placeholder="What did you enjoy about this meal? What could be better?"
@@ -1142,6 +1187,20 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               value={thoughts}
               onChangeText={setThoughts}
               maxLength={600}
+              onFocus={() => {
+                // Scroll to show the text input with some extra space
+                setTimeout(() => {
+                  if (textInputRef.current) {
+                    textInputRef.current.measureInWindow((x, y, width, height) => {
+                      // Calculate the position to scroll to
+                      const scrollToY = y - 100; // Offset to show some content above
+                      if (scrollViewRef.current && scrollViewRef.current.scrollToPosition) {
+                        scrollViewRef.current.scrollToPosition(0, scrollToY, true);
+                      }
+                    });
+                  }
+                }, 300);
+              }}
             />
             <Text style={styles.helperText}>
               Sharing will help others find your review helpful and allow us to give you better recommendations.
@@ -1398,7 +1457,7 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentsSection: {
-    marginTop: 10,
+    marginTop: 20,
   },
   commentInput: {
     borderWidth: 1,
@@ -1593,6 +1652,60 @@ const styles = StyleSheet.create({
   pixelArtEmoji: {
     width: 40,
     height: 40,
+  },
+  // Ask Me More button styles
+  askMeMoreButton: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#1a2b49',
+    borderRadius: 20,
+    marginTop: 20,
+  },
+  askMeMoreButtonText: {
+    color: '#1a2b49',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Optional prefix and navigation styles
+  optionalPrefix: {
+    color: '#999',
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  quickRatingNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  navButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#f0f2f5',
+  },
+  navButtonDisabled: {
+    opacity: 0.3,
+  },
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  navButtonTextDisabled: {
+    color: '#999',
+  },
+  navProgress: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

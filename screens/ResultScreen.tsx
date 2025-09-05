@@ -1742,7 +1742,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* Top Message with dish name */}
         <View style={styles.topMessageContainer}>
-          <Text style={styles.topMessage}>Enjoy your {meal || 'meal'}!</Text>
+          <Text style={styles.topMessage}>Your Meal has been Saved. Enjoy your {meal || 'meal'}!</Text>
         </View>
 
         {/* Loading for taste tips only - no spinner (using main loading circle) */}

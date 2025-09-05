@@ -1,6 +1,6 @@
 /**
- * Gemini Pixel Art Service
- * Handles generation of pixel-art icons from food images using Gemini
+ * Pixel Art Service
+ * Handles generation of pixel-art icons from dish names using GPT-Image-1
  */
 
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
@@ -29,30 +29,17 @@ export interface PixelArtResponse {
 }
 
 /**
- * Generate a pixel-art icon from a food image
+ * Generate a pixel-art icon from a dish name (text-only, no image needed)
  */
 export const generatePixelArtIcon = async (
-  imageUri: string,
-  dishName?: string
+  dishName: string
 ): Promise<PixelArtData | null> => {
   try {
     console.log('🚨 PixelArtService: Generating pixel art for dish:', dishName);
-    console.log('🚨 PixelArtService: Image URI:', imageUri);
     
-    // Create FormData
+    // Create FormData with only dish name
     const formData = new FormData();
-    
-    // Add the image
-    formData.append('image', {
-      uri: imageUri,
-      type: 'image/jpeg',
-      name: 'meal.jpg',
-    } as any);
-    
-    // Add dish name if provided
-    if (dishName) {
-      formData.append('dish_name', dishName);
-    }
+    formData.append('dish_name', dishName);
     
     console.log('🚨 PixelArtService: Making API call to generate-pixel-art-icon');
     

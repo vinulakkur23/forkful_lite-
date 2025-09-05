@@ -1148,7 +1148,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Step 3: Start pixel art with 1.5 second delay (staggered processing)
       setTimeout(() => {
         console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
-        const pixelArtPromise = generatePixelArtIcon(freshPhoto.uri, mealName);
+        const pixelArtPromise = generatePixelArtIcon(mealName);
       
       // Handle pixel art result
       pixelArtPromise.then(async (pixelArtResult) => {

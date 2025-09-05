@@ -372,10 +372,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       // Get cached following list (performance optimization)
       const followingUserIds = await getCachedFollowingList();
       
-      // Get meals from all users (limited to 75 for faster processing)
+      // Get meals from all users that have been rated (limited to 75 for faster processing)
       const querySnapshot = await firestore()
         .collection('mealEntries')
-        .orderBy('createdAt', 'desc')
+        .where('rating', '>', 0) // Only show meals that have been rated
+        .orderBy('rating', 'desc') // Order by rating first for better content
+        .orderBy('createdAt', 'desc') // Then by creation date
         .limit(75) // Reduced limit for faster processing
         .get();
 
