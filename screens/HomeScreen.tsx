@@ -27,6 +27,7 @@ import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
 import HomeMapComponent from '../components/HomeMapComponent';
+import NearbyUsersCarousel from '../components/NearbyUsersCarousel';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { getFollowing } from '../services/followService';
@@ -129,6 +130,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
+  
+  // Carousel refresh trigger
+  const [carouselRefreshTrigger, setCarouselRefreshTrigger] = useState(0);
   
   // Tooltip onboarding state
   const [showTooltips, setShowTooltips] = useState(false);
@@ -573,6 +577,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleRefresh = () => {
     setRefreshing(true);
     setImageErrors({}); // Reset image errors on refresh
+    setCarouselRefreshTrigger(prev => prev + 1); // Trigger carousel refresh
     fetchNearbyMeals();
   };
   
@@ -932,6 +937,17 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   };
 
+  // Navigation function for user profiles from carousel
+  const handleUserPress = (userId: string, userName: string, userPhoto: string) => {
+    console.log('Navigating to user profile from carousel:', userName, userId);
+    navigation.navigate('FoodPassport', { 
+      userId, 
+      userName,
+      userPhoto,
+      tabIndex: 0 // Always start on meals tab
+    });
+  };
+
 
   // Save meal to wishlist
   const saveMealToWishlist = async (mealId: string, mealData?: MealEntry) => {
@@ -1232,9 +1248,20 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   });
 
   // Render a meal item in the feed - memoized to prevent recreation
-  const renderMealItem = React.useCallback(({ item }: { item: MealEntry }) => (
-    <DoubleTapMealCard item={item} />
-  ), []);
+  const renderMealItem = React.useCallback(({ item }: { item: MealEntry | { type: 'carousel' } }) => {
+    // Check if this is the carousel item
+    if ('type' in item && item.type === 'carousel') {
+      return (
+        <NearbyUsersCarousel
+          userLocation={userLocation}
+          onUserPress={handleUserPress}
+          onRefresh={carouselRefreshTrigger}
+        />
+      );
+    }
+    // Otherwise render the meal card
+    return <DoubleTapMealCard item={item as MealEntry} />;
+  }, [userLocation, handleUserPress, carouselRefreshTrigger]);
   
 
 
@@ -1243,48 +1270,69 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
 
   // Feed view component (current content)
-  const FeedViewComponent = () => (
-    <>
-      {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
-          <Text style={styles.loadingText}>Finding meals nearby...</Text>
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={nearbyMeals}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMealItem}
-          contentContainerStyle={styles.feedContainer}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={10}
-          windowSize={10}
-          getItemLayout={(data, index) => ({
-            length: 400, // Approximate height of meal card (square image + content)
-            offset: 400 * index,
-            index,
-          })}
-          onScroll={(event) => {
-            scrollPosition.current = event.nativeEvent.contentOffset.y;
-          }}
-          scrollEventThrottle={16}
-          // Additional performance optimizations
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-          }}
-          legacyImplementation={false}
-          disableVirtualization={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={['#ff6b6b']}
-            />
-          }
-          ListEmptyComponent={
+  const FeedViewComponent = () => {
+    // Create feed data with carousel inserted at position 5
+    const feedData = React.useMemo(() => {
+      if (!nearbyMeals || nearbyMeals.length === 0) {
+        return nearbyMeals;
+      }
+      
+      // Create a copy of the meals array
+      const dataWithCarousel = [...nearbyMeals];
+      
+      // Insert carousel after 4 posts (at index 4, which is the 5th position)
+      if (dataWithCarousel.length >= 4) {
+        dataWithCarousel.splice(4, 0, { type: 'carousel' } as any);
+      } else {
+        // If less than 4 posts, add carousel at the end
+        dataWithCarousel.push({ type: 'carousel' } as any);
+      }
+      
+      return dataWithCarousel;
+    }, [nearbyMeals]);
+    
+    return (
+      <>
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#ff6b6b" />
+            <Text style={styles.loadingText}>Finding meals nearby...</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={feedData}
+            keyExtractor={(item) => ('type' in item && item.type === 'carousel') ? 'carousel' : item.id}
+            renderItem={renderMealItem}
+            contentContainerStyle={styles.feedContainer}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            updateCellsBatchingPeriod={50}
+            initialNumToRender={10}
+            windowSize={10}
+            getItemLayout={(data, index) => ({
+              length: 400, // Approximate height of meal card (square image + content)
+              offset: 400 * index,
+              index,
+            })}
+            onScroll={(event) => {
+              scrollPosition.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+            // Additional performance optimizations
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+            }}
+            legacyImplementation={false}
+            disableVirtualization={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={['#ff6b6b']}
+              />
+            }
+            ListEmptyComponent={
             !loading && !refreshing && allNearbyMeals.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>
@@ -1302,10 +1350,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               </View>
             ) : null
           }
-        />
-      )}
-    </>
-  );
+          />
+        )}
+      </>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
