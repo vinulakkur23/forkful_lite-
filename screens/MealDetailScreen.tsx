@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiDisplay from '../components/EmojiDisplay';
 import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
+import CommentsSection from '../components/CommentsSection';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
@@ -67,6 +68,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number } | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  
+  // Ref for ScrollView to enable auto-scrolling for comments
+  const scrollViewRef = useRef<ScrollView>(null);
   
   // Log the route params for debugging
   console.log("MealDetail Route params:", route.params);
@@ -670,7 +674,16 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
       </View>
 
-      <ScrollView style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <ScrollView 
+          ref={scrollViewRef} 
+          style={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Meal photos gallery */}
         <View style={styles.photosSection}>
           <MultiPhotoGallery
@@ -1088,6 +1101,21 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
       */}
       
+      {/* Comments Section - appears before the action buttons */}
+      <CommentsSection 
+        mealId={mealId}
+        scrollViewRef={scrollViewRef}
+        onUserPress={(userId, userName, userPhoto) => {
+          // Navigate to user's food passport
+          navigation.navigate('FoodPassport', {
+            userId,
+            userName,
+            userPhoto,
+            tabIndex: 0
+          });
+        }}
+      />
+      
       <View style={styles.actionsContainer}>
         {meal.userId === auth().currentUser?.uid ? (
           // If user is the owner, show all buttons with equal sizing and spacing
@@ -1141,6 +1169,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
       </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
