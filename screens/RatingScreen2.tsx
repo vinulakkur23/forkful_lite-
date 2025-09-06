@@ -35,6 +35,9 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import RNFS from 'react-native-fs';
 import ImageResizer from 'react-native-image-resizer';
+import * as ImagePicker from 'react-native-image-picker';
+import Exif from 'react-native-exif';
+import { getPhotoWithMetadata } from '../services/photoLibraryService';
 // Import our direct Places API service instead of going through the backend
 import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extractCityFromRestaurant, Restaurant } from '../services/placesService';
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // DISABLED FOR PERFORMANCE
@@ -55,13 +58,13 @@ import { firebase, auth, firestore, storage } from '../firebaseConfig';
 declare module '../App' {
   interface TabParamList {
     RatingScreen2: {
-      photo: {
+      photo?: {
         uri: string;
         width?: number;
         height?: number;
         sessionId?: string;
         assetId?: string;
-      };
+      } | null;
       location?: {
         latitude: number;
         longitude: number;
@@ -109,11 +112,11 @@ interface LocationData {
 const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // Don't destructure photo to avoid stale closures
   const { rating, thoughts, likedComment, dislikedComment } = route.params;
-  const photo = route.params.photo; // Always get fresh photo from route params
+  const photo = route.params.photo; // Photo might be null now
   
   // Create a session ID to track this specific photo instance
   const photoSessionRef = useRef<string>(`photo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
-  const photoUriRef = useRef<string>(route.params.photo.uri);
+  const photoUriRef = useRef<string>(route.params.photo?.uri || '');
   // Track the last photo URI that we fetched restaurants for
   const trackedPhotoUri = useRef<string>('');
   
@@ -141,6 +144,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [isUserEditingRestaurant, setIsUserEditingRestaurant] = useState(false);
   const [isUserEditingMeal, setIsUserEditingMeal] = useState(false);
   
+  // Local photo state to handle adding photo to existing session
+  const [localPhoto, setLocalPhoto] = useState<any>(null);
+  
   // Track if user has made an explicit restaurant selection (prevent auto-override)
   const [hasExplicitRestaurantSelection, setHasExplicitRestaurantSelection] = useState(false);
   
@@ -155,16 +161,22 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const logWithSession = (message: string) => {
     console.log(`[${photoSessionRef.current}] ${message}`);
   };
+
+  // Get the effective photo (either from route params or locally added)
+  const getEffectivePhoto = () => {
+    return localPhoto || route.params.photo;
+  };
   
   // Initialize location from prefetched data (preferred) or route params
   const initializeLocationFromParams = (): LocationData | null => {
     // FIRST TRY: Use the prefetched location data from CropScreen if available
     // This should be the original PHAsset location data that was preserved
     if ((global as any).prefetchedLocation && (global as any).prefetchedPhotoUri) {
-      // Verify this is for the current photo by checking URI correspondence
-      const isPrefetchForCurrentPhoto = (
-        (global as any).prefetchedPhotoUri === photo.uri || 
-        (global as any).currentPhotoUri === photo.uri
+      // Verify this is for the current photo by checking URI correspondence (if photo exists)
+      const effectivePhoto = getEffectivePhoto();
+      const isPrefetchForCurrentPhoto = effectivePhoto && (
+        (global as any).prefetchedPhotoUri === effectivePhoto.uri || 
+        (global as any).currentPhotoUri === effectivePhoto.uri
       );
       
       if (isPrefetchForCurrentPhoto) {
@@ -184,7 +196,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         return locationData;
       } else {
         logWithSession(`WARNING: Prefetched location exists but for a different photo`);
-        logWithSession(`Current photo: ${photo.uri}, prefetched photo: ${(global as any).prefetchedPhotoUri}`);
+        logWithSession(`Current photo: ${getEffectivePhoto()?.uri || 'none'}, prefetched photo: ${(global as any).prefetchedPhotoUri}`);
       }
     }
     
@@ -573,9 +585,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     // Check if the current photo URI matches the prefetched photo URI
     // This helps detect when we're handling a completely new photo vs the same photo
-    const isSamePhotoAsPrefetched = 
-      (global as any).prefetchedPhotoUri === route.params.photo.uri || 
-      (global as any).currentPhotoUri === route.params.photo.uri;
+    const effectivePhoto = getEffectivePhoto();
+    const isSamePhotoAsPrefetched = effectivePhoto && (
+      (global as any).prefetchedPhotoUri === effectivePhoto.uri || 
+      (global as any).currentPhotoUri === effectivePhoto.uri
+    );
     
     // We're NO LONGER clearing prefetched suggestions here
     // They should already be cleared in CropScreen when a new photo is detected
@@ -590,11 +604,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
     
     // Always update the currentPhotoUri to track the current photo being processed
-    (global as any).currentPhotoUri = route.params.photo.uri;
+    (global as any).currentPhotoUri = effectivePhoto?.uri || null;
     
     // Update session references
     photoSessionRef.current = newSessionId;
-    photoUriRef.current = route.params.photo.uri;
+    photoUriRef.current = effectivePhoto?.uri || '';
     // Reset the tracked photo URI so we'll fetch again for this new photo
     trackedPhotoUri.current = '';
     
@@ -609,6 +623,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setIsUserEditingRestaurant(false);
     setIsUserEditingMeal(false);
     setHasExplicitRestaurantSelection(false); // Reset for new photo
+    setLocalPhoto(null); // Clear any cached photo from previous session
     setIsLoadingSuggestions(false);
     setIsSearchingRestaurants(false);
     setIsLoadingMealSuggestions(false);
@@ -625,8 +640,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setLocation(initialLocation);
     
     // Check for any prefetched meal suggestions
-    if ((global as any).prefetchedSuggestions && 
-        (global as any).prefetchedPhotoUri === route.params.photo.uri) {
+    if ((global as any).prefetchedSuggestions && effectivePhoto &&
+        (global as any).prefetchedPhotoUri === effectivePhoto.uri) {
       // We have prefetched suggestions for this photo
       const prefetchedSuggestions = (global as any).prefetchedSuggestions;
       logWithSession("Found prefetched suggestion data during reset:");
@@ -645,7 +660,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     getCurrentLocation();
     
     // Reset complete for new photo session
-    logWithSession(`State reset complete for photo: ${route.params.photo.uri}`);
+    logWithSession(`State reset complete for photo: ${effectivePhoto?.uri || 'none'}`);
   };
   
   // Track if this is the first render
@@ -653,8 +668,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   
   // Initialize on component mount or when route params change
   useEffect(() => {
-    // Check for valid photo
-    if (!route.params.photo || !route.params.photo.uri) {
+    // Photo is now optional - only validate if provided
+    const effectivePhoto = getEffectivePhoto();
+    if (effectivePhoto && (!effectivePhoto.uri)) {
       console.error("Invalid photo object in RatingScreen2:", route.params.photo);
       Alert.alert(
         "Error",
@@ -694,7 +710,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         (global as any).ratingStatementsMealData = null;
       }
     };
-  }, [route.params._uniqueKey, route.params.photo.uri]); // Re-run when unique key or photo URI changes
+  }, [route.params._uniqueKey, route.params.photo?.uri]); // Re-run when unique key or photo URI changes
   
   // Effect to fetch restaurant suggestions when location is available
   useEffect(() => {
@@ -712,7 +728,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     
     if (bestLocation && suggestedRestaurants.length === 0 && !isLoadingSuggestions) {
       logWithSession(`Using location for restaurant suggestions: ${bestLocation.source} (priority: ${bestLocation.priority})`);
-      logWithSession(`Photo URI: ${route.params.photo.uri}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
+      logWithSession(`Photo URI: ${route.params.photo?.uri || 'none'}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
       
       // Check once more that we're using location data that belongs to this photo
       // by comparing with the global trackers
@@ -738,7 +754,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Session changed from ${currentSession} to ${photoSessionRef.current}, discarding pending operations`);
       }
     };
-  }, [location, suggestedRestaurants.length]); // Re-run when location changes or restaurant count changes - removed deviceLocation to prevent re-fetch
+  }, [location, deviceLocation, suggestedRestaurants.length]); // Re-run when location changes or device location is obtained
   
   // Handle autocomplete search for restaurants using DIRECT Places API
   const handleRestaurantSearch = async (text: string) => {
@@ -879,17 +895,22 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // CRITICAL: Resize image BEFORE API calls to prevent memory overload
       // Calculate dimensions to maintain aspect ratio with 800 minimum on shortest side
-      const originalWidth = route.params.photo.width || 1000;
-      const originalHeight = route.params.photo.height || 1000;
+      const effectivePhoto = getEffectivePhoto();
+      const originalWidth = effectivePhoto?.width || 1000;
+      const originalHeight = effectivePhoto?.height || 1000;
       const isPortrait = originalHeight > originalWidth;
       
       // Set 1200 on the shortest side, scale the other proportionally - increased for better quality
       const targetWidth = isPortrait ? 1200 : Math.round(1200 * (originalWidth / originalHeight));
       const targetHeight = isPortrait ? Math.round(1200 * (originalHeight / originalWidth)) : 1200;
       
-      console.log(`Resizing image from ${originalWidth}x${originalHeight} to ${targetWidth}x${targetHeight} for API calls...`);
-      const resizedImage = await ImageResizer.createResizedImage(
-        route.params.photo.uri,
+      // Only resize if we have a photo
+      let freshPhoto = effectivePhoto; // Default to the effective photo
+      
+      if (effectivePhoto?.uri) {
+        console.log(`Resizing image from ${originalWidth}x${originalHeight} to ${targetWidth}x${targetHeight} for API calls...`);
+        const resizedImage = await ImageResizer.createResizedImage(
+          effectivePhoto.uri,
         targetWidth,  // Proportional width
         targetHeight, // Proportional height
         'JPEG',
@@ -902,32 +923,36 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           onlyScaleDown: true,
         }
       );
-      logWithSession(`Image resized maintaining aspect ratio for subsequent cropping`);
-      
-      // Create a clean copy of the RESIZED image
-      const timestamp = new Date().getTime();
-      const fileExt = 'jpg';
-      const newFilename = `result_image_${timestamp}.${fileExt}`;
-      
-      // Determine the temp directory path based on platform
-      const dirPath = Platform.OS === 'ios'
-        ? `${RNFS.TemporaryDirectoryPath}/`
-        : `${RNFS.CachesDirectoryPath}/`;
-      
-      const newFilePath = `${dirPath}${newFilename}`;
-      logWithSession(`Creating clean resized image for Result screen at: ${newFilePath}`);
-      
-      // Copy the RESIZED image file to new location
-      await RNFS.copyFile(resizedImage.uri, newFilePath);
-      logWithSession('Resized file copied successfully for Result screen');
-      
-      // Create a fresh photo object with RESIZED dimensions
-      const freshPhoto = {
-        uri: newFilePath,
-        width: resizedImage.width,
-        height: resizedImage.height,
-        sessionId: sessionId
-      };
+        logWithSession(`Image resized maintaining aspect ratio for subsequent cropping`);
+        
+        // Create a clean copy of the RESIZED image
+        const timestamp = new Date().getTime();
+        const fileExt = 'jpg';
+        const newFilename = `result_image_${timestamp}.${fileExt}`;
+        
+        // Determine the temp directory path based on platform
+        const dirPath = Platform.OS === 'ios'
+          ? `${RNFS.TemporaryDirectoryPath}/`
+          : `${RNFS.CachesDirectoryPath}/`;
+        
+        const newFilePath = `${dirPath}${newFilename}`;
+        logWithSession(`Creating clean resized image for Result screen at: ${newFilePath}`);
+        
+        // Copy the RESIZED image file to new location
+        await RNFS.copyFile(resizedImage.uri, newFilePath);
+        logWithSession('Resized file copied successfully for Result screen');
+        
+        // Create a fresh photo object with RESIZED dimensions
+        freshPhoto = {
+          uri: newFilePath,
+          width: resizedImage.width,
+          height: resizedImage.height,
+          sessionId: sessionId
+        };
+      } else {
+        // No photo provided - freshPhoto remains null/undefined
+        logWithSession('No photo provided, skipping image processing');
+      }
       
       // ASYNC (NON-BLOCKING) but SEQUENTIAL: Start dish criteria API and let it run in background
       logWithSession('Starting dish criteria API asynchronously...');
@@ -1021,16 +1046,21 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Start challenge completion check in background (don't await)
       checkChallengeCompletion();
       
-      // Upload image to Firebase Storage and update the document with the URL
-      // Upload image to Firebase Storage
-      const imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
-      
-      // Update the document with the image URL
-      await firestore().collection('mealEntries').doc(mealId).update({
-        imageUrl: imageUrl,
-        photoUrl: imageUrl // Keep backward compatibility with photoUrl field
-      });
-      // Document updated with image URL
+      // Upload image to Firebase Storage and update the document with the URL (if photo exists)
+      let imageUrl = null;
+      if (freshPhoto?.uri) {
+        // Upload image to Firebase Storage
+        imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
+        
+        // Update the document with the image URL
+        await firestore().collection('mealEntries').doc(mealId).update({
+          imageUrl: imageUrl,
+          photoUrl: imageUrl // Keep backward compatibility with photoUrl field
+        });
+        logWithSession('Document updated with image URL');
+      } else {
+        logWithSession('No photo to upload, continuing without image');
+      }
       
       // Start with rating statements first, then enhanced metadata sequentially
       // Starting staggered API calls to avoid overwhelming backend
@@ -1081,7 +1111,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       if (restaurant && restaurant.trim() && mealName && mealName.trim()) {
         console.log('🍺🍷 Starting drink pairings IMMEDIATELY (parallel with rating statements)...');
         const drinkPairingPromise = getDrinkPairings(
-          freshPhoto.uri,
+          freshPhoto?.uri || '',  // Pass empty string if no photo
           mealName,
           restaurant,
           location?.city || cityInfo
@@ -1272,7 +1302,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         (global as any).ratingStatementsExtractionPromise = extractionPromise;
         (global as any).ratingStatementsStartTime = Date.now();
         (global as any).ratingStatementsSessionId = currentSessionId; // Track which session this belongs to
-        (global as any).ratingStatementsPhotoUri = photo.uri; // Track which photo this is for
+        (global as any).ratingStatementsPhotoUri = getEffectivePhoto()?.uri || null; // Track which photo this is for
         (global as any).ratingStatementsMealData = { mealName }; // Track meal data
         
         logWithSession(`Quick criteria extraction started in background for session: ${currentSessionId}`);
@@ -1287,6 +1317,171 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const handleImageError = () => {
     logWithSession('Image failed to load in RatingScreen2');
     setImageError(true);
+  };
+
+  // Handle adding photo to existing rating screen
+  const handleAddPhoto = () => {
+    const options: ImagePicker.MediaType = 'photo';
+    
+    Alert.alert(
+      'Add Photo',
+      'Choose photo source',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Camera', 
+          onPress: () => {
+            ImagePicker.launchCamera({ mediaType: options, quality: 0.8 }, handleCameraPhoto);
+          }
+        },
+        { 
+          text: 'Gallery', 
+          onPress: async () => {
+            // Use the native photo picker with metadata extraction for gallery photos
+            const photoAsset = await getPhotoWithMetadata();
+            if (photoAsset) {
+              handleGalleryPhoto(photoAsset);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Handle gallery photo (with PHAsset location data)
+  const handleGalleryPhoto = (photoAsset: any) => {
+    logWithSession('Gallery photo selected with metadata');
+    
+    // Create new photo object from gallery
+    const newPhoto = {
+      uri: photoAsset.uri,
+      width: photoAsset.width || 800,
+      height: photoAsset.height || 600,
+    };
+    
+    // Update local photo state
+    setLocalPhoto(newPhoto);
+    
+    // Update the photo URI ref
+    photoUriRef.current = photoAsset.uri;
+    
+    // Reset image error state
+    setImageError(false);
+    
+    // Clear any existing restaurant suggestions
+    setSuggestedRestaurants([]);
+    setIsLoadingSuggestions(true);
+    
+    // Check if photo has location from PHAsset
+    if (photoAsset.location) {
+      logWithSession('PHAsset location found: ' + JSON.stringify(photoAsset.location));
+      
+      // Create location object from PHAsset data (highest priority)
+      const photoLocation: LocationData = {
+        latitude: photoAsset.location.latitude,
+        longitude: photoAsset.location.longitude,
+        source: photoAsset.location.source || 'phasset',
+        priority: 2, // PHAsset has priority 2
+        city: undefined
+      };
+      
+      // Update location state
+      setLocation(photoLocation);
+      logWithSession('Location updated with PHAsset data from photo');
+      
+      // Fetch restaurant suggestions based on photo location
+      fetchRestaurantSuggestions(photoLocation);
+    } else {
+      logWithSession('No PHAsset location found, using device location');
+      // Fall back to device location
+      const bestLocation = getBestAvailableLocation();
+      if (bestLocation) {
+        fetchRestaurantSuggestions(bestLocation);
+      }
+    }
+  };
+  
+  // Handle camera photo (with EXIF extraction)
+  const handleCameraPhoto = async (response: any) => {
+    if (response.didCancel || response.errorCode || !response.assets?.[0]) {
+      return;
+    }
+
+    const asset = response.assets[0];
+    if (!asset.uri) {
+      Alert.alert('Error', 'Failed to get image data');
+      return;
+    }
+
+    logWithSession('Photo added to existing rating screen, updating state');
+
+    // Create new photo object
+    const newPhoto = {
+      uri: asset.uri,
+      width: asset.width || 800,
+      height: asset.height || 600,
+    };
+
+    // Update local photo state
+    setLocalPhoto(newPhoto);
+    
+    // Update the photo URI ref
+    photoUriRef.current = asset.uri;
+    
+    // Reset image error state
+    setImageError(false);
+    
+    // Clear any existing restaurant suggestions since we now have a photo
+    setSuggestedRestaurants([]);
+    setIsLoadingSuggestions(true);
+    
+    // Try to extract EXIF location data from the photo
+    let photoLocation: LocationData | null = null;
+    try {
+      logWithSession('Attempting to extract EXIF data from selected photo');
+      const exifData = await Exif.getExif(asset.uri);
+      logWithSession('EXIF data retrieved: ' + JSON.stringify(exifData));
+      
+      // Check if GPS data is available in the EXIF
+      if (exifData && exifData.GPSLatitude && exifData.GPSLongitude) {
+        logWithSession('EXIF GPS data found in photo: ' + JSON.stringify({
+          lat: exifData.GPSLatitude,
+          lng: exifData.GPSLongitude
+        }));
+        
+        // Create a location object from EXIF data
+        photoLocation = {
+          latitude: parseFloat(exifData.GPSLatitude),
+          longitude: parseFloat(exifData.GPSLongitude),
+          source: 'exif',
+          priority: 3, // EXIF has priority 3
+          city: undefined
+        };
+        
+        // Update the location state with photo location
+        setLocation(photoLocation);
+        logWithSession('Location updated with EXIF data from photo');
+        
+        // Fetch restaurant suggestions based on photo location
+        fetchRestaurantSuggestions(photoLocation);
+      } else {
+        logWithSession('No EXIF GPS data found in the selected photo');
+        // If no EXIF location, use device location for suggestions
+        const bestLocation = getBestAvailableLocation();
+        if (bestLocation) {
+          fetchRestaurantSuggestions(bestLocation);
+        }
+      }
+    } catch (exifError) {
+      logWithSession('Error extracting EXIF data from photo: ' + exifError);
+      // Fall back to device location
+      const bestLocation = getBestAvailableLocation();
+      if (bestLocation) {
+        fetchRestaurantSuggestions(bestLocation);
+      }
+    }
+    
+    logWithSession('Photo state updated, restaurant suggestions being fetched');
   };
   
   return (
@@ -1506,18 +1701,29 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           
           {/* Image Container */}
           <View style={styles.imageContainer}>
-            {!imageError && route.params.photo && route.params.photo.uri ? (
+            {!imageError && getEffectivePhoto()?.uri ? (
               <Image
-                source={{ uri: route.params.photo.uri }}
+                source={{ uri: getEffectivePhoto().uri }}
                 style={styles.image}
                 resizeMode="cover"
                 onError={handleImageError}
               />
-            ) : (
-              <View style={styles.errorImageContainer}>
-                <MaterialIcon name="broken-image" size={64} color="#ccc" />
-                <Text style={styles.errorImageText}>Failed to load image</Text>
+            ) : getEffectivePhoto() ? (
+              // Photo exists but has error or no URI
+              <View style={styles.imagePlaceholder}>
+                <MaterialIcon name="image" size={50} color="#ccc" />
+                <Text style={styles.placeholderText}>Image error</Text>
               </View>
+            ) : (
+              // No photo provided - show "Add Photo" button
+              <TouchableOpacity 
+                style={styles.addPhotoContainer}
+                onPress={handleAddPhoto}
+              >
+                <MaterialIcon name="add-a-photo" size={50} color="#1a2b49" />
+                <Text style={styles.addPhotoText}>Add Photo</Text>
+                <Text style={styles.addPhotoSubtext}>Tap to take a photo or upload from gallery</Text>
+              </TouchableOpacity>
             )}
             
             {/* Processing overlay */}
@@ -1741,6 +1947,32 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  addPhotoContainer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+  },
+  addPhotoText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginTop: 10,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  addPhotoSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+    textAlign: 'center',
+    paddingHorizontal: 20,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   processingOverlay: {

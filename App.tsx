@@ -334,10 +334,19 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
           );
         })()}
         
-        {/* Center button - Add Photo */}
+        {/* Center button - Add Meal */}
         <View style={styles.centerButtonContainer}>
           <TouchableOpacity
-            onPress={() => navigation.navigate('Camera')}
+            onPress={() => navigation.navigate('RatingScreen2', {
+              photo: null, // Start without photo
+              location: null, // Will fetch current location  
+              rating: 0,
+              _uniqueKey: `location_first_${Date.now()}`,
+              thoughts: '',
+              meal: '',
+              restaurant: '',
+              isEditingExisting: false
+            })}
             style={styles.centerButton}
             activeOpacity={0.9}
           >

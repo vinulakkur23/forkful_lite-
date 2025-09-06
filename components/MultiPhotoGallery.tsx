@@ -148,6 +148,21 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
 
   const renderMainPhoto = () => {
     if (photos.length === 0) {
+      // If editable and no photos, show Add Photo button
+      if (editable && onAddPhoto) {
+        return (
+          <TouchableOpacity 
+            style={styles.addPhotoButtonContainer}
+            onPress={onAddPhoto}
+            activeOpacity={0.8}
+          >
+            <Icon name="add-a-photo" size={64} color="#1a2b49" />
+            <Text style={styles.addPhotoButtonText}>Add Photo</Text>
+            <Text style={styles.addPhotoButtonSubtext}>Tap to add your first photo</Text>
+          </TouchableOpacity>
+        );
+      }
+      // Non-editable mode shows the no photos state
       return (
         <View style={styles.noPhotoContainer}>
           <Icon name="no-photography" size={64} color="#ccc" />
@@ -299,6 +314,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
+  },
+  addPhotoButtonContainer: {
+    width: '100%',
+    aspectRatio: 1, // Square aspect ratio
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+  },
+  addPhotoButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginTop: 12,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  addPhotoButtonSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   noPhotoText: {
     marginTop: 10,

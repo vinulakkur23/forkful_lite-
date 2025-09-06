@@ -1232,8 +1232,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.saveButton, rating === 0 && styles.disabledButton]}
-            disabled={rating === 0}
+            style={[styles.saveButton, (rating === 0 || photos.length === 0) && styles.disabledButton]}
+            disabled={rating === 0 || photos.length === 0}
             onPress={saveMeal}
           >
             <Text style={styles.buttonText}>Save Changes</Text>

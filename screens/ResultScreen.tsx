@@ -338,23 +338,15 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     
     setupListener();
 
-    // Validate the photo object
-    if (!photo || !photo.uri) {
-      console.error("Invalid photo object in ResultScreen:", photo);
-      Alert.alert(
-        "Error",
-        "Invalid photo data received. Please try again.",
-        [{ text: "OK", onPress: () => navigation.goBack() }]
-      );
-      return;
+    // Photo is now optional - only log if provided
+    if (photo?.uri) {
+      // Log photo information for debugging
+      console.log("Photo received in ResultScreen:", {
+        uri: photo.uri,
+        hasWidth: !!photo.width,
+        hasHeight: !!photo.height
+      });
     }
-
-    // Log photo information for debugging
-    console.log("Photo received in ResultScreen:", {
-      uri: photo.uri,
-      hasWidth: !!photo.width,
-      hasHeight: !!photo.height
-    });
 
     // Log location information for debugging
     console.log("Location received in ResultScreen:", location ? {
@@ -2282,6 +2274,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
   },
   customEmoji: {
     width: 120,  // Larger size for testing
