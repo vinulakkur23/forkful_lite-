@@ -156,9 +156,8 @@ const MultiPhotoGallery: React.FC<MultiPhotoGalleryProps> = ({
             onPress={onAddPhoto}
             activeOpacity={0.8}
           >
-            <Icon name="add-a-photo" size={64} color="#1a2b49" />
-            <Text style={styles.addPhotoButtonText}>Add Photo</Text>
-            <Text style={styles.addPhotoButtonSubtext}>Tap to add your first photo</Text>
+            <Text style={styles.plusIcon}>+</Text>
+            <Text style={styles.addPhotoButtonText}>Add a Photo</Text>
           </TouchableOpacity>
         );
       }
@@ -326,17 +325,17 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 12,
   },
+  plusIcon: {
+    fontSize: 120,
+    fontWeight: '300',
+    color: '#1a2b49',
+    lineHeight: 120,
+  },
   addPhotoButtonText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#1a2b49',
     marginTop: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
-  addPhotoButtonSubtext: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   noPhotoText: {

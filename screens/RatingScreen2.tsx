@@ -147,6 +147,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   // Local photo state to handle adding photo to existing session
   const [localPhoto, setLocalPhoto] = useState<any>(null);
   
+  // Photo source modal state
+  const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
+  
   // Track if user has made an explicit restaurant selection (prevent auto-override)
   const [hasExplicitRestaurantSelection, setHasExplicitRestaurantSelection] = useState(false);
   
@@ -1321,8 +1324,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 
   // Handle adding photo to existing rating screen
   const handleAddPhoto = () => {
-    const options: ImagePicker.MediaType = 'photo';
-    
     Alert.alert(
       'Add Photo',
       'Choose photo source',
@@ -1330,22 +1331,29 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Camera', 
-          onPress: () => {
-            ImagePicker.launchCamera({ mediaType: options, quality: 0.8 }, handleCameraPhoto);
-          }
+          onPress: handleCameraSelection
         },
         { 
           text: 'Gallery', 
-          onPress: async () => {
-            // Use the native photo picker with metadata extraction for gallery photos
-            const photoAsset = await getPhotoWithMetadata();
-            if (photoAsset) {
-              handleGalleryPhoto(photoAsset);
-            }
-          }
+          onPress: handleGallerySelection
         }
       ]
     );
+  };
+  
+  // Handle camera selection
+  const handleCameraSelection = () => {
+    const options: ImagePicker.MediaType = 'photo';
+    ImagePicker.launchCamera({ mediaType: options, quality: 0.8 }, handleCameraPhoto);
+  };
+  
+  // Handle gallery selection
+  const handleGallerySelection = async () => {
+    // Use the native photo picker with metadata extraction for gallery photos
+    const photoAsset = await getPhotoWithMetadata();
+    if (photoAsset) {
+      handleGalleryPhoto(photoAsset);
+    }
   };
 
   // Handle gallery photo (with PHAsset location data)
@@ -1494,6 +1502,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         extraHeight={120}
       >
         <View style={styles.contentContainer}>
+          {/* Header */}
+          <View style={styles.headerContainer}>
+            <Text style={styles.headerText}>New Meal</Text>
+          </View>
+          
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>
             {/* Restaurant Input */}
@@ -1720,9 +1733,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 style={styles.addPhotoContainer}
                 onPress={handleAddPhoto}
               >
-                <MaterialIcon name="add-a-photo" size={50} color="#1a2b49" />
-                <Text style={styles.addPhotoText}>Add Photo</Text>
-                <Text style={styles.addPhotoSubtext}>Tap to take a photo or upload from gallery</Text>
+                <Text style={styles.plusIcon}>+</Text>
+                <Text style={styles.addPhotoText}>Optional: Add Photo Now</Text>
+                <Text style={styles.addPhotoSubtext}>(You can add it later if you haven't taken it yet)</Text>
               </TouchableOpacity>
             )}
             
@@ -1757,7 +1770,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       <Modal
         visible={showRestaurantModal}
         transparent={true}
-        animationType="slide"
+        animationType="none"
         onRequestClose={() => setShowRestaurantModal(false)}
       >
         <View style={styles.modalContainer}>
@@ -1832,6 +1845,50 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+      
+      {/* Photo Source Modal - COMMENTED OUT FOR TESTING */}
+      {/*
+      <Modal
+        visible={showPhotoSourceModal}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowPhotoSourceModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.photoSourceModalContainer}
+          activeOpacity={1}
+          onPress={() => setShowPhotoSourceModal(false)}
+        >
+          <View style={styles.photoSourceModalContent}>
+            <TouchableOpacity
+              style={styles.photoSourceOption}
+              onPress={handleCameraSelection}
+            >
+              <Image
+                source={require('../assets/icons/camera-active.png')}
+                style={styles.photoSourceOptionImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.photoSourceOptionText}>Camera</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.modalSeparator} />
+            
+            <TouchableOpacity
+              style={styles.photoSourceOption}
+              onPress={handleGallerySelection}
+            >
+              <Image
+                source={require('../assets/icons/upload-active.png')}
+                style={styles.photoSourceOptionImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.photoSourceOptionText}>Upload</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      */}
       
       {/* Meal Suggestions Modal */}
       <Modal
@@ -1918,6 +1975,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF9F6', // Light off-white background
     overflow: 'visible', // Allow dropdowns to extend outside
   },
+  headerContainer: {
+    width: '100%',
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  headerText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   imageContainer: {
     width: '100%',
     height: 450, // Increased height from 400 to 450 for bigger image
@@ -1959,6 +2029,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ddd',
     borderStyle: 'dashed',
+  },
+  plusIcon: {
+    fontSize: 120,
+    fontWeight: '300',
+    color: '#1a2b49',
+    lineHeight: 120,
   },
   addPhotoText: {
     fontSize: 18,
@@ -2290,7 +2366,50 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '500',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  }
+  },
+  photoSourceModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoSourceModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 8,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 240,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  photoSourceOption: {
+    alignItems: 'center',
+    padding: 12,
+    flex: 1,
+  },
+  photoSourceOptionImage: {
+    width: 40,
+    height: 40,
+    tintColor: '#1a2b49',
+  },
+  photoSourceOptionText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  modalSeparator: {
+    width: 1,
+    height: 50,
+    backgroundColor: '#1a2b49',
+    marginHorizontal: 8,
+  },
 });
 
 export default RatingScreen2;
