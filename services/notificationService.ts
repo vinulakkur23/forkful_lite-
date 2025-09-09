@@ -20,8 +20,45 @@ class NotificationService {
       },
 
       // Called when a remote notification is received while app is in foreground
-      onNotification: function (notification) {
+      onNotification: async function (notification) {
         console.log('NOTIFICATION:', notification);
+
+        // Handle conditional meal reminders
+        if (notification.userInfo?.type === 'meal-reminder-conditional' && notification.userInfo?.checkReviewStatus) {
+          const mealId = notification.userInfo.mealId;
+          const dishName = notification.userInfo.dishName;
+          
+          try {
+            // Import Firebase here to avoid circular imports
+            const { firestore } = await import('../firebaseConfig');
+            
+            console.log('Checking meal review status for conditional reminder:', mealId);
+            
+            // Get meal document from Firestore
+            const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+            
+            if (mealDoc.exists) {
+              const mealData = mealDoc.data();
+              const rating = mealData?.rating || 0;
+              
+              // Only show notification if meal is still unreviewed
+              if (rating === 0 || !rating) {
+                console.log('Meal is unreviewed, showing notification:', mealId);
+                // Notification will display normally since meal is unreviewed
+              } else {
+                console.log('Meal already reviewed, canceling notification:', { mealId, rating });
+                // Cancel the notification since meal is already reviewed
+                PushNotification.cancelLocalNotifications({
+                  id: `meal-reminder-conditional-${mealId}`
+                });
+                return; // Don't process notification further
+              }
+            }
+          } catch (error) {
+            console.error('Error checking meal review status in notification:', error);
+            // If check fails, show notification anyway as fallback
+          }
+        }
 
         // Handle notification tap
         if (notification.userInteraction) {
@@ -69,7 +106,48 @@ class NotificationService {
     });
   }
 
-  // Schedule a meal rating reminder
+  // Schedule a meal rating reminder - only sends if meal is still unreviewed
+  async scheduleMealReminderConditional(mealData: MealReminderData, delayHours: number = 1) {
+    const { dishName, mealId, restaurantName } = mealData;
+    
+    console.log('Scheduling conditional meal reminder for:', mealId, 'in', delayHours, 'hours');
+    
+    // Calculate notification time
+    const notificationTime = new Date();
+    notificationTime.setHours(notificationTime.getHours() + delayHours);
+
+    // Schedule a reminder with a unique ID that includes conditional check info
+    PushNotification.localNotificationSchedule({
+      id: `meal-reminder-conditional-${mealId}`,
+      channelId: Platform.OS === 'android' ? 'meal-reminders' : undefined,
+      title: "Rate Your Meal! 🍽️",
+      message: `How was your ${dishName}? Rate it when you get a chance!`,
+      date: notificationTime,
+      playSound: true,
+      soundName: 'default',
+      repeatType: undefined,
+      userInfo: {
+        mealId: mealId,
+        type: 'meal-reminder-conditional',
+        dishName: dishName,
+        restaurantName: restaurantName,
+        checkReviewStatus: true // Flag to check review status when notification fires
+      },
+    });
+
+    console.log('Scheduled conditional meal reminder:', {
+      mealId,
+      scheduledFor: notificationTime.toISOString()
+    });
+
+    return {
+      success: true,
+      scheduledFor: notificationTime,
+      notificationId: `meal-reminder-conditional-${mealId}`
+    };
+  }
+
+  // Legacy method - kept for backwards compatibility
   scheduleMealReminder(mealData: MealReminderData, delayHours: number = 1) {
     const { dishName, mealId, restaurantName } = mealData;
     

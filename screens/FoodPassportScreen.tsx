@@ -12,7 +12,8 @@ import {
   Alert,
   Platform,
   SafeAreaView,
-  ScrollView
+  ScrollView,
+  Share
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -939,6 +940,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             Alert.alert('Error', `Failed to sign out: ${error.message || 'Unknown error'}`);
         }
     };
+
+    // Share passport function
+    const handleSharePassport = async () => {
+        try {
+            await Share.share({
+                message: 'Download Forkful and check out my passport!',
+            });
+        } catch (error) {
+            console.error('Error sharing:', error);
+        }
+    };
     
     // Function to render each meal item
     const renderMealItem = ({ item }: { item: MealEntry }) => {
@@ -1073,6 +1085,24 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 )}
                             </View>
                         }
+                        ListFooterComponent={() => (
+                            // Only show share button if user has meals and it's their own profile
+                            (filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid)) ? (
+                                <View style={styles.shareContainer}>
+                                    <TouchableOpacity
+                                        style={styles.shareButton}
+                                        onPress={handleSharePassport}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Image 
+                                            source={require('../assets/icons/map/share.png')} 
+                                            style={styles.shareIcon}
+                                        />
+                                        <Text style={styles.shareButtonText}>Share</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null
+                        )}
                     />
             )}
             
@@ -1215,6 +1245,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingTop: 100,
     },
     loadingText: {
         marginTop: 10,
@@ -1422,6 +1453,34 @@ const styles = StyleSheet.create({
         width: 1,
         height: 60,
         backgroundColor: '#eee',
+    },
+    shareContainer: {
+        alignItems: 'center',
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+    },
+    shareButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderWidth: 2,
+        borderColor: '#1a2b49', // Navy blue outline
+        borderRadius: 8,
+        backgroundColor: 'transparent',
+    },
+    shareIcon: {
+        width: 20,
+        height: 20,
+        marginRight: 8,
+        tintColor: '#1a2b49', // Navy blue icon
+    },
+    shareButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1a2b49', // Navy blue text
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
 });
 

@@ -17,6 +17,7 @@ import { firebase, auth, firestore } from '../firebaseConfig';
 import { Achievement, UserAchievement } from '../types/achievements';
 import { getUserAchievements, getAchievementById, getAllAchievements } from '../services/achievementService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { PieChart } from 'react-native-chart-kit';
 import { clearUserStamps } from '../services/clearUserStamps';
 import { clearAllUserData } from '../services/clearAllUserData';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -50,6 +51,12 @@ interface City {
   mealCount: number;
 }
 
+interface Cuisine {
+  name: string;
+  imageUrl: string;
+  mealCount: number;
+}
+
 interface TopRatedPhoto {
   id: string;
   photoUrl: string;
@@ -68,6 +75,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [selectedPhoto, setSelectedPhoto] = useState<TopRatedPhoto | null>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(true);
+  const [cuisines, setCuisines] = useState<Cuisine[]>([]);
+  const [cuisinesLoading, setCuisinesLoading] = useState(true);
   const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
@@ -175,6 +184,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     // DISABLED: Top rated photos to reduce Firestore calls
     // loadTopRatedPhotos();
     loadCities();
+    loadCuisines();
     loadAllChallenges();
     loadPixelArtEmojis();
   }, [userId]);
@@ -352,6 +362,80 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       console.error('Error loading cities:', error);
     } finally {
       setCitiesLoading(false);
+    }
+  };
+
+  const loadCuisines = async () => {
+    try {
+      setCuisinesLoading(true);
+      
+      const targetUserId = userId || auth().currentUser?.uid;
+      if (!targetUserId) return;
+
+      console.log(`🍳 Loading cuisines for user: ${targetUserId}`);
+
+      // Get user document to get unique cuisines
+      const userDoc = await firestore().collection('users').doc(targetUserId).get();
+      const userData = userDoc.data();
+      const uniqueCuisines = userData?.uniqueCuisines || [];
+
+      // Load cuisine data and count meals per cuisine
+      const cuisinesWithData: Cuisine[] = [];
+      
+      // Get meal counts per cuisine
+      const mealsQuery = await firestore()
+        .collection('mealEntries')
+        .where('userId', '==', targetUserId)
+        .get();
+      
+      const cuisineMealCounts: { [cuisine: string]: number } = {};
+      mealsQuery.docs.forEach(doc => {
+        const data = doc.data();
+        // Primary source: metadata_enriched.cuisine_type (this should always be present)
+        let cuisine = data.metadata_enriched?.cuisine_type;
+        
+        // Fallback sources (for backward compatibility)
+        if (!cuisine) {
+          cuisine = data.quick_criteria_result?.cuisine_type || 
+                   data.enhanced_facts?.food_facts?.cuisine_type || 
+                   data.aiMetadata?.cuisineType;
+        }
+        
+        if (cuisine) {
+          cuisine = cuisine.toLowerCase().trim();
+          if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
+            cuisineMealCounts[cuisine] = (cuisineMealCounts[cuisine] || 0) + 1;
+          }
+        }
+      });
+      
+      for (const cuisineName of uniqueCuisines) {
+        const normalizedCuisineName = cuisineName.toLowerCase().trim().replace(/\s+/g, '-');
+        
+        // Capitalize cuisine name for display
+        const capitalizedCuisineName = cuisineName.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+        
+        const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
+        
+        // For now, use a placeholder image. Later we can add cuisine images collection
+        cuisinesWithData.push({
+          name: capitalizedCuisineName,
+          imageUrl: 'https://via.placeholder.com/350',
+          mealCount: mealCount
+        });
+      }
+      
+      // Sort cuisines by meal count (highest first)
+      cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+      console.log(`🍳 Found ${cuisinesWithData.length} cuisines for user`);
+      setCuisines(cuisinesWithData);
+    } catch (error) {
+      console.error('Error loading cuisines:', error);
+    } finally {
+      setCuisinesLoading(false);
     }
   };
 
@@ -628,6 +712,45 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     </TouchableOpacity>
   );
 
+  const renderCuisineItem = ({ item }: { item: Cuisine }) => (
+    <TouchableOpacity
+      style={styles.cuisineItem}
+      onPress={() => {
+        if (navigation && onFilterChange && onTabChange) {
+          // Create cuisine filter
+          const cuisineFilter: FilterItem = {
+            type: 'cuisineType',
+            value: item.name, // Use exact name for filtering
+            label: item.name
+          };
+          
+          // Set the filter
+          onFilterChange([cuisineFilter]);
+          
+          // Switch to meals tab (index 0)
+          onTabChange(0);
+        } else {
+          // Fallback if functions not available
+          Alert.alert('View Cuisine', `Showing meals for ${item.name}`);
+        }
+      }}
+    >
+      <View style={styles.cuisineImageContainer}>
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.cuisineImage}
+          resizeMode="cover"
+        />
+      </View>
+      <Text style={styles.cuisineName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={styles.cuisineMealCount} numberOfLines={1}>
+        {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const renderEmojiItem = ({ item }: { item: string }) => (
     <View style={styles.emojiItem}>
       <Image 
@@ -696,6 +819,96 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     );
   };
 
+  // Generate pie chart data for cities
+  const generateCitiesPieData = () => {
+    if (!cities.length) return [];
+    
+    // Generate distinct colors for each city
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+      '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+      '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD'
+    ];
+    
+    return cities.map((city, index) => ({
+      name: city.name,
+      population: city.mealCount,
+      color: colors[index % colors.length],
+      legendFontColor: '#1a2b49',
+      legendFontSize: 12,
+    }));
+  };
+
+  const renderCitiesPieChart = () => {
+    if (!cities.length) return null;
+    
+    const pieData = generateCitiesPieData();
+    
+    return (
+      <View style={styles.pieChartContainer}>
+        <Text style={styles.pieChartTitle}>Meals by City</Text>
+        <PieChart
+          data={pieData}
+          width={width - 40}
+          height={200}
+          chartConfig={{
+            color: (opacity = 1) => `rgba(26, 43, 73, ${opacity})`,
+          }}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
+          center={[10, 0]}
+          hasLegend={true}
+        />
+      </View>
+    );
+  };
+
+  // Generate pie chart data for cuisines
+  const generateCuisinesPieData = () => {
+    if (!cuisines.length) return [];
+    
+    // Generate distinct colors for each cuisine - using different palette than cities
+    const colors = [
+      '#FF9F40', '#FFCD56', '#36A2EB', '#4BC0C0', '#9966FF',
+      '#FF6384', '#C9CBCF', '#FF8A80', '#82B1FF', '#B388FF',
+      '#8C9EFF', '#84FFFF', '#A7FFEB', '#B9F6CA', '#CCFF90'
+    ];
+    
+    return cuisines.map((cuisine, index) => ({
+      name: cuisine.name,
+      population: cuisine.mealCount,
+      color: colors[index % colors.length],
+      legendFontColor: '#1a2b49',
+      legendFontSize: 12,
+    }));
+  };
+
+  const renderCuisinesPieChart = () => {
+    if (!cuisines.length) return null;
+    
+    const pieData = generateCuisinesPieData();
+    
+    return (
+      <View style={styles.pieChartContainer}>
+        <Text style={styles.pieChartTitle}>Meals by Cuisine</Text>
+        <PieChart
+          data={pieData}
+          width={width - 40}
+          height={200}
+          chartConfig={{
+            color: (opacity = 1) => `rgba(26, 43, 73, ${opacity})`,
+          }}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
+          center={[10, 0]}
+          hasLegend={true}
+        />
+      </View>
+    );
+  };
+
   return (
     <>
       <ScrollView 
@@ -709,9 +922,9 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
         </View>
       ) : (
         <>
-          {/* Empty state - when no challenges, cities, photos, or emojis */}
-          {!challengesLoading && !citiesLoading && !photosLoading && !emojisLoading &&
-           allChallenges.length === 0 && cities.length === 0 && topRatedPhotos.length === 0 && pixelArtEmojis.length === 0 ? (
+          {/* Empty state - when no challenges, cities, cuisines, photos, or emojis */}
+          {!challengesLoading && !citiesLoading && !cuisinesLoading && !photosLoading && !emojisLoading &&
+           allChallenges.length === 0 && cities.length === 0 && cuisines.length === 0 && topRatedPhotos.length === 0 && pixelArtEmojis.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>Add meals to get and win challenges!</Text>
             </View>
@@ -721,14 +934,18 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {!emojisLoading && pixelArtEmojis.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Meals Eaten:</Text>
-              <FlatList
-                data={pixelArtEmojis}
-                renderItem={renderEmojiItem}
-                keyExtractor={(item, index) => `emoji_${index}`}
-                numColumns={6}
-                contentContainerStyle={styles.emojisList}
-                scrollEnabled={false}
-              />
+              <ScrollView 
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.challengeCarousel}
+                contentContainerStyle={styles.challengeCarouselContent}
+              >
+                {pixelArtEmojis.map((item, index) => (
+                  <View key={`emoji_${index}`} style={styles.emojiCarouselWrapper}>
+                    {renderEmojiItem({ item, index: 0, separators: null as any })}
+                  </View>
+                ))}
+              </ScrollView>
             </>
           )}
 
@@ -756,14 +973,41 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             <>
               <Text style={styles.sectionTitle}>Cities</Text>
               
-              <FlatList
-                data={cities}
-                renderItem={renderCityItem}
-                keyExtractor={item => item.name}
-                numColumns={3}
-                contentContainerStyle={styles.citiesList}
-                scrollEnabled={false}
-              />
+              <ScrollView 
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.challengeCarousel}
+                contentContainerStyle={styles.challengeCarouselContent}
+              >
+                {cities.map(item => (
+                  <View key={item.name} style={styles.carouselItemWrapper}>
+                    {renderCityItem({ item, index: 0, separators: null as any })}
+                  </View>
+                ))}
+              </ScrollView>
+              
+              {/* Cities Pie Chart */}
+              {renderCitiesPieChart()}
+            </>
+          )}
+
+          {/* Cuisines Section */}
+          {!cuisinesLoading && cuisines.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Cuisines</Text>
+              
+              <ScrollView 
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.challengeCarousel}
+                contentContainerStyle={styles.challengeCarouselContent}
+              >
+                {cuisines.map(item => (
+                  <View key={item.name} style={styles.carouselItemWrapper}>
+                    {renderCuisineItem({ item, index: 0, separators: null as any })}
+                  </View>
+                ))}
+              </ScrollView>
             </>
           )}
 
@@ -1410,6 +1654,67 @@ const styles = StyleSheet.create({
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     marginTop: 5,
   },
+  // Cuisine styles (identical to city styles)
+  cuisineItem: {
+    width: STAMP_SIZE,
+    height: STAMP_SIZE + 25, // More reasonable space for text
+    margin: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'flex-start', // Start from top
+    padding: 8,
+    backgroundColor: '#ffffff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cuisineImageContainer: {
+    width: STAMP_SIZE - 16,
+    height: STAMP_SIZE - 50, // Smaller image to make room for text
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginBottom: 8, // Add space between image and text
+  },
+  cuisineImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  cuisineName: {
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
+    marginBottom: 2,
+    marginTop: -40,
+  },
+  cuisineMealCount: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginTop: 5,
+  },
+  // Pie chart styles
+  pieChartContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+    paddingHorizontal: 20,
+  },
+  pieChartTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a2b49',
+    marginBottom: 15,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   challengeItem: {
     position: 'relative', // For absolute positioning of status indicator
   },
@@ -1520,11 +1825,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
+  emojiCarouselWrapper: {
+    marginRight: 6, // Space between carousel items
+  },
   emojiItem: {
-    width: (width - 100) / 6, // 6 per row to make them tiny
-    height: (width - 100) / 6,
-    marginHorizontal: 2,
-    marginVertical: 2,
+    width: 45, // Even smaller size
+    height: 45,
     alignItems: 'center',
     justifyContent: 'center',
   },

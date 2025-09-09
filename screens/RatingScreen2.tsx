@@ -1507,6 +1507,42 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.headerText}>New Meal</Text>
           </View>
           
+          {/* Image Container */}
+          <View style={styles.imageContainer}>
+            {!imageError && getEffectivePhoto()?.uri ? (
+              <Image
+                source={{ uri: getEffectivePhoto().uri }}
+                style={styles.image}
+                resizeMode="cover"
+                onError={handleImageError}
+              />
+            ) : getEffectivePhoto() ? (
+              // Photo exists but has error or no URI
+              <View style={styles.imagePlaceholder}>
+                <MaterialIcon name="image" size={50} color="#ccc" />
+                <Text style={styles.placeholderText}>Image error</Text>
+              </View>
+            ) : (
+              // No photo provided - show "Add Photo" button
+              <TouchableOpacity 
+                style={styles.addPhotoContainer}
+                onPress={handleAddPhoto}
+              >
+                <Text style={styles.plusIcon}>+</Text>
+                <Text style={styles.addPhotoText}>Optional: Add Photo Now</Text>
+                <Text style={styles.addPhotoSubtext}>(You can add it later if you haven't taken it yet)</Text>
+              </TouchableOpacity>
+            )}
+            
+            {/* Processing overlay */}
+            {isProcessing && (
+              <View style={styles.processingOverlay}>
+                <ActivityIndicator size="large" color="white" />
+                <Text style={styles.processingText}>Processing...</Text>
+              </View>
+            )}
+          </View>
+
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>
             {/* Restaurant Input */}
@@ -1708,42 +1744,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#ffc008" />
                 <Text style={styles.loadingText}>Getting suggestions...</Text>
-              </View>
-            )}
-          </View>
-          
-          {/* Image Container */}
-          <View style={styles.imageContainer}>
-            {!imageError && getEffectivePhoto()?.uri ? (
-              <Image
-                source={{ uri: getEffectivePhoto().uri }}
-                style={styles.image}
-                resizeMode="cover"
-                onError={handleImageError}
-              />
-            ) : getEffectivePhoto() ? (
-              // Photo exists but has error or no URI
-              <View style={styles.imagePlaceholder}>
-                <MaterialIcon name="image" size={50} color="#ccc" />
-                <Text style={styles.placeholderText}>Image error</Text>
-              </View>
-            ) : (
-              // No photo provided - show "Add Photo" button
-              <TouchableOpacity 
-                style={styles.addPhotoContainer}
-                onPress={handleAddPhoto}
-              >
-                <Text style={styles.plusIcon}>+</Text>
-                <Text style={styles.addPhotoText}>Optional: Add Photo Now</Text>
-                <Text style={styles.addPhotoSubtext}>(You can add it later if you haven't taken it yet)</Text>
-              </TouchableOpacity>
-            )}
-            
-            {/* Processing overlay */}
-            {isProcessing && (
-              <View style={styles.processingOverlay}>
-                <ActivityIndicator size="large" color="white" />
-                <Text style={styles.processingText}>Processing...</Text>
               </View>
             )}
           </View>

@@ -235,7 +235,7 @@ const SavedMealsScreen: React.FC<Props> = ({ navigation, activeFilters, activeRa
     <SafeAreaView style={styles.container}>
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ff6b6b" />
+          <ActivityIndicator size="large" color="#1a2b49" />
           <Text style={styles.loadingText}>Loading saved meals...</Text>
         </View>
       ) : (
@@ -284,6 +284,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 100,
   },
   loadingText: {
     marginTop: 10,

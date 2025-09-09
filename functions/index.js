@@ -34,13 +34,30 @@ const extractCityFromMeal = (meal) => {
 };
 
 const extractCuisineFromMeal = (meal) => {
-  if (meal.aiMetadata && meal.aiMetadata.cuisineType) {
-    const cuisine = meal.aiMetadata.cuisineType.toLowerCase().trim();
-    if (cuisine === 'unknown' || cuisine === 'n/a' || cuisine === '') {
-      return null;
+  // Primary source: metadata_enriched.cuisine_type (this should always be present)
+  if (meal.metadata_enriched?.cuisine_type) {
+    const cuisine = meal.metadata_enriched.cuisine_type.toLowerCase().trim();
+    if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
+      return cuisine;
     }
-    return cuisine;
   }
+  
+  // Fallback sources (for backward compatibility or edge cases)
+  const fallbackSources = [
+    meal.quick_criteria_result?.cuisine_type,
+    meal.enhanced_facts?.food_facts?.cuisine_type,
+    meal.aiMetadata?.cuisineType
+  ];
+  
+  for (const source of fallbackSources) {
+    if (source) {
+      const cuisine = source.toLowerCase().trim();
+      if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
+        return cuisine;
+      }
+    }
+  }
+  
   return null;
 };
 

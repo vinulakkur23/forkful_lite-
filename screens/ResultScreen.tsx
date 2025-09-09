@@ -728,7 +728,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           const dishName = mealData.meal || meal || 'your meal';
           const restaurantName = mealData.restaurant || restaurant;
           
-          const result = notificationService.scheduleMealReminder({
+          const result = await notificationService.scheduleMealReminderConditional({
             dishName: dishName,
             mealId: savedMealId,
             restaurantName: restaurantName
