@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { auth } from '../firebaseConfig';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 interface ProfileCardProps {
   userProfile: {
@@ -20,6 +21,9 @@ interface ProfileCardProps {
   onFollowToggle?: () => void;
   isFollowing?: boolean;
   followLoading?: boolean;
+  // Notification props
+  unreadCount?: number;
+  onNotificationPress?: () => void;
 }
 
 const ProfileCard: React.FC<ProfileCardProps> = ({
@@ -30,6 +34,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   onFollowToggle,
   isFollowing,
   followLoading,
+  unreadCount,
+  onNotificationPress,
 }) => {
   const renderAvatar = () => {
     if (userProfile?.photoURL) {
@@ -71,28 +77,54 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
           </View>
         </View>
 
-        {isOwnProfile ? (
-          onSignOut && (
-            <TouchableOpacity 
-              onPress={onSignOut} 
-              style={styles.signOutButton}
-            >
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </TouchableOpacity>
-          )
-        ) : (
-          onFollowToggle && (
-            <TouchableOpacity 
-              style={[styles.followButton, isFollowing && styles.followButtonActive]}
-              onPress={onFollowToggle}
-              disabled={followLoading}
-            >
-              <Text style={[styles.followButtonIcon, isFollowing && styles.followButtonIconActive]}>
-                {followLoading ? '...' : isFollowing ? '✓' : '+'}
-              </Text>
-            </TouchableOpacity>
-          )
-        )}
+        <View style={styles.rightSideContainer}>
+          {isOwnProfile ? (
+            <>
+              {/* Notification Bell - only show for own profile */}
+              {onNotificationPress && (
+                <TouchableOpacity 
+                  onPress={onNotificationPress} 
+                  style={styles.notificationButton}
+                >
+                  <Image 
+                    source={require('../assets/icons/notification-bell.png')} 
+                    style={styles.notificationIcon}
+                    resizeMode="contain"
+                  />
+                  {unreadCount && unreadCount > 0 && (
+                    <View style={styles.notificationBadge}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount.toString()}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+              
+              {/* Sign Out Button */}
+              {onSignOut && (
+                <TouchableOpacity 
+                  onPress={onSignOut} 
+                  style={styles.signOutButton}
+                >
+                  <Text style={styles.signOutText}>Sign Out</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            onFollowToggle && (
+              <TouchableOpacity 
+                style={[styles.followButton, isFollowing && styles.followButtonActive]}
+                onPress={onFollowToggle}
+                disabled={followLoading}
+              >
+                <Text style={[styles.followButtonIcon, isFollowing && styles.followButtonIconActive]}>
+                  {followLoading ? '...' : isFollowing ? '✓' : '+'}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
       </View>
     </View>
   );
@@ -192,6 +224,39 @@ const styles = StyleSheet.create({
   },
   followButtonIconActive: {
     color: '#ffffff',
+  },
+  rightSideContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notificationButton: {
+    padding: 4,
+    position: 'relative',
+  },
+  notificationIcon: {
+    width: 20,
+    height: 20,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  notificationBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    lineHeight: 12,
   },
 });
 

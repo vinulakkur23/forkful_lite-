@@ -1,5 +1,6 @@
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import inAppNotificationService from './inAppNotificationService';
 
 export interface Comment {
   id: string;
@@ -62,6 +63,32 @@ export const addComment = async (
         commentCount: firestore.FieldValue.increment(1),
         lastCommentAt: firestore.FieldValue.serverTimestamp(),
       });
+
+    // Get meal document to create notification for meal owner
+    const mealDoc = await firestore()
+      .collection('mealEntries')
+      .doc(mealId)
+      .get();
+    
+    const mealData = mealDoc.data();
+    if (mealData && mealData.userId !== currentUser.uid) {
+      // Create notification for meal owner
+      await inAppNotificationService.createNotification(
+        mealData.userId,
+        'comment',
+        {
+          fromUser: {
+            id: currentUser.uid,
+            name: displayName,
+            photo: photoURL,
+          },
+          mealId,
+          mealName: mealData.mealName || mealData.restaurantName || 'meal',
+          commentId: commentRef.id,
+          commentText: text.trim(),
+        }
+      );
+    }
 
     return {
       success: true,

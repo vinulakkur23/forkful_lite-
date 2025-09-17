@@ -17,6 +17,7 @@ import TooltipOnboarding from '../components/TooltipOnboarding';
 import ProfileCard from '../components/ProfileCard';
 import { followUser, unfollowUser, isFollowing } from '../services/followService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import inAppNotificationService from '../services/inAppNotificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -144,6 +145,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [showTooltips, setShowTooltips] = useState(false);
   const [tabBarLayout, setTabBarLayout] = useState<any>(null);
   
+  // Notification state
+  const [unreadCount, setUnreadCount] = useState(0);
+  
   // Handle route param changes (e.g., when navigating with openChallengeModal)
   useEffect(() => {
     if (route.params?.tabIndex !== undefined) {
@@ -188,6 +192,27 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const handleTooltipSkip = () => {
     handleTooltipComplete();
   };
+
+  // Handle notification press
+  const handleNotificationPress = () => {
+    navigation.navigate('Notifications');
+  };
+
+  // Listen to unread notification count (only for own profile)
+  useEffect(() => {
+    if (!isOwnProfile) return;
+
+    const user = auth().currentUser;
+    if (!user) return;
+
+    console.log('🔔 Setting up notification count listener for user:', user.uid);
+    const unsubscribe = inAppNotificationService.getUnreadCount(user.uid, (count) => {
+      console.log('🔔 Unread notification count updated:', count);
+      setUnreadCount(count);
+    });
+
+    return unsubscribe;
+  }, [isOwnProfile]);
 
   const handleSignOut = async () => {
     console.log("Sign out button pressed");
@@ -447,6 +472,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           onFollowToggle={!isOwnProfile ? handleFollowToggle : undefined}
           isFollowing={isUserFollowing}
           followLoading={followLoading}
+          unreadCount={isOwnProfile ? unreadCount : undefined}
+          onNotificationPress={isOwnProfile ? handleNotificationPress : undefined}
         />
         
         {/* Tab navigation */}
@@ -549,7 +576,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             id: 'map-tab',
             targetPosition: {
               x: (width / 4) * 2 + 20 + 5, // Third tab (My Map) - move a few pixels right
-              y: 150 - 80, // Move up significantly more (80px)
+              y: 150 - 25, // Moved down a bit more to better align with tabs
               width: width / 8, // Much narrower box
               height: 50,
             },
@@ -560,7 +587,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             id: 'stamps-tab',
             targetPosition: {
               x: (width / 4) * 3 + 20 + 5 - 3, // Fourth tab (Accolades) - adjust left to keep center
-              y: 150 - 80, // Move up significantly more (80px)
+              y: 150 - 25, // Moved down a bit more to better align with tabs
               width: width / 8 + 6, // Make box a few pixels wider
               height: 50,
             },

@@ -29,6 +29,7 @@ import MealDetailScreen from './screens/MealDetailScreen';
 import EditMealScreen from './screens/EditMealScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
+import NotificationsScreen from './screens/NotificationsScreen';
 
 // Define the types for our navigation parameters
 export type RootStackParamList = {
@@ -138,6 +139,7 @@ export type RootStackParamList = {
     passportUserName?: string;
     passportUserPhoto?: string;
   };
+  Notifications: undefined;
 };
 
 // Define separate types for tab navigation (screens directly in Tab.Navigator)
@@ -154,6 +156,7 @@ export type TabParamList = {
   Result: RootStackParamList['Result'];
   MealDetail: RootStackParamList['MealDetail'];
   EditMeal: RootStackParamList['EditMeal'];
+  Notifications: RootStackParamList['Notifications'];
 };
 
 // ResourceManager to track and clean temporary files and resources
@@ -326,7 +329,9 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               style={styles.tabButton}
               activeOpacity={0.7}
             >
-              {tab.icon(isFocused)}
+              <View style={styles.tabIconContainer}>
+                {tab.icon(isFocused)}
+              </View>
               <Text style={styles.tabLabel}>
                 {tab.label}
               </Text>
@@ -486,6 +491,14 @@ function TabNavigator() {
         component={EditMealScreen}
         options={{
           headerShown: false, // Hide the header since we add our own
+          tabBarButton: () => null, // Hide from tab bar
+        }}
+      />
+      <Tab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          headerShown: false,
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
@@ -888,7 +901,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#1a2b49', // Always navy blue
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  }
+  },
+  tabIconContainer: {
+    position: 'relative',
+  },
 });
 
 export default App;

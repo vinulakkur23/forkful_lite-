@@ -1297,7 +1297,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       <>
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ff6b6b" />
+            <ActivityIndicator size="large" color="#1a2b49" />
             <Text style={styles.loadingText}>Finding meals nearby...</Text>
           </View>
         ) : (
@@ -1331,7 +1331,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                colors={['#ff6b6b']}
+                colors={['#1a2b49']}
               />
             }
             ListEmptyComponent={

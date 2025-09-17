@@ -1,4 +1,5 @@
 import { firebase, firestore, auth } from '../firebaseConfig';
+import inAppNotificationService from './inAppNotificationService';
 
 interface Cheer {
   userId: string;
@@ -49,6 +50,41 @@ export const addCheer = async (mealId: string): Promise<boolean> => {
       .update({
         cheersCount: firestore.FieldValue.increment(1)
       });
+
+    // Get meal document to create notification for meal owner
+    const mealDoc = await firestore()
+      .collection('mealEntries')
+      .doc(mealId)
+      .get();
+    
+    const mealData = mealDoc.data();
+    if (mealData && mealData.userId !== userId) {
+      // Get user data for the notification
+      const userDoc = await firestore()
+        .collection('users')
+        .doc(userId)
+        .get();
+      
+      const userData = userDoc.data();
+      const currentUser = auth().currentUser;
+      const displayName = userData?.displayName || currentUser?.displayName || 'Someone';
+      const photoURL = userData?.photoURL || currentUser?.photoURL || null;
+
+      // Create notification for meal owner
+      await inAppNotificationService.createNotification(
+        mealData.userId,
+        'cheers',
+        {
+          fromUser: {
+            id: userId,
+            name: displayName,
+            photo: photoURL,
+          },
+          mealId,
+          mealName: mealData.mealName || mealData.restaurantName || 'meal',
+        }
+      );
+    }
 
     console.log('Cheer added successfully');
     return true;
