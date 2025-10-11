@@ -13,7 +13,8 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  Share
+  Share,
+  Modal
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -39,6 +40,9 @@ import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
 import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
+// Import for accolades section
+import { PieChart } from 'react-native-chart-kit';
+import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -102,6 +106,19 @@ interface MealEntry {
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing
 
+// Define interfaces for accolades section
+interface City {
+  name: string;
+  imageUrl: string;
+  mealCount: number;
+}
+
+interface Cuisine {
+  name: string;
+  imageUrl: string;
+  mealCount: number;
+}
+
 // Define the tab routes
 type TabRoutes = {
   key: string;
@@ -150,6 +167,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // Track screen focus for refreshing data
     const isFocused = useIsFocused();
 
+    // State for accolades section
+    const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
+    const [emojisLoading, setEmojisLoading] = useState(true);
+    const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
+    const [challengesLoading, setChallengesLoading] = useState(true);
+    const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
+    const [cities, setCities] = useState<City[]>([]);
+    const [citiesLoading, setCitiesLoading] = useState(true);
+    const [cuisines, setCuisines] = useState<Cuisine[]>([]);
+    const [cuisinesLoading, setCuisinesLoading] = useState(true);
+
     useEffect(() => {
         // Initialize GoogleSignin
         GoogleSignin.configure({
@@ -189,6 +217,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         console.log('FoodPassportScreen: activeFilters or activeRatingFilters changed:', activeFilters, activeRatingFilters);
         applyFilter();
     }, [meals, activeFilters, activeRatingFilters]);
+
+    // Load accolades data when component mounts or userId changes
+    useEffect(() => {
+        loadPixelArtEmojis();
+        loadAllChallenges();
+        loadCities();
+        loadCuisines();
+    }, [userId]);
     
     // Refresh data when screen comes into focus (handles returning from deletion)
     const lastFocusTime = useRef<number>(0);
@@ -670,11 +706,311 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     };
     
     // No longer need handleFilterChange as it's handled in the wrapper
-    
+
+    // Load accolades data functions
+    const loadPixelArtEmojis = async () => {
+        try {
+            setEmojisLoading(true);
+            const targetUserId = userId || auth().currentUser?.uid;
+            if (!targetUserId) return;
+
+            console.log(`🎨 Loading pixel art emojis for user: ${targetUserId}`);
+
+            // Query user's meals that have pixel art (check both URL and data fields)
+            const mealsQuery = await firestore()
+                .collection('mealEntries')
+                .where('userId', '==', targetUserId)
+                .orderBy('createdAt', 'desc')
+                .limit(100) // Get more meals to check
+                .get();
+
+            const emojiUrls: string[] = [];
+            mealsQuery.forEach((doc) => {
+                const data = doc.data();
+
+                // Only show pixel art for meals that have been rated (rating > 0)
+                if (data.rating && data.rating > 0) {
+                    // Check for both pixel_art_url and pixel_art_data
+                    if (data.pixel_art_url) {
+                        emojiUrls.push(data.pixel_art_url);
+                    } else if (data.pixel_art_data) {
+                        // If it's base64 data, convert to data URI
+                        emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
+                    }
+                }
+            });
+
+            console.log(`🎨 Found ${emojiUrls.length} pixel art emojis`);
+            setPixelArtEmojis(emojiUrls);
+        } catch (error) {
+            console.error('Error loading pixel art emojis:', error);
+        } finally {
+            setEmojisLoading(false);
+        }
+    };
+
+    const loadAllChallenges = async () => {
+        try {
+            setChallengesLoading(true);
+            const targetUserId = userId || auth().currentUser?.uid;
+            console.log(`🍽️ Loading all challenges for user: ${targetUserId}`);
+
+            // Get challenges for the target user
+            const challenges = await getUserChallenges(targetUserId);
+            console.log(`🍽️ Found ${challenges.length} total challenges for user ${targetUserId}`);
+
+            // Sort challenges: incomplete first, then completed
+            const sortedChallenges = [...challenges].sort((a, b) => {
+                if (a.status === 'completed' && b.status !== 'completed') return 1;
+                if (a.status !== 'completed' && b.status === 'completed') return -1;
+                return 0;
+            });
+
+            setAllChallenges(sortedChallenges);
+        } catch (error) {
+            console.error('Error loading challenges:', error);
+        } finally {
+            setChallengesLoading(false);
+        }
+    };
+
+    const loadCities = async () => {
+        try {
+            setCitiesLoading(true);
+
+            const targetUserId = userId || auth().currentUser?.uid;
+            if (!targetUserId) return;
+
+            console.log(`🌎 Loading cities for user: ${targetUserId}`);
+
+            // Get user document to get unique cities
+            const userDoc = await firestore().collection('users').doc(targetUserId).get();
+            const userData = userDoc.data();
+            const uniqueCities = userData?.uniqueCities || [];
+
+            // Load city images and count meals per city
+            const citiesWithData: City[] = [];
+
+            // Get meal counts per city
+            const mealsQuery = await firestore()
+                .collection('mealEntries')
+                .where('userId', '==', targetUserId)
+                .get();
+
+            const cityMealCounts: { [city: string]: number } = {};
+            mealsQuery.docs.forEach(doc => {
+                const data = doc.data();
+                const city = data.location?.city;
+                if (city) {
+                    cityMealCounts[city] = (cityMealCounts[city] || 0) + 1;
+                }
+            });
+
+            for (const cityName of uniqueCities) {
+                const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
+                const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
+
+                // Capitalize each word in the city name
+                const capitalizedCityName = cityName.split(' ').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                ).join(' ');
+
+                const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
+
+                if (cityDoc.exists) {
+                    const cityData = cityDoc.data();
+                    if (cityData.imageUrl) {
+                        citiesWithData.push({
+                            name: capitalizedCityName,
+                            imageUrl: cityData.imageUrl,
+                            mealCount: mealCount
+                        });
+                    }
+                } else {
+                    // Use placeholder if no image exists
+                    citiesWithData.push({
+                        name: capitalizedCityName,
+                        imageUrl: 'https://via.placeholder.com/350',
+                        mealCount: mealCount
+                    });
+                }
+            }
+
+            // Sort cities by meal count (highest first)
+            citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+            console.log(`🌎 Found ${citiesWithData.length} cities for user`);
+            setCities(citiesWithData);
+        } catch (error) {
+            console.error('Error loading cities:', error);
+        } finally {
+            setCitiesLoading(false);
+        }
+    };
+
+    const loadCuisines = async () => {
+        try {
+            setCuisinesLoading(true);
+
+            const targetUserId = userId || auth().currentUser?.uid;
+            if (!targetUserId) return;
+
+            console.log(`🍳 Loading cuisines for user: ${targetUserId}`);
+
+            // Get user document to get unique cuisines
+            const userDoc = await firestore().collection('users').doc(targetUserId).get();
+            const userData = userDoc.data();
+            const uniqueCuisines = userData?.uniqueCuisines || [];
+
+            // Load cuisine data and count meals per cuisine
+            const cuisinesWithData: Cuisine[] = [];
+
+            // Get meal counts per cuisine
+            const mealsQuery = await firestore()
+                .collection('mealEntries')
+                .where('userId', '==', targetUserId)
+                .get();
+
+            const cuisineMealCounts: { [cuisine: string]: number } = {};
+            mealsQuery.docs.forEach(doc => {
+                const data = doc.data();
+                // Primary source: metadata_enriched.cuisine_type
+                let cuisine = data.metadata_enriched?.cuisine_type;
+
+                // Fallback sources
+                if (!cuisine) {
+                    cuisine = data.quick_criteria_result?.cuisine_type ||
+                             data.enhanced_facts?.food_facts?.cuisine_type ||
+                             data.aiMetadata?.cuisineType;
+                }
+
+                if (cuisine) {
+                    cuisine = cuisine.toLowerCase().trim();
+                    if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
+                        cuisineMealCounts[cuisine] = (cuisineMealCounts[cuisine] || 0) + 1;
+                    }
+                }
+            });
+
+            for (const cuisineName of uniqueCuisines) {
+                const normalizedCuisineName = cuisineName.toLowerCase().trim().replace(/\s+/g, '-');
+
+                // Capitalize cuisine name for display
+                const capitalizedCuisineName = cuisineName.split(' ').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                ).join(' ');
+
+                const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
+
+                // For now, use a placeholder image
+                cuisinesWithData.push({
+                    name: capitalizedCuisineName,
+                    imageUrl: 'https://via.placeholder.com/350',
+                    mealCount: mealCount
+                });
+            }
+
+            // Sort cuisines by meal count (highest first)
+            cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+            console.log(`🍳 Found ${cuisinesWithData.length} cuisines for user`);
+            setCuisines(cuisinesWithData);
+        } catch (error) {
+            console.error('Error loading cuisines:', error);
+        } finally {
+            setCuisinesLoading(false);
+        }
+    };
+
+    // Helper functions for accolades section
+    const renderTextWithBold = (text: string) => {
+        if (!text) return null;
+
+        // Split by double asterisks
+        const parts = text.split(/\*\*(.*?)\*\*/g);
+
+        return (
+            <Text style={styles.detailDescription}>
+                {parts.map((part, index) => {
+                    // Even indices are regular text, odd indices are bold
+                    if (index % 2 === 0) {
+                        return <Text key={index}>{part}</Text>;
+                    } else {
+                        return <Text key={index} style={{ fontWeight: 'bold' }}>{part}</Text>;
+                    }
+                })}
+            </Text>
+        );
+    };
+
+    const handleShareChallenge = async (challenge: UserChallenge) => {
+        try {
+            // Create a shareable challenge in public collection
+            const publicChallengeRef = await firestore()
+                .collection('publicChallenges')
+                .add({
+                    ...challenge,
+                    sharedBy: auth().currentUser?.uid,
+                    sharedAt: firestore.FieldValue.serverTimestamp(),
+                    originalChallengeId: challenge.challenge_id
+                });
+
+            const shareableLink = `forkful://challenge/${publicChallengeRef.id}`;
+            const message = `Join me on a food challenge! ${challenge.recommended_dish_name}`;
+
+            const result = await Share.share({
+                message: `${message}\n${shareableLink}`,
+                title: 'Food Challenge from Forkful',
+                url: shareableLink
+            });
+
+            if (result.action === Share.sharedAction) {
+                console.log('Challenge shared successfully');
+            }
+        } catch (error) {
+            console.error('Error sharing challenge:', error);
+            Alert.alert('Error', 'Failed to share challenge');
+        }
+    };
+
+    const handleDeleteChallenge = async (challenge: UserChallenge) => {
+        Alert.alert(
+            'Delete Challenge',
+            `Are you sure you want to delete the challenge "${challenge.recommended_dish_name}"?`,
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const success = await deleteChallenge(challenge.challenge_id);
+                            if (success) {
+                                // Refresh challenges list
+                                const updatedChallenges = await getUserChallenges();
+                                setAllChallenges(updatedChallenges);
+                                setSelectedChallenge(null);
+                                Alert.alert('Success', 'Challenge deleted');
+                            } else {
+                                Alert.alert('Error', 'Failed to delete challenge');
+                            }
+                        } catch (error) {
+                            console.error('Error deleting challenge:', error);
+                            Alert.alert('Error', 'Failed to delete challenge');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const viewMealDetails = (meal: MealEntry) => {
         console.log("Navigating to meal detail with ID:", meal.id);
-        navigation.navigate('MealDetail', { 
-            mealId: meal.id, 
+        navigation.navigate('MealDetail', {
+            mealId: meal.id,
             previousScreen: 'FoodPassport',
             // Pass passport context for proper back navigation
             passportUserId: userId,
@@ -952,6 +1288,198 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         }
     };
     
+    // Render functions for accolades sections
+    const renderEmojiItem = ({ item }: { item: string }) => (
+        <View style={styles.emojiItem}>
+            <Image
+                source={{ uri: item }}
+                style={styles.emojiImage}
+                resizeMode="contain"
+            />
+        </View>
+    );
+
+    const renderChallengeItem = ({ item }: { item: UserChallenge }) => {
+        const isCompleted = item.status === 'completed';
+
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.stampItem,
+                    styles.challengeItem,
+                    isCompleted && styles.completedChallengeItem
+                ]}
+                onPress={() => setSelectedChallenge(item)}
+            >
+                {/* Completion status indicator */}
+                {isCompleted && (
+                    <View style={styles.challengeStatusIndicator}>
+                        <Text style={styles.checkmarkText}>✓</Text>
+                    </View>
+                )}
+
+                <View style={styles.stampIconContainer}>
+                    {item.image_data ? (
+                        <Image
+                            source={{ uri: item.image_data }}
+                            style={[
+                                styles.challengeEmojiImage,
+                                isCompleted && styles.completedChallengeImage
+                            ]}
+                            resizeMode="contain"
+                        />
+                    ) : (
+                        <Icon
+                            name="restaurant"
+                            size={40}
+                            color={isCompleted ? "#999" : "#ff6b6b"}
+                        />
+                    )}
+                </View>
+
+                <Text
+                    style={[
+                        styles.stampName,
+                        styles.earnedStampText,
+                        isCompleted && styles.completedChallengeText
+                    ]}
+                    numberOfLines={2}
+                >
+                    {item.recommended_dish_name}
+                </Text>
+
+                {isCompleted && item.completedWithDish && (
+                    <Text style={styles.completedWithText} numberOfLines={1}>
+                        ✓ {item.completedWithDish}
+                    </Text>
+                )}
+            </TouchableOpacity>
+        );
+    };
+
+    const renderCityItem = ({ item }: { item: City }) => (
+        <TouchableOpacity
+            style={styles.cityItem}
+            onPress={() => {
+                if (navigation && onFilterChange && onTabChange) {
+                    // Create city filter
+                    const cityFilter: FilterItem = {
+                        type: 'city',
+                        value: item.name.toLowerCase(),
+                        label: item.name
+                    };
+
+                    // Set the filter
+                    onFilterChange([cityFilter]);
+
+                    // Switch to meals tab (index 0)
+                    onTabChange(0);
+                } else {
+                    // Fallback if functions not available
+                    Alert.alert('View City', `Showing meals for ${item.name}`);
+                }
+            }}
+        >
+            <View style={styles.cityImageContainer}>
+                <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.cityImage}
+                    resizeMode="cover"
+                />
+            </View>
+            <Text style={styles.cityName} numberOfLines={1}>
+                {item.name}
+            </Text>
+            <Text style={styles.cityMealCount} numberOfLines={1}>
+                {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
+            </Text>
+        </TouchableOpacity>
+    );
+
+    const renderCuisineItem = ({ item }: { item: Cuisine }) => (
+        <TouchableOpacity
+            style={styles.cuisineItem}
+            onPress={() => {
+                if (navigation && onFilterChange && onTabChange) {
+                    // Create cuisine filter
+                    const cuisineFilter: FilterItem = {
+                        type: 'cuisineType',
+                        value: item.name,
+                        label: item.name
+                    };
+
+                    // Set the filter
+                    onFilterChange([cuisineFilter]);
+
+                    // Switch to meals tab (index 0)
+                    onTabChange(0);
+                } else {
+                    // Fallback if functions not available
+                    Alert.alert('View Cuisine', `Showing meals for ${item.name}`);
+                }
+            }}
+        >
+            <View style={styles.cuisineImageContainer}>
+                <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.cuisineImage}
+                    resizeMode="cover"
+                />
+            </View>
+            <Text style={styles.cuisineName} numberOfLines={1}>
+                {item.name}
+            </Text>
+            <Text style={styles.cuisineMealCount} numberOfLines={1}>
+                {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
+            </Text>
+        </TouchableOpacity>
+    );
+
+    // Generate pie chart data for cities
+    const generateCitiesPieData = () => {
+        if (!cities.length) return [];
+
+        // Generate distinct colors for each city
+        const colors = [
+            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+            '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+            '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD'
+        ];
+
+        return cities.map((city, index) => ({
+            name: city.name,
+            population: city.mealCount,
+            color: colors[index % colors.length],
+            legendFontColor: '#1a2b49',
+            legendFontSize: 12,
+        }));
+    };
+
+    const renderCitiesPieChart = () => {
+        if (!cities.length) return null;
+
+        const pieData = generateCitiesPieData();
+
+        return (
+            <View style={styles.pieChartContainer}>
+                <Text style={styles.pieChartTitle}>Meals by City</Text>
+                <PieChart
+                    data={pieData}
+                    width={width - 40}
+                    height={200}
+                    chartConfig={{
+                        color: (opacity = 1) => `rgba(26, 43, 73, ${opacity})`,
+                    }}
+                    accessor="population"
+                    backgroundColor="transparent"
+                    paddingLeft="15"
+                    center={[10, 0]}
+                    hasLegend={true}
+                />
+            </View>
+        );
+    };
+
     // Function to render each meal item
     const renderMealItem = ({ item }: { item: MealEntry }) => {
         const isUnrated = item.rating === 0;
@@ -1086,30 +1614,116 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             </View>
                         }
                         ListFooterComponent={() => (
-                            // Only show share button if user has meals and it's their own profile
-                            (filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid)) ? (
-                                <View style={styles.shareContainer}>
-                                    <TouchableOpacity
-                                        style={styles.shareButton}
-                                        onPress={handleSharePassport}
-                                        activeOpacity={0.8}
-                                    >
-                                        <Image 
-                                            source={require('../assets/icons/map/share.png')} 
-                                            style={styles.shareIcon}
-                                        />
-                                        <Text style={styles.shareButtonText}>Share</Text>
-                                    </TouchableOpacity>
+                            <View>
+                                {/* Accolades Section */}
+                                <View style={styles.accoladesContainer}>
+                                    {/* I've Eaten Section - Pixel Art Emojis */}
+                                    {!emojisLoading && pixelArtEmojis.length > 0 && (
+                                        <>
+                                            <Text style={styles.sectionTitle}>Meals Eaten:</Text>
+                                            <ScrollView
+                                                horizontal
+                                                showsHorizontalScrollIndicator={false}
+                                                style={styles.challengeCarousel}
+                                                contentContainerStyle={styles.challengeCarouselContent}
+                                            >
+                                                {pixelArtEmojis.map((item, index) => (
+                                                    <View key={`emoji_${index}`} style={styles.emojiCarouselWrapper}>
+                                                        {renderEmojiItem({ item, index: 0, separators: null as any })}
+                                                    </View>
+                                                ))}
+                                            </ScrollView>
+                                        </>
+                                    )}
+
+                                    {/* All Challenges Section */}
+                                    {!challengesLoading && allChallenges.length > 0 && (
+                                        <>
+                                            <Text style={styles.sectionTitle}>Food Challenges</Text>
+                                            <ScrollView
+                                                horizontal
+                                                showsHorizontalScrollIndicator={false}
+                                                style={styles.challengeCarousel}
+                                                contentContainerStyle={styles.challengeCarouselContent}
+                                            >
+                                                {allChallenges.map(item => (
+                                                    <View key={item.challenge_id} style={styles.carouselItemWrapper}>
+                                                        {renderChallengeItem({ item, index: 0, separators: null as any })}
+                                                    </View>
+                                                ))}
+                                            </ScrollView>
+                                        </>
+                                    )}
+
+                                    {/* Cities Section */}
+                                    {!citiesLoading && cities.length > 0 && (
+                                        <>
+                                            <Text style={styles.sectionTitle}>Cities</Text>
+
+                                            <ScrollView
+                                                horizontal
+                                                showsHorizontalScrollIndicator={false}
+                                                style={styles.challengeCarousel}
+                                                contentContainerStyle={styles.challengeCarouselContent}
+                                            >
+                                                {cities.map(item => (
+                                                    <View key={item.name} style={styles.carouselItemWrapper}>
+                                                        {renderCityItem({ item, index: 0, separators: null as any })}
+                                                    </View>
+                                                ))}
+                                            </ScrollView>
+
+                                            {/* Cities Pie Chart */}
+                                            {renderCitiesPieChart()}
+                                        </>
+                                    )}
+
+                                    {/* Cuisines Section */}
+                                    {!cuisinesLoading && cuisines.length > 0 && (
+                                        <>
+                                            <Text style={styles.sectionTitle}>Cuisines</Text>
+
+                                            <ScrollView
+                                                horizontal
+                                                showsHorizontalScrollIndicator={false}
+                                                style={styles.challengeCarousel}
+                                                contentContainerStyle={styles.challengeCarouselContent}
+                                            >
+                                                {cuisines.map(item => (
+                                                    <View key={item.name} style={styles.carouselItemWrapper}>
+                                                        {renderCuisineItem({ item, index: 0, separators: null as any })}
+                                                    </View>
+                                                ))}
+                                            </ScrollView>
+                                        </>
+                                    )}
                                 </View>
-                            ) : null
+
+                                {/* Share button - only show if user has meals and it's their own profile */}
+                                {filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid) && (
+                                    <View style={styles.shareContainer}>
+                                        <TouchableOpacity
+                                            style={styles.shareButton}
+                                            onPress={handleSharePassport}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Image
+                                                source={require('../assets/icons/map/share.png')}
+                                                style={styles.shareIcon}
+                                            />
+                                            <Text style={styles.shareButtonText}>Share</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
                         )}
                     />
             )}
             
             {/* Photo selection menu */}
             {showPhotoMenu && (
-                <TouchableOpacity 
-                    style={styles.photoMenuOverlay} 
+                <TouchableOpacity
+                    style={styles.photoMenuOverlay}
                     onPress={() => setShowPhotoMenu(false)}
                     activeOpacity={1}
                 >
@@ -1119,22 +1733,22 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             onPress={openCamera}
                             activeOpacity={0.8}
                         >
-                            <Image 
-                                source={require('../assets/icons/camera-inactive.png')} 
+                            <Image
+                                source={require('../assets/icons/camera-inactive.png')}
                                 style={{ width: 32, height: 32 }}
                             />
                             <Text style={styles.photoMenuText}>Camera</Text>
                         </TouchableOpacity>
-                        
+
                         <View style={styles.photoMenuDivider} />
-                        
+
                         <TouchableOpacity
                             style={styles.photoMenuItem}
                             onPress={selectFromGallery}
                             activeOpacity={0.8}
                         >
-                            <Image 
-                                source={require('../assets/icons/upload-inactive.png')} 
+                            <Image
+                                source={require('../assets/icons/upload-inactive.png')}
                                 style={{ width: 32, height: 32 }}
                             />
                             <Text style={styles.photoMenuText}>Upload</Text>
@@ -1142,6 +1756,79 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     </View>
                 </TouchableOpacity>
             )}
+
+            {/* Challenge detail modal */}
+            <Modal
+                visible={selectedChallenge !== null}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setSelectedChallenge(null)}
+            >
+                <View style={styles.detailOverlay}>
+                    <TouchableOpacity
+                        style={styles.detailOverlay}
+                        onPress={() => setSelectedChallenge(null)}
+                        activeOpacity={1}
+                    >
+                        <View style={styles.detailCard}>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={() => setSelectedChallenge(null)}
+                            >
+                                <Text style={styles.closeButtonX}>×</Text>
+                            </TouchableOpacity>
+
+                            {/* Zoomed challenge image */}
+                            <View style={styles.zoomedStampContainer}>
+                                {selectedChallenge?.image_data ? (
+                                    <Image
+                                        source={{ uri: selectedChallenge.image_data }}
+                                        style={styles.zoomedStampImage}
+                                        resizeMode="contain"
+                                    />
+                                ) : (
+                                    <Icon name="restaurant" size={120} color="#ff6b6b" />
+                                )}
+                            </View>
+
+                            {/* Title and description at bottom */}
+                            <View style={styles.stampInfo}>
+                                {selectedChallenge && (
+                                    <>
+                                        <Text style={styles.detailName}>
+                                            {selectedChallenge.recommended_dish_name}
+                                        </Text>
+
+                                        {renderTextWithBold(
+                                            selectedChallenge.challenge_description ||
+                                            `${selectedChallenge.why_this_dish || ''}\n\n${selectedChallenge.what_to_notice || ''}`.trim()
+                                        )}
+
+                                        {/* Action buttons for active challenges only - only show on own profile */}
+                                        {selectedChallenge.status === 'active' && (!userId || userId === auth().currentUser?.uid) && (
+                                            <View style={styles.challengeActionButtons}>
+                                                <TouchableOpacity
+                                                    style={styles.shareButton}
+                                                    onPress={() => handleShareChallenge(selectedChallenge)}
+                                                >
+                                                    <Text style={styles.shareButtonText}>Challenge Friend</Text>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    style={styles.deleteButton}
+                                                    onPress={() => handleDeleteChallenge(selectedChallenge)}
+                                                >
+                                                    <Text style={styles.deleteButtonText}>Delete Challenge</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -1481,6 +2168,328 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#1a2b49', // Navy blue text
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    // Accolades section styles
+    accoladesContainer: {
+        paddingTop: 10,
+    },
+    sectionTitle: {
+        fontSize: 24,
+        fontWeight: 'normal',
+        marginHorizontal: 15,
+        marginTop: 15,
+        color: '#1a2b49',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    stampItem: {
+        width: itemWidth * 0.9,
+        height: itemWidth * 0.9 + 30,
+        margin: 5,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 10,
+        backgroundColor: '#FFFFFF',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    stampName: {
+        textAlign: 'center',
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginTop: 5,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    earnedStampText: {
+        color: '#1a2b49',
+    },
+    stampIconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 0,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
+        overflow: 'hidden',
+    },
+    challengeItem: {
+        position: 'relative',
+    },
+    completedChallengeItem: {
+        backgroundColor: '#FFFFFF',
+        borderColor: '#ccc',
+        borderWidth: 2,
+    },
+    challengeStatusIndicator: {
+        position: 'absolute',
+        top: 5,
+        right: 5,
+        zIndex: 1,
+    },
+    checkmarkText: {
+        fontSize: 18,
+        color: '#4CAF50',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    challengeEmojiImage: {
+        width: '100%',
+        height: '100%',
+    },
+    completedChallengeImage: {
+        opacity: 0.5,
+    },
+    completedChallengeText: {
+        color: '#999',
+        textDecorationLine: 'line-through',
+    },
+    completedWithText: {
+        fontSize: 9,
+        color: '#4CAF50',
+        marginTop: 2,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        textAlign: 'center',
+        fontWeight: 'bold',
+    },
+    challengeCarousel: {
+        marginTop: 10,
+        marginBottom: 15,
+    },
+    challengeCarouselContent: {
+        paddingHorizontal: 15,
+        paddingRight: 25,
+    },
+    carouselItemWrapper: {
+        marginRight: 10,
+    },
+    emojiCarouselWrapper: {
+        marginRight: 6,
+    },
+    emojiItem: {
+        width: 45,
+        height: 45,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emojiImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 4,
+    },
+    cityItem: {
+        width: itemWidth * 0.9,
+        height: itemWidth * 0.9 + 25,
+        margin: 5,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        padding: 8,
+        backgroundColor: '#ffffff',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    cityImageContainer: {
+        width: itemWidth * 0.9 - 16,
+        height: itemWidth * 0.9 - 50,
+        borderRadius: 8,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    cityImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+    },
+    cityName: {
+        textAlign: 'center',
+        fontSize: 16,
+        fontWeight: 'bold',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: '#1a2b49',
+        marginBottom: 2,
+        marginTop: -40,
+    },
+    cityMealCount: {
+        textAlign: 'center',
+        fontSize: 14,
+        color: '#666',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        marginTop: 5,
+    },
+    cuisineItem: {
+        width: itemWidth * 0.9,
+        height: itemWidth * 0.9 + 25,
+        margin: 5,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        padding: 8,
+        backgroundColor: '#ffffff',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    cuisineImageContainer: {
+        width: itemWidth * 0.9 - 16,
+        height: itemWidth * 0.9 - 50,
+        borderRadius: 8,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    cuisineImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+    },
+    cuisineName: {
+        textAlign: 'center',
+        fontSize: 16,
+        fontWeight: 'bold',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: '#1a2b49',
+        marginBottom: 2,
+        marginTop: -40,
+    },
+    cuisineMealCount: {
+        textAlign: 'center',
+        fontSize: 14,
+        color: '#666',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        marginTop: 5,
+    },
+    pieChartContainer: {
+        alignItems: 'center',
+        marginTop: 20,
+        marginBottom: 10,
+        paddingHorizontal: 20,
+    },
+    pieChartTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1a2b49',
+        marginBottom: 15,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    detailOverlay: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    detailCard: {
+        width: itemWidth * 2.7,
+        backgroundColor: '#ffffff',
+        borderRadius: 25,
+        alignItems: 'center',
+        padding: 25,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        padding: 5,
+        width: 30,
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+    closeButtonX: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1a2b49',
+        textAlign: 'center',
+        lineHeight: 24,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    zoomedStampContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 0,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        overflow: 'hidden',
+    },
+    zoomedStampImage: {
+        width: '100%',
+        height: '100%',
+    },
+    stampInfo: {
+        alignItems: 'center',
+        paddingHorizontal: 0,
+        width: '100%',
+    },
+    detailName: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+        color: '#1a2b49',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    detailDescription: {
+        fontSize: 14,
+        color: '#1a2b49',
+        textAlign: 'center',
+        marginBottom: 15,
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        lineHeight: 20,
+    },
+    challengeActionButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 15,
+        paddingTop: 15,
+        borderTopWidth: 1,
+        borderTopColor: '#e0e0e0',
+        width: '100%',
+    },
+    deleteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderColor: '#1a2b49',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        flex: 0.45,
+        justifyContent: 'center',
+    },
+    deleteButtonText: {
+        color: '#1a2b49',
+        fontSize: 12,
+        fontWeight: '600',
     },
 });
 
