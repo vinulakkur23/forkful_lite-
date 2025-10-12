@@ -5,6 +5,24 @@ import { firebase, firestore, auth } from '../firebaseConfig';
 // Stub functions to replace achievement service functions
 const extractCityFromMeal = (meal: any) => null;
 const extractCuisineFromMeal = (meal: any) => null;
+const extractRestaurantFromMeal = (meal: any) => {
+  if (!meal.restaurant) return null;
+
+  let restaurantName = meal.restaurant.trim();
+
+  // If restaurant includes city/state (e.g., "Pok Pok, Portland OR"), extract just the name
+  if (restaurantName.includes(',')) {
+    const parts = restaurantName.split(',');
+    restaurantName = parts[0].trim();
+  }
+
+  // Filter out empty strings or generic entries
+  if (restaurantName === '' || restaurantName.toLowerCase() === 'unknown' || restaurantName.toLowerCase() === 'n/a') {
+    return null;
+  }
+
+  return restaurantName;
+};
 const isSushiMeal = (meal: any) => false;
 const isTakeoutMeal = (meal: any) => false;
 
@@ -14,6 +32,7 @@ export const refreshUserCounts = async (userId?: string): Promise<{
   counts?: {
     cities: number;
     cuisines: number;
+    restaurants: number;
     sushi: number;
     takeout: number;
   };
@@ -43,6 +62,7 @@ export const refreshUserCounts = async (userId?: string): Promise<{
     // Recalculate all counts
     const uniqueCities = new Set<string>();
     const uniqueCuisines = new Set<string>();
+    const uniqueRestaurants = new Set<string>();
     let sushiMealCount = 0;
     let takeoutMealCount = 0;
 
@@ -55,6 +75,11 @@ export const refreshUserCounts = async (userId?: string): Promise<{
       const cuisine = extractCuisineFromMeal(meal);
       if (cuisine) {
         uniqueCuisines.add(cuisine);
+      }
+
+      const restaurant = extractRestaurantFromMeal(meal);
+      if (restaurant) {
+        uniqueRestaurants.add(restaurant);
       }
 
       if (isSushiMeal(meal)) {
@@ -71,6 +96,7 @@ export const refreshUserCounts = async (userId?: string): Promise<{
     const counts = {
       cities: uniqueCities.size,
       cuisines: uniqueCuisines.size,
+      restaurants: uniqueRestaurants.size,
       sushi: sushiMealCount,
       takeout: takeoutMealCount
     };
@@ -86,6 +112,8 @@ export const refreshUserCounts = async (userId?: string): Promise<{
         uniqueCities: Array.from(uniqueCities),
         uniqueCuisineCount: counts.cuisines,
         uniqueCuisines: Array.from(uniqueCuisines),
+        uniqueRestaurantCount: counts.restaurants,
+        uniqueRestaurants: Array.from(uniqueRestaurants),
         sushiMealCount: counts.sushi,
         takeoutMealCount: counts.takeout,
         lastCountRefresh: firestore.FieldValue.serverTimestamp()

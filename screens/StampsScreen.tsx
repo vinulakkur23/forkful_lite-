@@ -57,6 +57,11 @@ interface Cuisine {
   mealCount: number;
 }
 
+interface Restaurant {
+  name: string;
+  mealCount: number;
+}
+
 interface TopRatedPhoto {
   id: string;
   photoUrl: string;
@@ -77,6 +82,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
   const [citiesLoading, setCitiesLoading] = useState(true);
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [cuisinesLoading, setCuisinesLoading] = useState(true);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurantsLoading, setRestaurantsLoading] = useState(true);
   const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
@@ -185,6 +192,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
     // loadTopRatedPhotos();
     loadCities();
     loadCuisines();
+    loadRestaurants();
     loadAllChallenges();
     loadPixelArtEmojis();
   }, [userId]);
@@ -436,6 +444,69 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       console.error('Error loading cuisines:', error);
     } finally {
       setCuisinesLoading(false);
+    }
+  };
+
+  const loadRestaurants = async () => {
+    try {
+      setRestaurantsLoading(true);
+
+      const targetUserId = userId || auth().currentUser?.uid;
+      if (!targetUserId) return;
+
+      console.log(`🍽️ Loading restaurants for user: ${targetUserId}`);
+
+      // Get user document to get unique restaurants
+      const userDoc = await firestore().collection('users').doc(targetUserId).get();
+      const userData = userDoc.data();
+      const uniqueRestaurants = userData?.uniqueRestaurants || [];
+
+      // Get meal counts per restaurant
+      const mealsQuery = await firestore()
+        .collection('mealEntries')
+        .where('userId', '==', targetUserId)
+        .get();
+
+      const restaurantMealCounts: { [restaurant: string]: number } = {};
+      mealsQuery.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.restaurant) {
+          let restaurantName = data.restaurant.trim();
+
+          // If restaurant includes city/state, extract just the name
+          if (restaurantName.includes(',')) {
+            const parts = restaurantName.split(',');
+            restaurantName = parts[0].trim();
+          }
+
+          if (restaurantName && restaurantName !== '' && restaurantName.toLowerCase() !== 'unknown' && restaurantName.toLowerCase() !== 'n/a') {
+            restaurantMealCounts[restaurantName] = (restaurantMealCounts[restaurantName] || 0) + 1;
+          }
+        }
+      });
+
+      const restaurantsWithData: Restaurant[] = [];
+
+      for (const restaurantName of uniqueRestaurants) {
+        const mealCount = restaurantMealCounts[restaurantName] || 0;
+
+        if (mealCount > 0) {
+          restaurantsWithData.push({
+            name: restaurantName,
+            mealCount: mealCount
+          });
+        }
+      }
+
+      // Sort restaurants by meal count (highest first)
+      restaurantsWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+      console.log(`🍽️ Found ${restaurantsWithData.length} restaurants for user`);
+      setRestaurants(restaurantsWithData);
+    } catch (error) {
+      console.error('Error loading restaurants:', error);
+    } finally {
+      setRestaurantsLoading(false);
     }
   };
 
@@ -723,10 +794,10 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
             value: item.name, // Use exact name for filtering
             label: item.name
           };
-          
+
           // Set the filter
           onFilterChange([cuisineFilter]);
-          
+
           // Switch to meals tab (index 0)
           onTabChange(0);
         } else {
@@ -746,6 +817,41 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
         {item.name}
       </Text>
       <Text style={styles.cuisineMealCount} numberOfLines={1}>
+        {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
+    <TouchableOpacity
+      style={styles.restaurantItem}
+      onPress={() => {
+        if (navigation && onFilterChange && onTabChange) {
+          // Create restaurant filter
+          const restaurantFilter: FilterItem = {
+            type: 'restaurant',
+            value: item.name,
+            label: item.name
+          };
+
+          // Set the filter
+          onFilterChange([restaurantFilter]);
+
+          // Switch to meals tab (index 0)
+          onTabChange(0);
+        } else {
+          // Fallback if functions not available
+          Alert.alert('View Restaurant', `Showing meals for ${item.name}`);
+        }
+      }}
+    >
+      <View style={styles.restaurantIconContainer}>
+        <Icon name="restaurant" size={40} color="#1a2b49" />
+      </View>
+      <Text style={styles.restaurantName} numberOfLines={2}>
+        {item.name}
+      </Text>
+      <Text style={styles.restaurantMealCount} numberOfLines={1}>
         {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
       </Text>
     </TouchableOpacity>
@@ -995,8 +1101,8 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           {!cuisinesLoading && cuisines.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Cuisines</Text>
-              
-              <ScrollView 
+
+              <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.challengeCarousel}
@@ -1005,6 +1111,26 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
                 {cuisines.map(item => (
                   <View key={item.name} style={styles.carouselItemWrapper}>
                     {renderCuisineItem({ item, index: 0, separators: null as any })}
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* Restaurants Section */}
+          {!restaurantsLoading && restaurants.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Restaurants</Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.challengeCarousel}
+                contentContainerStyle={styles.challengeCarouselContent}
+              >
+                {restaurants.map(item => (
+                  <View key={item.name} style={styles.carouselItemWrapper}>
+                    {renderRestaurantItem({ item, index: 0, separators: null as any })}
                   </View>
                 ))}
               </ScrollView>
@@ -1700,6 +1826,46 @@ const styles = StyleSheet.create({
     color: '#666',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     marginTop: 5,
+  },
+  restaurantItem: {
+    width: STAMP_SIZE,
+    height: STAMP_SIZE + 25,
+    margin: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+    backgroundColor: '#ffffff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  restaurantIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FAF8E6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  restaurantName: {
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1a2b49',
+    marginBottom: 5,
+    paddingHorizontal: 5,
+  },
+  restaurantMealCount: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#666',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginTop: 2,
   },
   // Pie chart styles
   pieChartContainer: {

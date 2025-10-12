@@ -41,14 +41,14 @@ const extractCuisineFromMeal = (meal) => {
       return cuisine;
     }
   }
-  
+
   // Fallback sources (for backward compatibility or edge cases)
   const fallbackSources = [
     meal.quick_criteria_result?.cuisine_type,
     meal.enhanced_facts?.food_facts?.cuisine_type,
     meal.aiMetadata?.cuisineType
   ];
-  
+
   for (const source of fallbackSources) {
     if (source) {
       const cuisine = source.toLowerCase().trim();
@@ -57,8 +57,27 @@ const extractCuisineFromMeal = (meal) => {
       }
     }
   }
-  
+
   return null;
+};
+
+const extractRestaurantFromMeal = (meal) => {
+  if (!meal.restaurant) return null;
+
+  let restaurantName = meal.restaurant.trim();
+
+  // If restaurant includes city/state (e.g., "Pok Pok, Portland OR"), extract just the name
+  if (restaurantName.includes(',')) {
+    const parts = restaurantName.split(',');
+    restaurantName = parts[0].trim();
+  }
+
+  // Filter out empty strings or generic entries
+  if (restaurantName === '' || restaurantName.toLowerCase() === 'unknown' || restaurantName.toLowerCase() === 'n/a') {
+    return null;
+  }
+
+  return restaurantName;
 };
 
 const isSushiMeal = (meal) => {
@@ -174,7 +193,16 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
             uniqueCuisines.add(cuisine);
           }
         });
-        
+
+        // Recalculate restaurants
+        const uniqueRestaurants = new Set();
+        meals.forEach((meal) => {
+          const restaurant = extractRestaurantFromMeal(meal);
+          if (restaurant) {
+            uniqueRestaurants.add(restaurant);
+          }
+        });
+
         // Recalculate sushi meals
         const sushiMealCount = meals.filter((meal) => isSushiMeal(meal)).length;
         
@@ -192,15 +220,18 @@ exports.dailyCountRefresh = onSchedule('0 2 * * *', async (event) => {
           uniqueCities: Array.from(uniqueCities),
           uniqueCuisineCount: uniqueCuisines.size,
           uniqueCuisines: Array.from(uniqueCuisines),
+          uniqueRestaurantCount: uniqueRestaurants.size,
+          uniqueRestaurants: Array.from(uniqueRestaurants),
           sushiMealCount: sushiMealCount,
           takeoutMealCount: takeoutMealCount,
           highRatedPhotoCount: highRatedPhotoCount,
           lastCountRefresh: new Date(),
         });
-        
+
         console.log(`Updated counts for user ${userId}:`, {
           cities: uniqueCities.size,
           cuisines: uniqueCuisines.size,
+          restaurants: uniqueRestaurants.size,
           sushi: sushiMealCount,
           takeout: takeoutMealCount,
           highRatedPhotos: highRatedPhotoCount,
@@ -246,17 +277,21 @@ exports.manualCountRefresh = onCall(async (request) => {
     // Recalculate all counts
     const uniqueCities = new Set();
     const uniqueCuisines = new Set();
+    const uniqueRestaurants = new Set();
     let sushiMealCount = 0;
     let takeoutMealCount = 0;
     let highRatedPhotoCount = 0;
-    
+
     meals.forEach((meal) => {
       const city = extractCityFromMeal(meal);
       if (city) uniqueCities.add(city);
-      
+
       const cuisine = extractCuisineFromMeal(meal);
       if (cuisine) uniqueCuisines.add(cuisine);
-      
+
+      const restaurant = extractRestaurantFromMeal(meal);
+      if (restaurant) uniqueRestaurants.add(restaurant);
+
       if (isSushiMeal(meal)) sushiMealCount++;
       if (isTakeoutMeal(meal)) takeoutMealCount++;
       if (meal.photoScore && meal.photoScore >= 5.5) highRatedPhotoCount++;
@@ -268,17 +303,20 @@ exports.manualCountRefresh = onCall(async (request) => {
       uniqueCities: Array.from(uniqueCities),
       uniqueCuisineCount: uniqueCuisines.size,
       uniqueCuisines: Array.from(uniqueCuisines),
+      uniqueRestaurantCount: uniqueRestaurants.size,
+      uniqueRestaurants: Array.from(uniqueRestaurants),
       sushiMealCount: sushiMealCount,
       takeoutMealCount: takeoutMealCount,
       highRatedPhotoCount: highRatedPhotoCount,
       lastCountRefresh: new Date(),
     });
-    
+
     return {
       success: true,
       counts: {
         cities: uniqueCities.size,
         cuisines: uniqueCuisines.size,
+        restaurants: uniqueRestaurants.size,
         sushi: sushiMealCount,
         takeout: takeoutMealCount,
         highRatedPhotos: highRatedPhotoCount,
