@@ -3,8 +3,25 @@ import { firebase, firestore, auth } from '../firebaseConfig';
 // import { extractCityFromMeal, extractCuisineFromMeal, isSushiMeal, isTakeoutMeal } from './achievementService';
 
 // Stub functions to replace achievement service functions
-const extractCityFromMeal = (meal: any) => null;
-const extractCuisineFromMeal = (meal: any) => null;
+const extractCityFromMeal = (meal: any) => {
+  // Try location.city first (primary source)
+  if (meal.location?.city) return meal.location.city;
+  // Try top-level city field
+  if (meal.city) return meal.city;
+  // Try metadata_enriched.city
+  if (meal.metadata_enriched?.city) return meal.metadata_enriched.city;
+  return null;
+};
+
+const extractCuisineFromMeal = (meal: any) => {
+  // Try metadata_enriched.cuisine_type first (primary source)
+  if (meal.metadata_enriched?.cuisine_type) return meal.metadata_enriched.cuisine_type;
+  // Try quick_criteria_result
+  if (meal.quick_criteria_result?.cuisine_type) return meal.quick_criteria_result.cuisine_type;
+  // Try aiMetadata
+  if (meal.aiMetadata?.cuisineType) return meal.aiMetadata.cuisineType;
+  return null;
+};
 const extractRestaurantFromMeal = (meal: any) => {
   if (!meal.restaurant) return null;
 

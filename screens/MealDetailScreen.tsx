@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking, KeyboardAvoidingView, Platform, Modal, TextInput } from 'react-native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -25,6 +25,8 @@ import { toggleCheer, subscribeToCheersData } from '../services/cheersService';
 import { DishCriteria } from '../services/dishCriteriaService';
 // Import combined service types for testing
 import { CombinedResponse } from '../services/combinedMetadataCriteriaService';
+// Import count refresh service
+import { refreshUserCounts } from '../services/countRefreshService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -68,7 +70,12 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number } | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  
+
+  // State for editing metadata
+  const [editingField, setEditingField] = useState<'city' | 'cuisine' | 'restaurant' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editModalVisible, setEditModalVisible] = useState(false);
+
   // Ref for ScrollView to enable auto-scrolling for comments
   const scrollViewRef = useRef<ScrollView>(null);
   
@@ -564,7 +571,90 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       Alert.alert('Error', 'Failed to open maps application');
     }
   };
-  
+
+  // Check if current user owns the meal
+  const isOwnMeal = () => {
+    const currentUserId = auth().currentUser?.uid;
+    return meal && meal.userId === currentUserId;
+  };
+
+  // Handle long press on metadata tags
+  const handleMetadataLongPress = (field: 'city' | 'cuisine' | 'restaurant', currentValue: string) => {
+    if (!isOwnMeal()) {
+      Alert.alert('Not Allowed', 'You can only edit your own meals');
+      return;
+    }
+
+    setEditingField(field);
+    setEditValue(currentValue || '');
+    setEditModalVisible(true);
+  };
+
+  // Update metadata in Firebase
+  const handleSaveMetadata = async () => {
+    if (!editingField || !mealId) return;
+
+    try {
+      const trimmedValue = editValue.trim();
+
+      if (!trimmedValue) {
+        Alert.alert('Error', 'Value cannot be empty');
+        return;
+      }
+
+      const updateData: any = {};
+
+      switch (editingField) {
+        case 'city':
+          // Update all city fields
+          updateData['location.city'] = trimmedValue;
+          updateData['city'] = trimmedValue;
+          updateData['metadata_enriched.city'] = trimmedValue;
+          break;
+
+        case 'cuisine':
+          // Update cuisine field
+          updateData['metadata_enriched.cuisine_type'] = trimmedValue;
+          break;
+
+        case 'restaurant':
+          // Update restaurant field
+          updateData['restaurant'] = trimmedValue;
+          break;
+      }
+
+      // Update Firestore
+      await firestore()
+        .collection('mealEntries')
+        .doc(mealId)
+        .update(updateData);
+
+      console.log(`Updated ${editingField} to: ${trimmedValue}`);
+
+      // Close modal
+      setEditModalVisible(false);
+      setEditingField(null);
+      setEditValue('');
+
+      // Refresh meal data
+      await fetchMealDetails();
+
+      // Refresh user counts to update unique arrays
+      await refreshUserCounts();
+
+      Alert.alert('Success', `${editingField.charAt(0).toUpperCase() + editingField.slice(1)} updated successfully`);
+    } catch (error) {
+      console.error(`Error updating ${editingField}:`, error);
+      Alert.alert('Error', `Failed to update ${editingField}`);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditModalVisible(false);
+    setEditingField(null);
+    setEditValue('');
+  };
+
   // Navigate back to the correct screen
   const goBack = () => {
     const previousScreen = route.params?.previousScreen;
@@ -725,7 +815,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 )}
               </View>
               {meal.restaurant && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.restaurantRow}
                   onPress={handleRestaurantPress}
                   activeOpacity={0.7}
@@ -907,17 +997,26 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
               {/* Cuisine Type - prioritize metadata_enriched */}
               {((meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type !== 'Unknown') ||
-                (meal.enhanced_metadata_facts?.metadata?.cuisine_type && meal.enhanced_metadata_facts.metadata.cuisine_type !== 'Unknown') || 
+                (meal.enhanced_metadata_facts?.metadata?.cuisine_type && meal.enhanced_metadata_facts.metadata.cuisine_type !== 'Unknown') ||
                 (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type !== 'Unknown') ||
                 (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown')) && (
-                <View style={styles.metadataTag}>
+                <TouchableOpacity
+                  style={styles.metadataTag}
+                  onLongPress={() => handleMetadataLongPress('cuisine',
+                    meal.metadata_enriched?.cuisine_type ||
+                    meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
+                    meal.quick_criteria_result?.cuisine_type ||
+                    meal.aiMetadata?.cuisineType
+                  )}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.metadataTagText}>
                     {meal.metadata_enriched?.cuisine_type ||
-                     meal.enhanced_metadata_facts?.metadata?.cuisine_type || 
-                     meal.quick_criteria_result?.cuisine_type || 
+                     meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
+                     meal.quick_criteria_result?.cuisine_type ||
                      meal.aiMetadata?.cuisineType}
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
 
               {/* Food Type - from old AI metadata if available */}
@@ -1036,9 +1135,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
               {/* City tag */}
               {(meal.location?.city || meal.city || meal.metadata_enriched?.city) && (
-                <View style={[styles.metadataTag, styles.cityTag]}>
+                <TouchableOpacity
+                  style={[styles.metadataTag, styles.cityTag]}
+                  onLongPress={() => handleMetadataLongPress('city', meal.location?.city || meal.city || meal.metadata_enriched?.city)}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.metadataTagText}>{meal.location?.city || meal.city || meal.metadata_enriched?.city}</Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -1170,6 +1273,61 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Edit Metadata Modal */}
+      <Modal
+        visible={editModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelEdit}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={handleCancelEdit}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <TouchableOpacity
+              style={styles.modalContainer}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.modalTitle}>
+                Edit {editingField && editingField.charAt(0).toUpperCase() + editingField.slice(1)}
+              </Text>
+
+              <TextInput
+                style={styles.modalInput}
+                value={editValue}
+                onChangeText={setEditValue}
+                placeholder={`Enter ${editingField}`}
+                placeholderTextColor="#999"
+                autoFocus={true}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveMetadata}
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={handleCancelEdit}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleSaveMetadata}
+                >
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -2028,6 +2186,71 @@ const styles = StyleSheet.create({
   boldText: {
     fontWeight: 'bold',
     color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Edit metadata modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '90%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 20,
+    textAlign: 'center',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+    color: '#1a2b49',
+    marginBottom: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  saveButton: {
+    backgroundColor: '#1a2b49',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });

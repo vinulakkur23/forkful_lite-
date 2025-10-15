@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -147,7 +147,10 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   
   // Notification state
   const [unreadCount, setUnreadCount] = useState(0);
-  
+
+  // ScrollView ref for scrolling to top when filters change
+  const scrollViewRef = useRef<ScrollView | null>(null);
+
   // Handle route param changes (e.g., when navigating with openChallengeModal)
   useEffect(() => {
     if (route.params?.tabIndex !== undefined) {
@@ -175,6 +178,20 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     console.log('FoodPassportWrapper: Rating filters changed to:', ratings);
     setActiveRatingFilters(ratings);
   };
+
+  // Scroll to top when filters change
+  useEffect(() => {
+    if (activeFilters && activeFilters.length > 0 && scrollViewRef.current) {
+      // Small delay to ensure content has re-rendered with filtered data
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          x: 0,
+          y: 0,
+          animated: true
+        });
+      }, 100);
+    }
+  }, [activeFilters]);
 
   // Handle tooltip completion
   const handleTooltipComplete = async () => {
@@ -458,8 +475,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        style={styles.scrollContainer} 
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         scrollEnabled={tabIndex !== 2} // Disable scroll for map tab (index 2)
       >

@@ -104,7 +104,8 @@ interface MealEntry {
 }
 
 const { width } = Dimensions.get('window');
-const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing
+const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing (for meal cards)
+const STAMP_SIZE = (width - 60) / 3; // 3 items per row for challenges/cities/cuisines
 
 // Define interfaces for accolades section
 interface City {
@@ -168,7 +169,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
     // Map view reference
     const mapRef = useRef<MapView | null>(null);
-    
+
     // Track screen focus for refreshing data
     const isFocused = useIsFocused();
 
@@ -693,6 +694,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         }
                     }
                     
+                    return false;
+                });
+            } else if (filter.type === 'restaurant') {
+                result = result.filter(meal => {
+                    if (meal.restaurant) {
+                        // Extract just the restaurant name (remove city/state if present)
+                        let restaurantName = meal.restaurant.trim();
+                        if (restaurantName.includes(',')) {
+                            restaurantName = restaurantName.split(',')[0].trim();
+                        }
+
+                        const matches = restaurantName.toLowerCase() === filter.value.toLowerCase();
+                        if (matches) {
+                            console.log(`Meal "${meal.meal}" matches restaurant: ${filter.value}`);
+                        }
+                        return matches;
+                    }
                     return false;
                 });
             }
@@ -1508,7 +1526,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
     const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
         <TouchableOpacity
-            style={styles.restaurantItem}
+            style={styles.restaurantListItem}
             onPress={() => {
                 if (navigation && onFilterChange && onTabChange) {
                     // Create restaurant filter
@@ -1529,14 +1547,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 }
             }}
         >
-            <View style={styles.restaurantIconContainer}>
-                <Icon name="restaurant" size={40} color="#1a2b49" />
-            </View>
-            <Text style={styles.restaurantName} numberOfLines={2}>
+            <Text style={styles.restaurantListName} numberOfLines={1}>
                 {item.name}
-            </Text>
-            <Text style={styles.restaurantMealCount} numberOfLines={1}>
-                {item.mealCount} {item.mealCount === 1 ? 'meal' : 'meals'}
             </Text>
         </TouchableOpacity>
     );
@@ -1808,19 +1820,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     {!restaurantsLoading && restaurants.length > 0 && (
                                         <>
                                             <Text style={styles.sectionTitle}>Restaurants</Text>
-
-                                            <ScrollView
-                                                horizontal
-                                                showsHorizontalScrollIndicator={false}
-                                                style={styles.challengeCarousel}
-                                                contentContainerStyle={styles.challengeCarouselContent}
-                                            >
+                                            <View style={styles.restaurantsList}>
                                                 {restaurants.map(item => (
-                                                    <View key={item.name} style={styles.carouselItemWrapper}>
+                                                    <View key={item.name}>
                                                         {renderRestaurantItem({ item, index: 0, separators: null as any })}
                                                     </View>
                                                 ))}
-                                            </ScrollView>
+                                            </View>
                                         </>
                                     )}
                                 </View>
@@ -2308,8 +2314,8 @@ const styles = StyleSheet.create({
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
     stampItem: {
-        width: itemWidth * 0.9,
-        height: itemWidth * 0.9 + 30,
+        width: STAMP_SIZE,
+        height: STAMP_SIZE + 30,
         margin: 5,
         borderRadius: 10,
         alignItems: 'center',
@@ -2408,8 +2414,8 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     cityItem: {
-        width: itemWidth * 0.9,
-        height: itemWidth * 0.9 + 25,
+        width: STAMP_SIZE,
+        height: STAMP_SIZE + 25,
         margin: 5,
         borderRadius: 10,
         alignItems: 'center',
@@ -2423,8 +2429,8 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     cityImageContainer: {
-        width: itemWidth * 0.9 - 16,
-        height: itemWidth * 0.9 - 50,
+        width: STAMP_SIZE - 16,
+        height: STAMP_SIZE - 50,
         borderRadius: 8,
         backgroundColor: 'transparent',
         justifyContent: 'center',
@@ -2454,8 +2460,8 @@ const styles = StyleSheet.create({
         marginTop: 5,
     },
     cuisineItem: {
-        width: itemWidth * 0.9,
-        height: itemWidth * 0.9 + 25,
+        width: STAMP_SIZE,
+        height: STAMP_SIZE + 25,
         margin: 5,
         borderRadius: 10,
         alignItems: 'center',
@@ -2469,8 +2475,8 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     cuisineImageContainer: {
-        width: itemWidth * 0.9 - 16,
-        height: itemWidth * 0.9 - 50,
+        width: STAMP_SIZE - 16,
+        height: STAMP_SIZE - 50,
         borderRadius: 8,
         backgroundColor: 'transparent',
         justifyContent: 'center',
@@ -2499,45 +2505,27 @@ const styles = StyleSheet.create({
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
         marginTop: 5,
     },
-    restaurantItem: {
-        width: itemWidth * 0.9,
-        height: itemWidth * 0.9 + 25,
-        margin: 5,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 8,
-        backgroundColor: '#ffffff',
-        elevation: 3,
+    restaurantsList: {
+        paddingHorizontal: 20,
+        paddingBottom: 10,
+    },
+    restaurantListItem: {
+        backgroundColor: '#fff',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginBottom: 4,
+        borderRadius: 6,
+        elevation: 1,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
     },
-    restaurantIconContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#FAF8E6',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    restaurantName: {
-        textAlign: 'center',
-        fontSize: 14,
-        fontWeight: 'bold',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    restaurantListName: {
+        fontSize: 15,
+        fontWeight: '500',
         color: '#1a2b49',
-        marginBottom: 5,
-        paddingHorizontal: 5,
-    },
-    restaurantMealCount: {
-        textAlign: 'center',
-        fontSize: 12,
-        color: '#666',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        marginTop: 2,
     },
     pieChartContainer: {
         alignItems: 'center',
