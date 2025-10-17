@@ -1965,15 +1965,15 @@ const styles = StyleSheet.create({
     marginRight: 6, // Space between carousel items
   },
   emojiItem: {
-    width: 45, // Even smaller size
-    height: 45,
+    width: 120, // Bigger for better visibility
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emojiImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 12,
   },
 });
 

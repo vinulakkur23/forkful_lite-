@@ -29,17 +29,32 @@ export interface PixelArtResponse {
 }
 
 /**
- * Generate a pixel-art icon from a dish name (text-only, no image needed)
+ * Generate a pixel-art icon from a dish name with optional meal image
+ *
+ * @param dishName - Name of the dish for context
+ * @param imageUri - Optional URI to the meal photo (for image-based pixel art)
  */
 export const generatePixelArtIcon = async (
-  dishName: string
+  dishName: string,
+  imageUri?: string
 ): Promise<PixelArtData | null> => {
   try {
     console.log('🚨 PixelArtService: Generating pixel art for dish:', dishName);
-    
-    // Create FormData with only dish name
+    console.log('🚨 PixelArtService: Image provided:', !!imageUri);
+
+    // Create FormData with dish name and optional image
     const formData = new FormData();
     formData.append('dish_name', dishName);
+
+    // Add image if provided (for Nano Banana multimodal generation)
+    if (imageUri) {
+      console.log('🚨 PixelArtService: Adding meal photo to request');
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'meal_photo.jpg',
+      } as any);
+    }
     
     console.log('🚨 PixelArtService: Making API call to generate-pixel-art-icon');
     

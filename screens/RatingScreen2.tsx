@@ -1181,7 +1181,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Step 3: Start pixel art with 1.5 second delay (staggered processing)
       setTimeout(() => {
         console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
-        const pixelArtPromise = generatePixelArtIcon(mealName);
+        console.log('🎨 Photo URI available:', !!photoUriRef.current);
+        const pixelArtPromise = generatePixelArtIcon(mealName, photoUriRef.current);
       
       // Handle pixel art result
       pixelArtPromise.then(async (pixelArtResult) => {
@@ -1189,17 +1190,44 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           console.log('✅ Pixel art generation completed');
           logWithSession('Pixel art completed successfully');
           
-          // Update meal with pixel art data
+          // Upload pixel art to Firebase Storage and save URL to Firestore
           try {
+            // Get current user ID
+            const currentUser = auth().currentUser;
+            if (!currentUser) {
+              console.error('❌ No authenticated user for pixel art upload');
+              return;
+            }
+
+            // Create a unique filename for the pixel art
+            const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
+            const pixelArtStoragePath = `pixel_art/${currentUser.uid}/${pixelArtFileName}`;
+
+            // Convert base64 to data URI
+            const base64Data = pixelArtResult.image_data;
+            const dataUri = `data:image/png;base64,${base64Data}`;
+
+            console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
+            logWithSession(`Uploading pixel art to: ${pixelArtStoragePath}`);
+
+            // Upload to Firebase Storage
+            const storageRef = storage().ref(pixelArtStoragePath);
+            await storageRef.putString(dataUri, 'data_url');
+
+            // Get download URL
+            const downloadUrl = await storageRef.getDownloadURL();
+            console.log('✅ Pixel art uploaded, URL:', downloadUrl);
+
+            // Update meal with pixel art URL instead of base64 data
             await firestore()
               .collection('mealEntries')
               .doc(mealId)
               .update({
-                pixel_art_data: pixelArtResult.image_data,
+                pixel_art_url: downloadUrl,
                 pixel_art_prompt: pixelArtResult.prompt_used,
                 pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
               });
-            
+
             console.log('✅ Pixel art saved to Firestore');
             logWithSession('Pixel art saved successfully');
           } catch (firestoreError) {
