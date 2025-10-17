@@ -47,6 +47,7 @@ import { extractRatingStatements, RatingStatementsData } from '../services/ratin
 import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
 import { getDishHistory, DishHistoryResult } from '../services/dishHistoryService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
+import { getOrGenerateMonument, MonumentData } from '../services/monumentPixelArtService';
 // Enhanced metadata service removed - now handled by Cloud Functions
 // REMOVED: Facts service no longer used
 // import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
@@ -1243,11 +1244,64 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Pixel art error: ${error}`);
       });
       }, 1500); // 1.5 second delay for pixel art generation
-      
+
+      // Step 4: Generate monument for city if it's a new city (2 second delay)
+      setTimeout(async () => {
+        if (cityInfo && cityInfo.trim()) {
+          console.log('🏛️ Checking if monument needed for city:', cityInfo);
+          logWithSession(`Checking monument for city: ${cityInfo}`);
+
+          try {
+            // Check if user has any previous meals in this city
+            const currentUser = auth().currentUser;
+            if (!currentUser) {
+              console.log('🏛️ No authenticated user, skipping monument check');
+              return;
+            }
+
+            const previousMeals = await firestore()
+              .collection('mealEntries')
+              .where('userId', '==', currentUser.uid)
+              .where('city', '==', cityInfo)
+              .limit(2) // Limit to 2 - if we get 2 results, this is not a new city
+              .get();
+
+            // If this is the first meal in this city (only 1 result - the one we just created)
+            const isNewCity = previousMeals.size === 1;
+
+            if (isNewCity) {
+              console.log('🏛️ NEW CITY DETECTED:', cityInfo, '- Generating monument!');
+              logWithSession(`New city detected: ${cityInfo} - generating monument`);
+
+              // Generate monument (will cache in Firebase Storage)
+              const monumentResult = await getOrGenerateMonument(cityInfo);
+
+              if (monumentResult) {
+                console.log('✅ Monument generated for', cityInfo, ':', monumentResult.monument_name);
+                console.log('✅ Monument cached at:', monumentResult.monument_url);
+                console.log('✅ Was cached?', monumentResult.cached);
+                logWithSession(`Monument ready for ${cityInfo}: ${monumentResult.monument_name} (cached: ${monumentResult.cached})`);
+              } else {
+                console.warn('⚠️ Monument generation failed for', cityInfo);
+                logWithSession(`Monument generation failed for ${cityInfo}`);
+              }
+            } else {
+              console.log('🏛️ City already visited:', cityInfo, `(${previousMeals.size} previous meals)`);
+              logWithSession(`City already visited: ${cityInfo} - skipping monument generation`);
+            }
+          } catch (error) {
+            console.error('❌ Error checking/generating monument:', error);
+            logWithSession(`Monument error: ${error}`);
+          }
+        } else {
+          console.log('🏛️ No city info available, skipping monument generation');
+        }
+      }, 2000); // 2 second delay for monument generation
+
       // The rating statements are already handled above - this duplicate call has been removed
-      
+
       // Pixel art is now handled in staggered approach above
-      
+
       // Dish criteria API running asynchronously
       logWithSession('Dish criteria API started - continuing with navigation');
       

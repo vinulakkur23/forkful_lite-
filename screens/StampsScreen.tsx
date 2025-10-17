@@ -334,14 +334,14 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
       for (const cityName of uniqueCities) {
         const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
         const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
-        
+
         // Capitalize each word in the city name
-        const capitalizedCityName = cityName.split(' ').map(word => 
+        const capitalizedCityName = cityName.split(' ').map(word =>
           word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
         ).join(' ');
-        
+
         const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
-        
+
         if (cityDoc.exists) {
           const cityData = cityDoc.data();
           if (cityData.imageUrl) {
