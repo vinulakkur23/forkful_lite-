@@ -92,6 +92,13 @@
 		<string>Lobster.ttf</string>
 		<string>Pacifico-Regular.ttf</string>
 		<string>NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf</string>
+		<string>PlayfairDisplay-Bold.ttf</string>
+		<string>PlayfairDisplay-Medium.ttf</string>
+		<string>PlayfairDisplay-Regular.ttf</string>
+		<string>PlayfairDisplay-SemiBold.ttf</string>
+		<string>Caudex-Regular.ttf</string>
+		<string>Uchen-Regular.ttf</string>
+		<string>Unna-Regular.ttf</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

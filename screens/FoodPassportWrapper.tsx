@@ -515,12 +515,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             >
               <Image
                 source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
-                style={styles.tabIcon}
+                style={[styles.tabIcon, { tintColor: tabIndex === i ? '#5B8A72' : '#858585' }]}
                 resizeMode="contain"
               />
               <Text style={[
                 styles.tabLabel,
-                { color: tabIndex === i ? '#ffc008' : '#1a2b49' }
+                { color: tabIndex === i ? '#5B8A72' : '#858585' }
               ]}>
                 {route.title}
               </Text>
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomColor: '#ffc008', // Changed to gold color
+    borderBottomColor: '#5B8A72', // Sage green
     backgroundColor: 'transparent', // Explicitly set transparent background
   },
   tabIcon: {
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter-SemiBold',
   },
   contentContainer: {
     flex: 1,

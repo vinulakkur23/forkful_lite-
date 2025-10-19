@@ -7,11 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		05888713BB2E46AC9105A917 /* PlayfairDisplay-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 90E103F5149148B5B99276BF /* PlayfairDisplay-Medium.ttf */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		229BB0523DEC69DC130F39B1 /* Pods_MealRatingAppNew.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 061FB0F1A3DF4DFE6032F239 /* Pods_MealRatingAppNew.framework */; };
+		38F87B9710AD4E509773EBF0 /* PlayfairDisplay-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2FF3B7D4300843358C9C45D9 /* PlayfairDisplay-Regular.ttf */; };
 		3C35C55452874781ACEA60ED /* Lobster.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7BCB9F5DEC034410B3B329B6 /* Lobster.ttf */; };
 		49391C90363E473E8CFB54ED /* Inter.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F8AA3B827EF6416AB0D853F6 /* Inter.ttf */; };
 		58CA74DDB05A41AEA1D107AB /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 3A9F7370A68945AE9EEF9647 /* README.md */; };
+		6B0D56E63A4849AB9E4E7615 /* PlayfairDisplay-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F08285A2DC784779BC8773BC /* PlayfairDisplay-SemiBold.ttf */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		7E573AC92DA4C396008880D5 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7E573AC82DA4C396008880D5 /* GoogleService-Info.plist */; };
 		7EBE54222DD68A30003CD5BD /* PhotoGPSModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */; };
@@ -19,10 +22,14 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		8349962C3DDE44F898CA72B8 /* Inter-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 759D3BB7593B41B698A83ABA /* Inter-Regular.ttf */; };
 		A4F323E6F5F849E4BFC41D1E /* Pacifico-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6A4614283F0A4680A7857B0E /* Pacifico-Regular.ttf */; };
+		BE4FD34A152E43D9B82D26EB /* Caudex-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E3BE402782364580A65D965B /* Caudex-Regular.ttf */; };
 		CD0FDB150F274CD08157627A /* Lobster-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A8DCBFC5616545A9B28A8BEB /* Lobster-Regular.ttf */; };
 		D29E92551A8A482689FD34B3 /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */; };
 		EA074F54591B60E5413625FA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		F0C12F7E86DE4713A168462D /* Lobster.otf in Resources */ = {isa = PBXBuildFile; fileRef = 14B32B9D6A754443857C3464 /* Lobster.otf */; };
+		F8A54ED02B5F482FA0550E45 /* PlayfairDisplay-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A3F630FFE21F44FFA1D389DE /* PlayfairDisplay-Bold.ttf */; };
+		3213B0890F32461FA9853317 /* Uchen-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4E08766217FB400E9C11BE30 /* Uchen-Regular.ttf */; };
+		382A06F6A24549BA8B8686B0 /* Unna-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B92B4346F98C4281A5BCD23C /* Unna-Regular.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +39,7 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MealRatingAppNew/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = MealRatingAppNew/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		14B32B9D6A754443857C3464 /* Lobster.otf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Lobster.otf; path = ../assets/fonts/Lobster.otf; sourceTree = "<group>"; };
+		2FF3B7D4300843358C9C45D9 /* PlayfairDisplay-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "PlayfairDisplay-Regular.ttf"; path = "../assets/fonts/PlayfairDisplay-Regular.ttf"; sourceTree = "<group>"; };
 		3A9F7370A68945AE9EEF9647 /* README.md */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = README.md; path = ../assets/fonts/README.md; sourceTree = "<group>"; };
 		415AE71D506A729A0E2965B5 /* Pods-MealRatingAppNew.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MealRatingAppNew.debug.xcconfig"; path = "Target Support Files/Pods-MealRatingAppNew/Pods-MealRatingAppNew.debug.xcconfig"; sourceTree = "<group>"; };
 		55289415D3C02637404C05F3 /* Pods-MealRatingAppNew.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MealRatingAppNew.release.xcconfig"; path = "Target Support Files/Pods-MealRatingAppNew/Pods-MealRatingAppNew.release.xcconfig"; sourceTree = "<group>"; };
@@ -44,10 +52,16 @@
 		7EBE541F2DD68A30003CD5BD /* PhotoGPSModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhotoGPSModule.m; sourceTree = "<group>"; };
 		7EBE54202DD68A30003CD5BD /* PhotoGPSModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGPSModule.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MealRatingAppNew/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		90E103F5149148B5B99276BF /* PlayfairDisplay-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "PlayfairDisplay-Medium.ttf"; path = "../assets/fonts/PlayfairDisplay-Medium.ttf"; sourceTree = "<group>"; };
+		A3F630FFE21F44FFA1D389DE /* PlayfairDisplay-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "PlayfairDisplay-Bold.ttf"; path = "../assets/fonts/PlayfairDisplay-Bold.ttf"; sourceTree = "<group>"; };
 		A8DCBFC5616545A9B28A8BEB /* Lobster-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lobster-Regular.ttf"; path = "../assets/fonts/Lobster-Regular.ttf"; sourceTree = "<group>"; };
+		E3BE402782364580A65D965B /* Caudex-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Caudex-Regular.ttf"; path = "../assets/fonts/Caudex-Regular.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		F08285A2DC784779BC8773BC /* PlayfairDisplay-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "PlayfairDisplay-SemiBold.ttf"; path = "../assets/fonts/PlayfairDisplay-SemiBold.ttf"; sourceTree = "<group>"; };
 		F8AA3B827EF6416AB0D853F6 /* Inter.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Inter.ttf; path = ../assets/fonts/Inter.ttf; sourceTree = "<group>"; };
 		FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"; path = "../assets/fonts/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"; sourceTree = "<group>"; };
+		4E08766217FB400E9C11BE30 /* Uchen-Regular.ttf */ = {isa = PBXFileReference; name = "Uchen-Regular.ttf"; path = "../assets/fonts/Uchen-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		B92B4346F98C4281A5BCD23C /* Unna-Regular.ttf */ = {isa = PBXFileReference; name = "Unna-Regular.ttf"; path = "../assets/fonts/Unna-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +111,13 @@
 				759D3BB7593B41B698A83ABA /* Inter-Regular.ttf */,
 				6A4614283F0A4680A7857B0E /* Pacifico-Regular.ttf */,
 				FD38561EEC5747B890D0A82A /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf */,
+				A3F630FFE21F44FFA1D389DE /* PlayfairDisplay-Bold.ttf */,
+				90E103F5149148B5B99276BF /* PlayfairDisplay-Medium.ttf */,
+				2FF3B7D4300843358C9C45D9 /* PlayfairDisplay-Regular.ttf */,
+				F08285A2DC784779BC8773BC /* PlayfairDisplay-SemiBold.ttf */,
+				E3BE402782364580A65D965B /* Caudex-Regular.ttf */,
+				4E08766217FB400E9C11BE30 /* Uchen-Regular.ttf */,
+				B92B4346F98C4281A5BCD23C /* Unna-Regular.ttf */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -222,6 +243,13 @@
 				8349962C3DDE44F898CA72B8 /* Inter-Regular.ttf in Resources */,
 				A4F323E6F5F849E4BFC41D1E /* Pacifico-Regular.ttf in Resources */,
 				D29E92551A8A482689FD34B3 /* NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf in Resources */,
+				F8A54ED02B5F482FA0550E45 /* PlayfairDisplay-Bold.ttf in Resources */,
+				05888713BB2E46AC9105A917 /* PlayfairDisplay-Medium.ttf in Resources */,
+				38F87B9710AD4E509773EBF0 /* PlayfairDisplay-Regular.ttf in Resources */,
+				6B0D56E63A4849AB9E4E7615 /* PlayfairDisplay-SemiBold.ttf in Resources */,
+				BE4FD34A152E43D9B82D26EB /* Caudex-Regular.ttf in Resources */,
+				3213B0890F32461FA9853317 /* Uchen-Regular.ttf in Resources */,
+				382A06F6A24549BA8B8686B0 /* Unna-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

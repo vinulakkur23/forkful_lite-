@@ -43,6 +43,10 @@ import { getPhotoWithMetadata } from '../services/photoLibraryService';
 // Import for accolades section
 import { PieChart } from 'react-native-chart-kit';
 import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
+// Import new theme
+import { colors, typography, spacing, shadows, addAlpha } from '../themes';
+// Import monument service for passport stamps
+import { getOrGenerateMonument } from '../services/monumentPixelArtService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -105,13 +109,14 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing (for meal cards)
-const STAMP_SIZE = (width - 60) / 3; // 3 items per row for challenges/cities/cuisines
+const STAMP_SIZE = (width - 50) / 2.5; // ~2.5 items per row for challenges/cities/cuisines (bigger stamps)
 
 // Define interfaces for accolades section
 interface City {
   name: string;
   imageUrl: string;
   mealCount: number;
+  stampUrl?: string;
 }
 
 interface Cuisine {
@@ -843,13 +848,25 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
                 const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
 
+                // Get or generate passport stamp for this city
+                let stampUrl: string | undefined;
+                try {
+                    console.log(`🏛️ FoodPassport: Getting stamp for city: ${capitalizedCityName}`);
+                    const stampData = await getOrGenerateMonument(capitalizedCityName);
+                    stampUrl = stampData?.monument_url;
+                    console.log(`🏛️ FoodPassport: Got stamp for ${capitalizedCityName}:`, stampUrl ? 'success' : 'failed');
+                } catch (error) {
+                    console.log(`🏛️ FoodPassport: Error getting stamp for ${capitalizedCityName}:`, error);
+                }
+
                 if (cityDoc.exists) {
                     const cityData = cityDoc.data();
                     if (cityData.imageUrl) {
                         citiesWithData.push({
                             name: capitalizedCityName,
                             imageUrl: cityData.imageUrl,
-                            mealCount: mealCount
+                            mealCount: mealCount,
+                            stampUrl: stampUrl
                         });
                     }
                 } else {
@@ -857,7 +874,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     citiesWithData.push({
                         name: capitalizedCityName,
                         imageUrl: 'https://via.placeholder.com/350',
-                        mealCount: mealCount
+                        mealCount: mealCount,
+                        stampUrl: stampUrl
                     });
                 }
             }
@@ -1470,11 +1488,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             }}
         >
             <View style={styles.cityImageContainer}>
-                <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.cityImage}
-                    resizeMode="cover"
-                />
+                {item.stampUrl ? (
+                    <Image
+                        source={{ uri: item.stampUrl }}
+                        style={styles.cityImage}
+                        resizeMode="contain"
+                    />
+                ) : (
+                    <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.cityImage}
+                        resizeMode="cover"
+                    />
+                )}
             </View>
             <Text style={styles.cityName} numberOfLines={1}>
                 {item.name}
@@ -1557,18 +1583,25 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const generateCitiesPieData = () => {
         if (!cities.length) return [];
 
-        // Generate distinct colors for each city
-        const colors = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-            '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-            '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD'
+        // Generate bright, fresh color palette complementing sage green
+        const sageColors = [
+            '#5B8A72', // Sage green
+            '#A8E6CF', // Mint green
+            '#FFD3B6', // Butter yellow
+            '#FF8B94', // Coral
+            '#A8D8EA', // Sky blue
+            '#FFB7C3', // Soft pink
+            '#8DD3C7', // Light teal
+            '#C9B1E4', // Lavender
+            '#FFAAA5', // Peach
+            '#B4E7D3', // Pale mint
         ];
 
-        return cities.map((city, index) => ({
+        return cities.slice(0, 10).map((city, index) => ({
             name: city.name,
             population: city.mealCount,
-            color: colors[index % colors.length],
-            legendFontColor: '#1a2b49',
+            color: sageColors[index % sageColors.length],
+            legendFontColor: colors.textSecondary,
             legendFontSize: 12,
         }));
     };
@@ -1580,19 +1613,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
         return (
             <View style={styles.pieChartContainer}>
-                <Text style={styles.pieChartTitle}>Meals by City</Text>
+                <Text style={styles.pieChartTitle}>Meals by City (Top 10)</Text>
                 <PieChart
                     data={pieData}
                     width={width - 40}
                     height={200}
                     chartConfig={{
-                        color: (opacity = 1) => `rgba(26, 43, 73, ${opacity})`,
+                        color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
                     }}
                     accessor="population"
                     backgroundColor="transparent"
-                    paddingLeft="15"
-                    center={[10, 0]}
-                    hasLegend={true}
+                    paddingLeft="0"
+                    absolute
                 />
             </View>
         );
@@ -1637,8 +1670,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         </View>
                     )}
                     
-                    {/* Show either rating or "Rate Meal" overlay */}
-                    {isUnrated ? (
+                    {/* Show "Rate Meal" overlay for unrated meals */}
+                    {isUnrated && (
                         <>
                             {/* Gray wash overlay over entire image */}
                             <View style={styles.imageWashOverlay} />
@@ -1647,17 +1680,20 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 <Text style={styles.rateMealText}>Click to review meal</Text>
                             </View>
                         </>
-                    ) : (
-                        <View style={styles.ratingOverlay}>
-                            <EmojiDisplay rating={item.rating} size={22} />
-                        </View>
                     )}
                 </View>
-                
+
                 <View style={styles.mealCardContent}>
                     <Text style={styles.mealName} numberOfLines={1}>{item.meal || 'Untitled meal'}</Text>
                     {item.restaurant && (
                         <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
+                    )}
+
+                    {/* Rating emoji in bottom right */}
+                    {!isUnrated && (
+                        <View style={styles.ratingOverlay}>
+                            <EmojiDisplay rating={item.rating} size={22} />
+                        </View>
                     )}
                 </View>
             </TouchableOpacity>
@@ -1686,8 +1722,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 {/* Forkful Logo - only show on own profile */}
                                 {(!userId || userId === auth().currentUser?.uid) && (
                                     <View style={styles.logoContainer}>
-                                        <Image 
-                                            source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+                                        <Image
+                                            source={require('../assets/forkful_logos/forkful_logo_cursive2.png')}
                                             style={styles.logoImage}
                                             resizeMode="contain"
                                         />
@@ -1800,6 +1836,42 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     {!cuisinesLoading && cuisines.length > 0 && (
                                         <>
                                             <Text style={styles.sectionTitle}>Cuisines</Text>
+
+                                            {/* Cuisines Pie Chart */}
+                                            <View style={styles.pieChartContainer}>
+                                                <Text style={styles.pieChartTitle}>Meals by Cuisine (Top 10)</Text>
+                                                <PieChart
+                                                    data={cuisines.slice(0, 10).map((cuisine, index) => ({
+                                                        name: cuisine.name,
+                                                        population: cuisine.mealCount,
+                                                        color: [
+                                                            '#5B8A72', // Sage green
+                                                            '#8B7355', // Warm taupe
+                                                            '#7A9B8E', // Mid sage
+                                                            '#9CA986', // Light sage
+                                                            '#D4C5B9', // Light beige
+                                                            '#6B8E7F', // Darker sage
+                                                            '#B8A89A', // Tan
+                                                            '#A89F91', // Warm grey
+                                                            '#C8BCB0', // Light taupe
+                                                            '#E8DDD3', // Cream
+                                                        ][index % 10],
+                                                        legendFontColor: colors.textSecondary,
+                                                        legendFontSize: 12,
+                                                        legendFontFamily: 'Inter-Regular',
+                                                    }))}
+                                                    width={width - 40}
+                                                    height={200}
+                                                    chartConfig={{
+                                                        color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                                    }}
+                                                    accessor="population"
+                                                    backgroundColor="transparent"
+                                                    paddingLeft="0"
+                                                    absolute
+                                                />
+                                            </View>
 
                                             <ScrollView
                                                 horizontal
@@ -1968,66 +2040,60 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAF9F6', // Back to original
+        backgroundColor: colors.lightTan,
     },
     logoContainer: {
         alignItems: 'center',
-        paddingTop: 2,
-        paddingBottom: 8,
-        backgroundColor: '#FAF9F6',
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.md,
+        backgroundColor: colors.lightTan,
     },
     logoText: {
-        fontFamily: 'Lobster-Regular',
-        fontSize: 28,
-        color: '#E63946',
-        letterSpacing: 0.5,
+        ...typography.h1,
+        color: colors.warmTaupe,
     },
     logoImage: {
-        width: 140,
-        height: 47,
+        width: 170,
+        height: 57,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 15,
-        backgroundColor: '#ff6b6b',
+        padding: spacing.md,
+        backgroundColor: colors.error,
         zIndex: 10,
     },
     title: {
-        fontSize: 20,
+        ...typography.h3,
         fontWeight: 'bold',
-        color: '#fff',
+        color: colors.white,
     },
     signOutButton: {
-        padding: 8,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 5,
+        padding: spacing.sm,
+        backgroundColor: addAlpha(colors.white, 0.2),
+        borderRadius: spacing.xs,
     },
     signOutText: {
-        color: '#fff',
+        ...typography.bodyMedium,
+        color: colors.white,
         fontWeight: '500',
-        fontSize: 14,
     },
     filterContainer: {
-        marginVertical: 10,
-        paddingHorizontal: 10,
+        marginVertical: spacing.sm,
+        paddingHorizontal: spacing.sm,
     },
     filterArea: {
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        backgroundColor: '#fff',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.white,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: colors.mediumGray,
         zIndex: 100,
         position: 'relative',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        marginTop: 5,
-        marginBottom: 5,
+        ...shadows.light,
+        marginTop: spacing.xs,
+        marginBottom: spacing.xs,
     },
     statItem: {
         flex: 1,
@@ -2044,79 +2110,69 @@ const styles = StyleSheet.create({
     },
     statDivider: {
         width: 1,
-        backgroundColor: '#FAF3E0',
-        marginHorizontal: 10,
+        backgroundColor: colors.mediumGray,
+        marginHorizontal: spacing.sm,
     },
     statValue: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1a2b49',
+        ...typography.h3,
+        color: colors.charcoal,
         marginVertical: 2,
     },
     statLabel: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        fontSize: 12,
-        color: '#1a2b49',
+        ...typography.caption,
+        color: colors.textSecondary,
     },
     // Styles for the standalone button removed and integrated into profile stats
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: 100,
+        paddingTop: spacing.xxxl,
     },
     loadingText: {
-        marginTop: 10,
-        fontSize: 16,
-        color: '#666',
+        marginTop: spacing.sm,
+        ...typography.bodyLarge,
+        color: colors.textSecondary,
     },
     list: {
-        padding: 10,
-        paddingTop: 5, // Reduced top padding
-        paddingBottom: 30,
+        padding: spacing.sm,
+        paddingTop: spacing.xs,
+        paddingBottom: spacing.xl,
     },
     row: {
         justifyContent: 'space-between',
     },
     mealCard: {
         width: itemWidth,
-        marginBottom: 15,
-        backgroundColor: '#fff', // White like search bar
-        borderRadius: 12,
-        elevation: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        marginBottom: spacing.md,
+        backgroundColor: colors.white,
+        borderRadius: spacing.borderRadius.md,
+        ...shadows.light,
     },
     imageContainer: {
         position: 'relative',
         width: '100%',
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
+        borderTopLeftRadius: spacing.borderRadius.md,
+        borderTopRightRadius: spacing.borderRadius.md,
         overflow: 'hidden',
     },
     mealImage: {
         width: '100%',
         height: itemWidth,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: colors.lightGray,
     },
     imagePlaceholder: {
         width: '100%',
         height: itemWidth,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: colors.lightGray,
         justifyContent: 'center',
         alignItems: 'center',
     },
     ratingOverlay: {
         position: 'absolute',
-        bottom: 8,
-        left: 8,
-        backgroundColor: 'rgba(250, 248, 230, 0.8)', // Cream color with 80% opacity
-        borderRadius: 15,
-        padding: 3,
-        paddingHorizontal: 4,
+        bottom: spacing.sm,
+        right: spacing.sm,
+        backgroundColor: 'transparent',
     },
     imageWashOverlay: {
         position: 'absolute',
@@ -2124,114 +2180,102 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(128, 128, 128, 0.7)', // Gray overlay with 70% opacity
+        backgroundColor: colors.overlay,
     },
     rateMealOverlay: {
         position: 'absolute',
-        bottom: 8,
-        left: 8,
-        backgroundColor: 'rgba(250, 248, 230, 0.8)', // Same cream color/opacity as emoji overlay
-        borderRadius: 15, // Same border radius as emoji overlay
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 4,
+        bottom: spacing.sm,
+        left: spacing.sm,
+        backgroundColor: addAlpha(colors.white, 0.9),
+        borderRadius: spacing.borderRadius.md,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        ...shadows.light,
     },
     rateMealText: {
-        color: '#1a2b49', // Navy blue text color
-        fontSize: 10, // Smaller font size
-        fontWeight: 'normal', // Not bold
-        fontFamily: 'Inter-Regular', // Inter font
+        ...typography.caption,
+        color: colors.textPrimary,
         textAlign: 'center',
     },
     mealCardContent: {
-        padding: 10,
+        padding: spacing.sm,
+        position: 'relative',
     },
     mealName: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        fontFamily: 'Unna',
         fontSize: 16,
-        fontWeight: 'normal',
-        color: '#1a2b49',
-        marginBottom: 3,
+        lineHeight: 20,
+        color: colors.textPrimary,
+        marginBottom: spacing.xs,
+        paddingRight: 30,
     },
     restaurantName: {
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        fontSize: 13,
-        color: '#666',
-        fontWeight: '500',
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        paddingRight: 30,
     },
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 30,
-        paddingTop: 60, // Move entire container up more
+        padding: spacing.xl,
+        paddingTop: spacing.xxxl,
     },
     emptyText: {
-        fontSize: 16,
-        fontWeight: 'normal',
-        color: '#1a2b49', // Navy blue
+        ...typography.bodyLarge,
+        color: colors.textPrimary,
         textAlign: 'center',
-        paddingHorizontal: 0,
-        lineHeight: 22,
-        marginBottom: 20, // Space before subtitle
+        marginBottom: spacing.lg,
     },
     emptySubText: {
-        fontSize: 14,
-        color: '#1a2b49', // Navy blue
+        ...typography.bodyMedium,
+        color: colors.textPrimary,
         textAlign: 'center',
-        paddingHorizontal: 0,
-        lineHeight: 20,
-        marginBottom: 0, // No margin since "Try it out!" has marginTop
+        marginBottom: 0,
     },
     highlightedWord: {
-        backgroundColor: '#ffc008', // Gold background
-        paddingHorizontal: 3,
+        backgroundColor: colors.warmTaupe,
+        paddingHorizontal: spacing.xs,
         paddingVertical: 1,
-        borderRadius: 3,
+        borderRadius: spacing.xs,
         fontWeight: 'bold',
     },
     tryItOutText: {
-        fontSize: 14,
-        color: '#1a2b49', // Navy blue
+        ...typography.bodyMedium,
+        color: colors.textPrimary,
         textAlign: 'center',
-        fontWeight: '400',
-        marginTop: 100, // Move down from subtitle
-        marginBottom: 0, // No gap with arrow
+        marginTop: spacing.xxxl,
+        marginBottom: 0,
     },
     downArrow: {
-        fontSize: 90, // Changed to 90
-        color: '#1a2b49', // Navy blue
+        fontSize: 90,
+        color: colors.textPrimary,
         textAlign: 'center',
         fontWeight: '50', // Ultra light weight
         lineHeight: 140, // Keep the same line height for thickness
     },
     emptySubtext: {
-        fontSize: 14,
-        color: '#888',
+        ...typography.bodyMedium,
+        color: colors.textTertiary,
         textAlign: 'center',
-        marginTop: 5,
+        marginTop: spacing.xs,
     },
     debugButtonsContainer: {
         flexDirection: 'row',
-        marginTop: 8,
-        gap: 8,
+        marginTop: spacing.sm,
+        gap: spacing.sm,
     },
     debugButton: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        backgroundColor: 'rgba(230, 57, 70, 0.1)',
-        borderRadius: 6,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.md,
+        backgroundColor: addAlpha(colors.error, 0.1),
+        borderRadius: spacing.xs,
         borderWidth: 1,
-        borderColor: 'rgba(230, 57, 70, 0.3)',
+        borderColor: addAlpha(colors.error, 0.3),
     },
     debugButtonText: {
-        fontSize: 12,
-        color: '#E63946',
+        ...typography.bodySmall,
+        color: colors.error,
         fontWeight: '500',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
     photoMenuOverlay: {
         position: 'absolute',
@@ -2239,104 +2283,91 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         top: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: colors.overlay,
         justifyContent: 'center',
         alignItems: 'center',
     },
     photoMenuContainer: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
-        elevation: 8,
-        paddingVertical: 20,
-        paddingHorizontal: 30,
+        backgroundColor: colors.white,
+        borderRadius: spacing.borderRadius.md,
+        ...shadows.medium,
+        paddingVertical: spacing.lg,
+        paddingHorizontal: spacing.xl,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 20,
+        gap: spacing.lg,
     },
     photoMenuItem: {
         alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
     },
     photoMenuText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: '#1a2b49', // Navy blue
+        marginTop: spacing.sm,
+        ...typography.bodyMedium,
+        color: colors.textPrimary,
         fontWeight: '500',
     },
     photoMenuDivider: {
         width: 1,
         height: 60,
-        backgroundColor: '#eee',
+        backgroundColor: colors.mediumGray,
     },
     shareContainer: {
         alignItems: 'center',
-        paddingVertical: 20,
-        paddingHorizontal: 20,
+        paddingVertical: spacing.lg,
+        paddingHorizontal: spacing.lg,
     },
     shareButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
         borderWidth: 2,
-        borderColor: '#1a2b49', // Navy blue outline
-        borderRadius: 8,
+        borderColor: colors.charcoal,
+        borderRadius: spacing.borderRadius.sm,
         backgroundColor: 'transparent',
     },
     shareIcon: {
         width: 20,
         height: 20,
-        marginRight: 8,
-        tintColor: '#1a2b49', // Navy blue icon
+        marginRight: spacing.sm,
+        tintColor: colors.charcoal,
     },
     shareButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1a2b49', // Navy blue text
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        ...typography.buttonLarge,
+        color: colors.charcoal,
     },
     // Accolades section styles
     accoladesContainer: {
-        paddingTop: 10,
+        paddingTop: spacing.sm,
     },
     sectionTitle: {
-        fontSize: 24,
-        fontWeight: 'normal',
-        marginHorizontal: 15,
-        marginTop: 15,
-        color: '#1a2b49',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        ...typography.h2,
+        marginHorizontal: spacing.md,
+        marginTop: spacing.md,
+        color: colors.charcoal,
     },
     stampItem: {
         width: STAMP_SIZE,
         height: STAMP_SIZE + 30,
-        margin: 5,
-        borderRadius: 10,
+        margin: spacing.xs,
+        borderRadius: spacing.borderRadius.sm,
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 10,
-        backgroundColor: '#FFFFFF',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        padding: spacing.sm,
+        backgroundColor: colors.white,
+        ...shadows.light,
     },
     stampName: {
         textAlign: 'center',
-        fontSize: 12,
+        ...typography.bodySmall,
         fontWeight: 'bold',
-        marginTop: 5,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        marginTop: spacing.xs,
     },
     earnedStampText: {
-        color: '#1a2b49',
+        color: colors.charcoal,
     },
     stampIconContainer: {
         width: 60,
@@ -2352,8 +2383,8 @@ const styles = StyleSheet.create({
         position: 'relative',
     },
     completedChallengeItem: {
-        backgroundColor: '#FFFFFF',
-        borderColor: '#ccc',
+        backgroundColor: colors.white,
+        borderColor: colors.mediumGray,
         borderWidth: 2,
     },
     challengeStatusIndicator: {
@@ -2377,30 +2408,30 @@ const styles = StyleSheet.create({
         opacity: 0.5,
     },
     completedChallengeText: {
-        color: '#999',
+        color: colors.textTertiary,
         textDecorationLine: 'line-through',
     },
     completedWithText: {
+        ...typography.caption,
         fontSize: 9,
-        color: '#4CAF50',
+        color: colors.success,
         marginTop: 2,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
         textAlign: 'center',
         fontWeight: 'bold',
     },
     challengeCarousel: {
-        marginTop: 10,
-        marginBottom: 15,
+        marginTop: spacing.sm,
+        marginBottom: spacing.md,
     },
     challengeCarouselContent: {
-        paddingHorizontal: 15,
-        paddingRight: 25,
+        paddingHorizontal: spacing.md,
+        paddingRight: spacing.lg,
     },
     carouselItemWrapper: {
-        marginRight: 10,
+        marginRight: spacing.sm,
     },
     emojiCarouselWrapper: {
-        marginRight: 6,
+        marginRight: spacing.xs,
     },
     emojiItem: {
         width: 100,
@@ -2411,140 +2442,118 @@ const styles = StyleSheet.create({
     emojiImage: {
         width: '100%',
         height: '100%',
-        borderRadius: 12,
+        borderRadius: spacing.borderRadius.md,
     },
     cityItem: {
         width: STAMP_SIZE,
         height: STAMP_SIZE + 25,
-        margin: 5,
-        borderRadius: 10,
+        margin: spacing.xs,
         alignItems: 'center',
         justifyContent: 'flex-start',
-        padding: 8,
-        backgroundColor: '#ffffff',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
     },
     cityImageContainer: {
         width: STAMP_SIZE - 16,
         height: STAMP_SIZE - 50,
-        borderRadius: 8,
+        borderRadius: spacing.borderRadius.sm,
         backgroundColor: 'transparent',
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
-        marginBottom: 8,
+        marginBottom: spacing.sm,
     },
     cityImage: {
         width: '100%',
         height: '100%',
-        borderRadius: 8,
+        borderRadius: spacing.borderRadius.sm,
     },
     cityName: {
         textAlign: 'center',
-        fontSize: 16,
+        ...typography.bodySmall,
         fontWeight: 'bold',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        color: '#1a2b49',
+        color: colors.charcoal,
         marginBottom: 2,
-        marginTop: -40,
+        marginTop: 0,
     },
     cityMealCount: {
         textAlign: 'center',
-        fontSize: 14,
-        color: '#666',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        marginTop: 5,
+        ...typography.caption,
+        color: colors.textSecondary,
+        marginTop: 2,
     },
     cuisineItem: {
         width: STAMP_SIZE,
         height: STAMP_SIZE + 25,
-        margin: 5,
-        borderRadius: 10,
+        margin: spacing.xs,
+        borderRadius: spacing.borderRadius.sm,
         alignItems: 'center',
         justifyContent: 'flex-start',
-        padding: 8,
-        backgroundColor: '#ffffff',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        padding: spacing.sm,
+        backgroundColor: colors.white,
+        ...shadows.light,
     },
     cuisineImageContainer: {
         width: STAMP_SIZE - 16,
         height: STAMP_SIZE - 50,
-        borderRadius: 8,
+        borderRadius: spacing.borderRadius.sm,
         backgroundColor: 'transparent',
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
-        marginBottom: 8,
+        marginBottom: spacing.sm,
     },
     cuisineImage: {
         width: '100%',
         height: '100%',
-        borderRadius: 8,
+        borderRadius: spacing.borderRadius.sm,
     },
     cuisineName: {
         textAlign: 'center',
-        fontSize: 16,
+        ...typography.bodyLarge,
         fontWeight: 'bold',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        color: '#1a2b49',
+        color: colors.charcoal,
         marginBottom: 2,
         marginTop: -40,
     },
     cuisineMealCount: {
         textAlign: 'center',
-        fontSize: 14,
-        color: '#666',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        marginTop: 5,
+        ...typography.bodyMedium,
+        color: colors.textSecondary,
+        marginTop: spacing.xs,
     },
     restaurantsList: {
-        paddingHorizontal: 20,
-        paddingBottom: 10,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.sm,
     },
     restaurantListItem: {
-        backgroundColor: '#fff',
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        marginBottom: 4,
-        borderRadius: 6,
-        elevation: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        backgroundColor: colors.white,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        marginBottom: spacing.xs,
+        borderRadius: spacing.xs,
+        ...shadows.light,
     },
     restaurantListName: {
-        fontSize: 15,
+        fontFamily: 'Unna',
+        fontSize: 16,
         fontWeight: '500',
-        color: '#1a2b49',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: colors.textPrimary,
     },
     pieChartContainer: {
         alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 10,
-        paddingHorizontal: 20,
+        marginTop: spacing.lg,
+        marginBottom: spacing.sm,
+        paddingHorizontal: spacing.lg,
     },
     pieChartTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1a2b49',
-        marginBottom: 15,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        ...typography.h3,
+        color: colors.charcoal,
+        marginBottom: spacing.md,
     },
     detailOverlay: {
         flex: 1,
         width: '100%',
         height: '100%',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: colors.overlay,
         justifyContent: 'center',
         alignItems: 'center',
         position: 'absolute',
@@ -2555,21 +2564,17 @@ const styles = StyleSheet.create({
     },
     detailCard: {
         width: itemWidth * 2.7,
-        backgroundColor: '#ffffff',
-        borderRadius: 25,
+        backgroundColor: colors.white,
+        borderRadius: spacing.borderRadius.lg,
         alignItems: 'center',
-        padding: 25,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
+        padding: spacing.lg,
+        ...shadows.heavy,
     },
     closeButton: {
         position: 'absolute',
-        top: 10,
-        right: 10,
-        padding: 5,
+        top: spacing.sm,
+        right: spacing.sm,
+        padding: spacing.xs,
         width: 30,
         height: 30,
         alignItems: 'center',
@@ -2579,10 +2584,9 @@ const styles = StyleSheet.create({
     closeButtonX: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#1a2b49',
+        color: colors.charcoal,
         textAlign: 'center',
         lineHeight: 24,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
     zoomedStampContainer: {
         width: 120,
@@ -2591,7 +2595,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: spacing.lg,
         overflow: 'hidden',
     },
     zoomedStampImage: {
@@ -2604,28 +2608,25 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     detailName: {
-        fontSize: 20,
+        ...typography.h3,
         fontWeight: 'bold',
-        marginBottom: 12,
+        marginBottom: spacing.md,
         textAlign: 'center',
-        color: '#1a2b49',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: colors.charcoal,
     },
     detailDescription: {
-        fontSize: 14,
-        color: '#1a2b49',
+        ...typography.bodyMedium,
+        color: colors.textPrimary,
         textAlign: 'center',
-        marginBottom: 15,
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        lineHeight: 20,
+        marginBottom: spacing.md,
     },
     challengeActionButtons: {
         flexDirection: 'row',
         justifyContent: 'space-around',
-        marginTop: 15,
-        paddingTop: 15,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: '#e0e0e0',
+        borderTopColor: colors.mediumGray,
         width: '100%',
     },
     deleteButton: {
@@ -2633,16 +2634,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: 'transparent',
         borderWidth: 2,
-        borderColor: '#1a2b49',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
+        borderColor: colors.charcoal,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: spacing.borderRadius.lg,
         flex: 0.45,
         justifyContent: 'center',
     },
     deleteButtonText: {
-        color: '#1a2b49',
-        fontSize: 12,
+        ...typography.bodySmall,
+        color: colors.charcoal,
         fontWeight: '600',
     },
 });

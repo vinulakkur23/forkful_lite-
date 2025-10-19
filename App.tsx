@@ -275,24 +275,24 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
 
 
     const mainTabs = [
-      { 
-        name: 'FoodPassport', 
-        label: 'Passport', 
+      {
+        name: 'FoodPassport',
+        label: 'Passport',
         icon: (focused: boolean) => (
-          <Image 
-            source={focused ? tabIcons.passport.active : tabIcons.passport.inactive} 
-            style={{ width: 32, height: 32 }}
+          <Image
+            source={focused ? tabIcons.passport.active : tabIcons.passport.inactive}
+            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : '#858585' }}
             key={`passport-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
       },
-      { 
-        name: 'Home', 
-        label: 'Discover', 
+      {
+        name: 'Home',
+        label: 'Discover',
         icon: (focused: boolean) => (
-          <Image 
-            source={focused ? tabIcons.place.active : tabIcons.place.inactive} 
-            style={{ width: 32, height: 32 }}
+          <Image
+            source={focused ? tabIcons.place.active : tabIcons.place.inactive}
+            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : '#858585' }}
             key={`home-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
@@ -332,7 +332,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               <View style={styles.tabIconContainer}>
                 {tab.icon(isFocused)}
               </View>
-              <Text style={styles.tabLabel}>
+              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : '#858585' }]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -387,7 +387,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               activeOpacity={0.7}
             >
               {tab.icon(isFocused)}
-              <Text style={styles.tabLabel}>
+              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : '#858585' }]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -891,16 +891,16 @@ const styles = StyleSheet.create({
   centerButtonText: {
     fontSize: 100,
     fontWeight: '350',
-    color: '#1a2b49',
+    color: '#5B8A72',
     lineHeight: 100,
     marginTop: -15,
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     marginTop: 4,
     color: '#1a2b49', // Always navy blue
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter-SemiBold',
   },
   tabIconContainer: {
     position: 'relative',

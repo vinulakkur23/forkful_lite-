@@ -167,10 +167,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   profileName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: 'normal',
     color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Unna',
     marginBottom: 2,
   },
   statsRow: {
@@ -194,11 +194,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: '#1a2b49',
+    borderColor: '#858585',
   },
   signOutText: {
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    color: '#858585',
     fontWeight: '500',
     fontSize: 11,
   },
