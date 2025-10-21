@@ -5,7 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Icon import was duplicated, removed one. MaterialIcons is conventional.
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Linking, Alert } from 'react-native';
+import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Linking, Alert, Modal } from 'react-native';
 // Import Firebase from our config file to ensure consistent initialization
 import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import GlobalAchievementListener from './components/GlobalAchievementListener';
 import GlobalChallengeListener from './components/GlobalChallengeListener';
 import { warmupQuickCriteriaService } from './services/quickCriteriaService';
+import { initializeUnratedMealNotificationChannels } from './services/unratedMealNotificationService';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -50,6 +51,13 @@ export type RootStackParamList = {
     } | null;
     photoSource?: 'camera' | 'gallery';
     _navigationKey?: string; // For forcing screen refresh
+    _uniqueKey?: string;
+    mealId?: string;
+    pendingMealData?: {
+      dishName: string;
+      restaurant: string;
+      location: any;
+    };
     // New parameters for adding photos to existing meals
     isAddingToExistingMeal?: boolean;
     existingMealId?: string;
@@ -253,7 +261,60 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
 const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
-  
+  // State for photo source modal
+  const [showPhotoSourceModal, setShowPhotoSourceModal] = React.useState(false);
+
+  // Handler for camera option
+  const handleCameraPress = () => {
+    setShowPhotoSourceModal(false);
+    // Navigate to Camera screen
+    navigation.navigate('Camera' as any);
+  };
+
+  // Handler for upload option
+  const handleUploadPress = async () => {
+    setShowPhotoSourceModal(false);
+
+    // Get photo from library
+    try {
+      const photoAsset = await getPhotoWithMetadata();
+
+      if (!photoAsset) {
+        console.log('No photo selected from library');
+        return;
+      }
+
+      console.log('Photo selected from gallery (App.tsx):', {
+        uri: photoAsset.uri,
+        hasLocation: !!photoAsset.location,
+      });
+
+      // Navigate to RatingScreen2 with the photo
+      navigation.navigate('RatingScreen2' as any, {
+        photo: {
+          uri: photoAsset.uri,
+          width: photoAsset.width,
+          height: photoAsset.height,
+          originalUri: photoAsset.originalUri,
+          fromGallery: true,
+          assetId: photoAsset.assetId,
+        },
+        location: photoAsset.location || null,
+        exifData: photoAsset.exifData,
+        photoSource: 'gallery',
+        _uniqueKey: `gallery_photo_${Date.now()}`,
+        rating: 0,
+        thoughts: '',
+        meal: '',
+        restaurant: '',
+        isEditingExisting: false
+      });
+    } catch (error) {
+      console.error('Error selecting photo from library:', error);
+      Alert.alert('Error', 'Failed to select photo. Please try again.');
+    }
+  };
+
   // Pre-load and cache all tab bar icons using React.useMemo
   const tabIcons = React.useMemo(() => ({
     place: {
@@ -342,16 +403,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         {/* Center button - Add Meal */}
         <View style={styles.centerButtonContainer}>
           <TouchableOpacity
-            onPress={() => navigation.navigate('RatingScreen2', {
-              photo: null, // Start without photo
-              location: null, // Will fetch current location  
-              rating: 0,
-              _uniqueKey: `location_first_${Date.now()}`,
-              thoughts: '',
-              meal: '',
-              restaurant: '',
-              isEditingExisting: false
-            })}
+            onPress={() => setShowPhotoSourceModal(true)}
             style={styles.centerButton}
             activeOpacity={0.9}
           >
@@ -394,7 +446,43 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
           );
         })()}
       </View>
-      
+
+      {/* Photo Source Modal */}
+      <Modal
+        visible={showPhotoSourceModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPhotoSourceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.photoSourceModalContainer}
+          activeOpacity={1}
+          onPress={() => setShowPhotoSourceModal(false)}
+        >
+          <View style={styles.photoSourceModalContent}>
+            <TouchableOpacity
+              style={styles.photoSourceOption}
+              onPress={handleCameraPress}
+              activeOpacity={0.7}
+            >
+              <Icon name="camera-alt" size={40} color="#5B8A72" />
+              <Text style={styles.photoSourceOptionText}>Take Photo</Text>
+            </TouchableOpacity>
+
+            <View style={styles.photoSourceDivider} />
+
+            <TouchableOpacity
+              style={styles.photoSourceOption}
+              onPress={handleUploadPress}
+              activeOpacity={0.7}
+            >
+              <Icon name="photo-library" size={40} color="#5B8A72" />
+              <Text style={styles.photoSourceOptionText}>Upload Photo</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </>
   );
 });
@@ -521,7 +609,10 @@ const App: React.FC = () => {
     GoogleSignin.configure({
       webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
     });
-    
+
+    // Initialize notification channels for unrated meals
+    initializeUnratedMealNotificationChannels();
+
     // PERFORMANCE: Warm up the backend service to reduce first API call delay
     warmupQuickCriteriaService().then(success => {
       console.log(`Backend warmup ${success ? 'completed' : 'failed'}`);
@@ -904,6 +995,36 @@ const styles = StyleSheet.create({
   },
   tabIconContainer: {
     position: 'relative',
+  },
+  photoSourceModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoSourceModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    width: '80%',
+    maxWidth: 300,
+  },
+  photoSourceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+  },
+  photoSourceOptionText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 20,
+  },
+  photoSourceDivider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 5,
   },
 });
 

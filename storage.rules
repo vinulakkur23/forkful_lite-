@@ -10,7 +10,17 @@ service firebase.storage {
     match /meals/{userId}/{allPaths=**} {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
-    
+
+    // Allow users to upload meal photos (new path for camera captures)
+    match /meal_photos/{userId}/{allPaths=**} {
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Allow users to upload pixel art icons
+    match /pixel_art/{userId}/{allPaths=**} {
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // Allow users to upload their profile images
     match /users/{userId}/{allPaths=**} {
       allow write: if request.auth != null && request.auth.uid == userId;

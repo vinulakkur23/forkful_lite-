@@ -105,6 +105,8 @@ interface MealEntry {
   } | null;
   enhanced_facts?: any;
   quick_criteria_result?: any;
+  isUnrated?: boolean;
+  photoSource?: string;
 }
 
 const { width } = Dimensions.get('window');
@@ -328,7 +330,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     enhanced_facts: data.enhanced_facts || null, // Include enhanced_facts field
                     quick_criteria_result: data.quick_criteria_result || null, // Include quick_criteria_result field
                     mealType: data.mealType || 'Restaurant',
-                    comments: data.comments || { liked: '', disliked: '' }
+                    comments: data.comments || { liked: '', disliked: '' },
+                    isUnrated: data.isUnrated,
+                    photoSource: data.photoSource
                 });
             });
 
@@ -1633,24 +1637,41 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
     // Function to render each meal item
     const renderMealItem = ({ item }: { item: MealEntry }) => {
-        const isUnrated = item.rating === 0;
-        
+        const isUnrated = item.rating === 0 || item.isUnrated === true;
+        const isUnratedCameraCapture = item.isUnrated === true && item.photoSource === 'camera';
+
         return (
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={styles.mealCard}
                 onPress={() => {
                     if (isUnrated) {
-                        // Navigate to EditMealScreen for unrated meals (just add rating and comments)
-                        navigation.navigate('EditMeal', {
-                            mealId: item.id,
-                            meal: item,
-                            // Pass navigation context so EditMeal can navigate back properly
-                            previousScreen: 'FoodPassport',
-                            previousTabIndex: tabIndex,
-                            passportUserId: userId,
-                            passportUserName: userName,
-                            passportUserPhoto: userPhoto
-                        });
+                        // Path 1 (camera capture): Navigate to RatingScreen2 to enter meal details
+                        if (isUnratedCameraCapture) {
+                            navigation.navigate('RatingScreen2', {
+                                isUnratedMeal: true,
+                                existingMealId: item.id,
+                                photo: item.photoUrl ? { uri: item.photoUrl } : null,
+                                location: item.location || null,
+                                photoSource: 'camera',
+                                _uniqueKey: `unrated_${item.id}_${Date.now()}`,
+                                rating: 0,
+                                thoughts: '',
+                                meal: item.meal || '',
+                                restaurant: item.restaurant || '',
+                                isEditingExisting: false
+                            });
+                        } else {
+                            // Other unrated meals: Navigate to EditMealScreen
+                            navigation.navigate('EditMeal', {
+                                mealId: item.id,
+                                meal: item,
+                                previousScreen: 'FoodPassport',
+                                previousTabIndex: tabIndex,
+                                passportUserId: userId,
+                                passportUserName: userName,
+                                passportUserPhoto: userPhoto
+                            });
+                        }
                     } else {
                         // Navigate to meal detail for rated meals
                         viewMealDetails(item);
@@ -1679,6 +1700,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             <View style={styles.rateMealOverlay}>
                                 <Text style={styles.rateMealText}>Click to review meal</Text>
                             </View>
+                            {/* Badge for unrated camera captures */}
+                            {isUnratedCameraCapture && (
+                                <View style={styles.unratedBadge}>
+                                    <Text style={styles.unratedBadgeText}>NEW</Text>
+                                </View>
+                            )}
                         </>
                     )}
                 </View>
@@ -1689,10 +1716,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
                     )}
 
-                    {/* Rating emoji in bottom right */}
+                    {/* Rating emoji/pixel art in bottom right */}
                     {!isUnrated && (
                         <View style={styles.ratingOverlay}>
-                            <EmojiDisplay rating={item.rating} size={22} />
+                            {/* Show pixel art icon if available, otherwise fallback to emoji rating */}
+                            {(item.pixel_art_url || item.pixel_art_data) ? (
+                                <Image
+                                    source={{ uri: item.pixel_art_url || `data:image/png;base64,${item.pixel_art_data}` }}
+                                    style={{ width: 28, height: 28 }}
+                                    resizeMode="contain"
+                                />
+                            ) : (
+                                <EmojiDisplay rating={item.rating} size={22} />
+                            )}
                         </View>
                     )}
                 </View>
@@ -2196,6 +2232,23 @@ const styles = StyleSheet.create({
         ...typography.caption,
         color: colors.textPrimary,
         textAlign: 'center',
+    },
+    unratedBadge: {
+        position: 'absolute',
+        top: spacing.sm,
+        right: spacing.sm,
+        backgroundColor: '#5B8A72',
+        borderRadius: spacing.borderRadius.sm,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        ...shadows.medium,
+    },
+    unratedBadgeText: {
+        ...typography.caption,
+        fontSize: 10,
+        fontWeight: '700',
+        color: colors.white,
+        letterSpacing: 0.5,
     },
     mealCardContent: {
         padding: spacing.sm,

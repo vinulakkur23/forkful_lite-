@@ -29,6 +29,8 @@ import Geolocation from '@react-native-community/geolocation';
 import Exif from 'react-native-exif';
 import RNFS from 'react-native-fs';
 import ViewShot from 'react-native-view-shot';
+import { uploadImageToFirebase } from '../services/imageUploadService';
+import { auth } from '../firebaseConfig';
 
 // Extend the TabParamList to include exifData in the Crop screen params
 declare module '../App' {
@@ -180,28 +182,82 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         return;
       }
       
-      // Original flow for new meals
+      // Check if this is Path 2 (upload flow with pending meal data)
+      const pendingMealData = route.params.pendingMealData;
+
+      if (pendingMealData && mealId) {
+        // Path 2: Gallery upload flow → Mark meal as no longer unrated and navigate to EditMealScreen
+        console.log('Path 2: Updating meal and navigating to EditMealScreen');
+
+        try {
+          // Import firestore
+          const { firestore } = await import('../firebaseConfig');
+
+          // Get current user for upload path
+          const currentUser = auth().currentUser;
+          if (!currentUser) {
+            console.error('No authenticated user for upload');
+            Alert.alert('Error', 'Please log in to continue');
+            return;
+          }
+
+          // Upload edited photo to Firebase Storage
+          console.log('Uploading edited photo to Firebase Storage...');
+          const firebasePhotoUrl = await uploadImageToFirebase(finalImageUri, currentUser.uid);
+          console.log('Photo uploaded to Firebase:', firebasePhotoUrl);
+
+          // Update the meal with Firebase Storage URL (not local path)
+          await firestore().collection('mealEntries').doc(mealId).update({
+            isUnrated: false,
+            photoUrl: firebasePhotoUrl, // Firebase Storage URL
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          });
+
+          console.log('Meal updated, navigating to EditMealScreen');
+
+          // Navigate to EditMealScreen
+          navigation.navigate('EditMeal', {
+            mealId: mealId,
+            meal: {
+              id: mealId,
+              photoUrl: firebasePhotoUrl, // Use Firebase URL
+              meal: pendingMealData.dishName,
+              restaurant: pendingMealData.restaurant,
+              rating: 0, // Still needs rating
+            },
+            previousScreen: 'CropScreen',
+          });
+
+          return;
+        } catch (error) {
+          console.error('Error updating meal for Path 2:', error);
+          Alert.alert('Error', 'Failed to update meal. Please try again.');
+          return;
+        }
+      }
+
+      // Original flow for new meals (current flow)
       const timestamp = new Date().getTime();
       const cachedSuggestions = (global as any).prefetchedSuggestions;
       const isFromCamera = !route.params.photo?.fromGallery;
       const locationToUse = (global as any).prefetchedLocation || location;
-      
+
       // Create clean photo data with final processed image
       const photoData = {
         uri: finalImageUri,  // Use the processed image
         width: croppedImage.width,
         height: croppedImage.height,
       };
-      
+
       // CLEAN APPROACH: Navigate to Results with cropped image and meal ID
       console.log('Navigating to Results with cropped image and meal ID:', mealId);
-      
+
       const safeLocation = locationToUse ? {
         latitude: Number(locationToUse.latitude),
         longitude: Number(locationToUse.longitude),
         source: String(locationToUse.source || 'unknown')
       } : null;
-      
+
       try {
         const resultParams = {
           photo: photoData,
@@ -210,14 +266,14 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           mealId: mealId,
           _uniqueKey: `result_${timestamp}`,
         };
-        
+
         console.log('CropScreen navigation to Results params preview:', {
           hasPhoto: !!resultParams.photo,
           hasLocation: !!resultParams.location,
           mealId: resultParams.mealId,
           uniqueKey: resultParams._uniqueKey
         });
-        
+
         navigation.navigate('Result', resultParams);
       } catch (navError) {
         console.error('CropScreen navigation error:', navError);

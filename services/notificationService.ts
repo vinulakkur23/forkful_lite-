@@ -1,4 +1,5 @@
 import PushNotification from 'react-native-push-notification';
+import PushNotificationIOS from '@react-native-community/push-notification-ios';
 import { Platform } from 'react-native';
 
 interface MealReminderData {
@@ -27,20 +28,20 @@ class NotificationService {
         if (notification.userInfo?.type === 'meal-reminder-conditional' && notification.userInfo?.checkReviewStatus) {
           const mealId = notification.userInfo.mealId;
           const dishName = notification.userInfo.dishName;
-          
+
           try {
             // Import Firebase here to avoid circular imports
             const { firestore } = await import('../firebaseConfig');
-            
+
             console.log('Checking meal review status for conditional reminder:', mealId);
-            
+
             // Get meal document from Firestore
             const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
-            
+
             if (mealDoc.exists) {
               const mealData = mealDoc.data();
               const rating = mealData?.rating || 0;
-              
+
               // Only show notification if meal is still unreviewed
               if (rating === 0 || !rating) {
                 console.log('Meal is unreviewed, showing notification:', mealId);
@@ -64,6 +65,11 @@ class NotificationService {
         if (notification.userInteraction) {
           console.log('User tapped on notification');
           // You can navigate to specific screen here if needed
+        }
+
+        // IMPORTANT: For iOS, must call finish to allow foreground notifications
+        if (Platform.OS === 'ios') {
+          notification.finish(PushNotificationIOS.FetchResult.NoData);
         }
       },
 

@@ -9,6 +9,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiRating from '../components/EmojiRating';
+import EmojiDisplay from '../components/EmojiDisplay';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import { saveUserChallenge } from '../services/userChallengesService';
 import challengeNotificationService from '../services/challengeNotificationService';
@@ -98,7 +99,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [showPhotoSourceModal, setShowPhotoSourceModal] = useState<boolean>(false);
-  
+
+  // Success modal state (Path 1 vs Path 2)
+  const [showEmojiAwardModal, setShowEmojiAwardModal] = useState<boolean>(false);
+  const [showThankYouModal, setShowThankYouModal] = useState<boolean>(false);
+
   // Ref for scroll view
   const scrollViewRef = useRef<any>(null);
   const textInputRef = useRef<any>(null);
@@ -254,7 +259,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               const freshMealData = { id: documentSnapshot.id, ...documentSnapshot.data() };
               
               // Skip processing if quick ratings expansion is active OR if we're in below-rating mode
-              if (showQuickRatingsExpansion || (rating > 0 && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements))) {
+              if (showQuickRatingsExpansion || (rating > 0 && getRatingStatements())) {
                 console.log('EditMealScreen - Skipping listener update while rating interface is active');
                 return;
               }
@@ -389,14 +394,15 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Ensure the user is the owner of this meal
   useEffect(() => {
     const currentUser = auth().currentUser;
-    if (!currentUser || currentUser.uid !== meal.userId) {
+    // Only check permission if userId is loaded from Firestore
+    if (meal.userId && (!currentUser || currentUser.uid !== meal.userId)) {
       Alert.alert(
         "Not Authorized",
         "You don't have permission to edit this meal.",
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     }
-  }, []);
+  }, [meal.userId]); // Re-run when userId is loaded from Firestore
   
   // Update hasUnsavedChanges when any editable field changes
   useEffect(() => {
@@ -446,13 +452,20 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     setLastClickedRating(selectedRating);
   };
 
+  // Helper function to get rating criteria from unified data structure
+  // Both camera and gallery flows now save to dish_rating_criteria.rating_criteria
+  const getRatingStatements = () => {
+    return meal.dish_rating_criteria?.rating_criteria ||
+           meal.quick_criteria_result?.rating_statements; // Backward compatibility with old field
+  };
+
   // Handle quick ratings overlay
   const handleOpenQuickRatings = (): void => {
     Keyboard.dismiss();
-    
-    // Get statements from either new or old data structure
-    const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
-    
+
+    // Get statements from any available data structure
+    const statements = getRatingStatements();
+
     if (statements && statements.length > 0) {
       // Find the first unrated statement
       let nextUnratedIndex = 0;
@@ -472,8 +485,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleQuickRating = async (rating: number): Promise<void> => {
-    // Get statements from either new or old data structure
-    const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+    // Get statements from any available data structure
+    const statements = getRatingStatements();
     if (!statements) return;
     
     // Show press feedback briefly
@@ -528,8 +541,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Handler for below-rating mode - doesn't close the component
   const handleBelowRating = async (rating: number): Promise<void> => {
-    // Get statements from either new or old data structure
-    const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+    // Get statements from any available data structure
+    const statements = getRatingStatements();
     if (!statements) return;
     
     // Show press feedback briefly
@@ -1043,21 +1056,33 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Start handling the challenge asynchronously (don't await)
       handlePendingChallenge();
 
-      // Show restaurant history overlay or go to meal detail
-      if (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) {
-        setShowRestaurantHistory(true);
+      // Determine which modal to show based on photo source
+      const photoSource = meal.photoSource;
+
+      if (photoSource === 'camera') {
+        // Path 1: Camera capture → Show emoji award modal
+        console.log('Path 1: Showing emoji award modal');
+        setShowEmojiAwardModal(true);
+      } else if (photoSource === 'gallery') {
+        // Path 2: Gallery upload → Show thank you modal (no emoji)
+        console.log('Path 2: Showing thank you modal');
+        setShowThankYouModal(true);
       } else {
-        // No restaurant history, go straight to meal detail
-        navigation.navigate('MealDetail', { 
-          mealId: mealId,
-          justEdited: true,
-          // Pass through navigation context
-          previousScreen: route.params?.previousScreen,
-          previousTabIndex: route.params?.previousTabIndex,
-          passportUserId: route.params?.passportUserId,
-          passportUserName: route.params?.passportUserName,
-          passportUserPhoto: route.params?.passportUserPhoto
-        });
+        // Default: Show restaurant history overlay or go to meal detail
+        if (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) {
+          setShowRestaurantHistory(true);
+        } else {
+          // No restaurant history, go straight to meal detail
+          navigation.navigate('MealDetail', {
+            mealId: mealId,
+            justEdited: true,
+            previousScreen: route.params?.previousScreen,
+            previousTabIndex: route.params?.previousTabIndex,
+            passportUserId: route.params?.passportUserId,
+            passportUserName: route.params?.passportUserName,
+            passportUserPhoto: route.params?.passportUserPhoto
+          });
+        }
       }
     } catch (error) {
       console.error('Error updating meal:', error);
@@ -1153,52 +1178,52 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 )}
 
                 {/* Rating Statements - Show BELOW overall rating when rating > 0 */}
-                {rating > 0 && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
+                {rating > 0 && getRatingStatements() && (
                   <View style={styles.belowRatingContainer}>
                     <Text style={styles.ratingStatementText}>
                       <Text style={styles.optionalPrefix}>(Optional) </Text>
                       {renderTextWithBold(
-                        (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''
+                        getRatingStatements()?.[currentStatementIndex] || ''
                       )}
                     </Text>
-                    <EmojiRating 
-                      rating={quickRatings[(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''] || 0}
+                    <EmojiRating
+                      rating={quickRatings[getRatingStatements()?.[currentStatementIndex] || ''] || 0}
                       onRatingChange={handleBelowRating}
                       size={40}
                       style={styles.interactiveRating}
                       maxEmojis={3}
                     />
-                    
+
                     {/* Navigation controls */}
                     <View style={styles.quickRatingNavigation}>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={[styles.navButton, currentStatementIndex === 0 && styles.navButtonDisabled]}
                         onPress={() => currentStatementIndex > 0 && setCurrentStatementIndex(currentStatementIndex - 1)}
                         disabled={currentStatementIndex === 0}
                       >
                         <Text style={[styles.navButtonText, currentStatementIndex === 0 && styles.navButtonTextDisabled]}>← Back</Text>
                       </TouchableOpacity>
-                      
+
                       <Text style={styles.navProgress}>
-                        {currentStatementIndex + 1} of {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0}
+                        {currentStatementIndex + 1} of {getRatingStatements()?.length || 0}
                       </Text>
-                      
-                      <TouchableOpacity 
+
+                      <TouchableOpacity
                         style={[
-                          styles.navButton, 
-                          currentStatementIndex === ((meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0) - 1 && styles.navButtonDisabled
+                          styles.navButton,
+                          currentStatementIndex === (getRatingStatements()?.length || 0) - 1 && styles.navButtonDisabled
                         ]}
                         onPress={() => {
-                          const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+                          const statements = getRatingStatements();
                           if (statements && currentStatementIndex < statements.length - 1) {
                             setCurrentStatementIndex(currentStatementIndex + 1);
                           }
                         }}
-                        disabled={currentStatementIndex === ((meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0) - 1}
+                        disabled={currentStatementIndex === (getRatingStatements()?.length || 0) - 1}
                       >
                         <Text style={[
-                          styles.navButtonText, 
-                          currentStatementIndex === ((meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0) - 1 && styles.navButtonTextDisabled
+                          styles.navButtonText,
+                          currentStatementIndex === (getRatingStatements()?.length || 0) - 1 && styles.navButtonTextDisabled
                         ]}>
                           Skip →
                         </Text>
@@ -1209,40 +1234,40 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               </>
             ) : (
               // Detailed Rating Mode - same styling as main rating
-              (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
+              getRatingStatements() && (
                 <>
                   <Text style={styles.ratingStatementText}>
                     <Text style={styles.optionalPrefix}>(Optional) </Text>
                     {renderTextWithBold(
-                      (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''
+                      getRatingStatements()?.[currentStatementIndex] || ''
                     )}
                   </Text>
-                  <EmojiRating 
-                    rating={quickRatings[(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.[currentStatementIndex] || ''] || 0}
+                  <EmojiRating
+                    rating={quickRatings[getRatingStatements()?.[currentStatementIndex] || ''] || 0}
                     onRatingChange={handleQuickRating}
                     size={40}
                     style={styles.interactiveRating}
                     maxEmojis={3}
                   />
-                  
+
                   {/* Navigation controls */}
                   <View style={styles.quickRatingNavigation}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.navButton, currentStatementIndex === 0 && styles.navButtonDisabled]}
                       onPress={() => currentStatementIndex > 0 && setCurrentStatementIndex(currentStatementIndex - 1)}
                       disabled={currentStatementIndex === 0}
                     >
                       <Text style={[styles.navButtonText, currentStatementIndex === 0 && styles.navButtonTextDisabled]}>← Back</Text>
                     </TouchableOpacity>
-                    
+
                     <Text style={styles.navProgress}>
-                      {currentStatementIndex + 1} of {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0}
+                      {currentStatementIndex + 1} of {getRatingStatements()?.length || 0}
                     </Text>
-                    
-                    <TouchableOpacity 
+
+                    <TouchableOpacity
                       style={styles.navButton}
                       onPress={() => {
-                        const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+                        const statements = getRatingStatements();
                         if (statements && currentStatementIndex < statements.length - 1) {
                           setCurrentStatementIndex(currentStatementIndex + 1);
                         } else {
@@ -1252,8 +1277,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                       }}
                     >
                       <Text style={styles.navButtonText}>
-                        {currentStatementIndex === ((meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)?.length || 0) - 1 
-                          ? 'Skip' 
+                        {currentStatementIndex === (getRatingStatements()?.length || 0) - 1
+                          ? 'Skip'
                           : 'Skip →'}
                       </Text>
                     </TouchableOpacity>
@@ -1431,6 +1456,80 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         </TouchableOpacity>
       </Modal>
       */}
+
+      {/* Emoji Award Modal (Path 1: Camera) */}
+      <Modal
+        visible={showEmojiAwardModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowEmojiAwardModal(false);
+          navigation.navigate('FoodPassport', { tabIndex: 0 });
+        }}
+      >
+        <View style={styles.emojiModalContainer}>
+          <View style={styles.emojiModalContent}>
+            <Text style={styles.emojiModalTitle}>🎉 Meal Rated!</Text>
+            <View style={styles.emojiDisplay}>
+              {/* Show pixel art icon if available, otherwise fallback to emoji rating */}
+              {(pixelArtUrl || pixelArtData) ? (
+                <Image
+                  source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }}
+                  style={{ width: 100, height: 100 }}
+                  resizeMode="contain"
+                  onError={(error) => {
+                    console.error('❌ Pixel art failed to load in modal');
+                  }}
+                />
+              ) : (
+                <EmojiDisplay rating={rating} size={80} />
+              )}
+            </View>
+            <Text style={styles.emojiModalText}>
+              You've earned this {(pixelArtUrl || pixelArtData) ? 'pixel art icon' : 'emoji'} for your {meal.meal}!
+            </Text>
+            <TouchableOpacity
+              style={styles.emojiModalButton}
+              onPress={() => {
+                setShowEmojiAwardModal(false);
+                navigation.navigate('FoodPassport', { tabIndex: 0 });
+              }}
+            >
+              <Text style={styles.emojiModalButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Thank You Modal (Path 2: Gallery) */}
+      <Modal
+        visible={showThankYouModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowThankYouModal(false);
+          navigation.navigate('FoodPassport', { tabIndex: 0 });
+        }}
+      >
+        <View style={styles.emojiModalContainer}>
+          <View style={styles.emojiModalContent}>
+            <Text style={styles.emojiModalTitle}>✅ Thank You!</Text>
+            <Text style={styles.emojiModalText}>
+              Your meal has been rated and saved.
+            </Text>
+            <TouchableOpacity
+              style={styles.emojiModalButton}
+              onPress={() => {
+                setShowThankYouModal(false);
+                navigation.navigate('FoodPassport', { tabIndex: 0 });
+              }}
+            >
+              <Text style={styles.emojiModalButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -1888,6 +1987,49 @@ const styles = StyleSheet.create({
     height: 50,
     backgroundColor: '#1a2b49',
     marginHorizontal: 8,
+  },
+  emojiModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 30,
+    width: '80%',
+    maxWidth: 350,
+    alignItems: 'center',
+  },
+  emojiModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a2b49',
+    marginBottom: 20,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  emojiDisplay: {
+    marginVertical: 20,
+  },
+  emojiModalText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 25,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  emojiModalButton: {
+    backgroundColor: '#5B8A72',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+  },
+  emojiModalButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

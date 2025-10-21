@@ -43,7 +43,7 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // DISABLED FOR PERFORMANCE
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 // import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
-import { extractRatingStatements, RatingStatementsData } from '../services/ratingStatementsService';
+import { extractDishRatingCriteria, DishRatingCriteriaData } from '../services/dishRatingCriteriaService';
 import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
 import { getDishHistory, DishHistoryResult } from '../services/dishHistoryService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
@@ -990,40 +990,62 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Using city from restaurant parsing fallback
       }
       
-      // IMPORTANT: Don't upload image yet - wait until after editing
-      // Create document first, then upload image
-      
-      // Create basic meal data (without image URL yet)
-      const basicMealData = {
-        userId: user.uid,
-        userName: user.displayName || 'Anonymous User',
-        userPhoto: user.photoURL || null,
-        photoUrl: null, // Will be updated after editing
-        rating: rating,
-        restaurant: restaurant || '',
-        meal: mealName || '',
-        mealType: mealType || 'Restaurant',
-        city: cityInfo,
-        comments: thoughts ? { thoughts: thoughts } : {},
-        location: location ? {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          source: location.source || 'unknown',
-          city: cityInfo
-        } : null,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        sessionId: sessionId,
-        platform: Platform.OS,
-        appVersion: '1.0.0',
-        // Initially null - will be updated by background API call
-        rating_statements_result: null
-      };
-      
-      // Save basic meal data and get the document ID
-      const docRef = await firestore().collection('mealEntries').add(basicMealData);
-      const mealId = docRef.id;
-      // Basic meal saved with ID: mealId
-      logWithSession(`Basic meal saved: ${mealId}`);
+      // Determine if this is an unrated meal being updated or a new meal
+      const isUnratedMeal = route.params.isUnratedMeal === true;
+      const existingMealId = route.params.existingMealId;
+
+      let mealId: string;
+
+      if (isUnratedMeal && existingMealId) {
+        // Path 1: Update existing unrated meal
+        logWithSession('Updating existing unrated meal:', existingMealId);
+        mealId = existingMealId;
+
+        // Update meal with user-entered details
+        await firestore().collection('mealEntries').doc(mealId).update({
+          meal: mealName || '',
+          restaurant: restaurant || '',
+          city: cityInfo,
+          isUnrated: false, // Mark as no longer unrated
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+          sessionId: sessionId,
+        });
+
+        logWithSession('Unrated meal updated with details');
+      } else {
+        // Normal flow: Create new meal document
+        logWithSession('Creating new meal entry');
+
+        const basicMealData = {
+          userId: user.uid,
+          userName: user.displayName || 'Anonymous User',
+          userPhoto: user.photoURL || null,
+          photoUrl: null, // Will be updated after editing
+          rating: rating,
+          restaurant: restaurant || '',
+          meal: mealName || '',
+          mealType: mealType || 'Restaurant',
+          city: cityInfo,
+          comments: thoughts ? { thoughts: thoughts } : {},
+          location: location ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            source: location.source || 'unknown',
+            city: cityInfo
+          } : null,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          sessionId: sessionId,
+          platform: Platform.OS,
+          appVersion: '1.0.0',
+          // Initially null - will be updated by background API call
+          rating_statements_result: null
+        };
+
+        // Save basic meal data and get the document ID
+        const docRef = await firestore().collection('mealEntries').add(basicMealData);
+        mealId = docRef.id;
+        logWithSession(`Basic meal saved: ${mealId}`);
+      }
       
       // Check if this meal completes any active challenges (in background)
       const checkChallengeCompletion = async () => {
@@ -1050,18 +1072,20 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // Start challenge completion check in background (don't await)
       checkChallengeCompletion();
       
-      // Upload image to Firebase Storage and update the document with the URL (if photo exists)
+      // Upload image to Firebase Storage (skip for unrated meals - already uploaded)
       let imageUrl = null;
-      if (freshPhoto?.uri) {
-        // Upload image to Firebase Storage
+      if (!isUnratedMeal && freshPhoto?.uri) {
+        // Upload image to Firebase Storage (only for new meals)
         imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
-        
+
         // Update the document with the image URL
         await firestore().collection('mealEntries').doc(mealId).update({
           imageUrl: imageUrl,
           photoUrl: imageUrl // Keep backward compatibility with photoUrl field
         });
         logWithSession('Document updated with image URL');
+      } else if (isUnratedMeal) {
+        logWithSession('Unrated meal - photo already uploaded, skipping upload');
       } else {
         logWithSession('No photo to upload, continuing without image');
       }
@@ -1072,43 +1096,38 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       
       // STAGGERED API calls to avoid overwhelming the backend service
       
-      // Step 1: Start rating statements/insights first (0ms)
-      console.log('📝 Starting rating statements/insights first...');
-      extractRatingStatements(
+      // Step 1: Start rating criteria extraction first (0ms)
+      console.log('📝 Starting rating criteria extraction first...');
+      extractDishRatingCriteria(
         mealName
       ).then(async (result) => {
-        // Rating statements API call completed
+        // Rating criteria API call completed
         if (result) {
-          // Rating statements completed successfully
+          // Rating criteria completed successfully
           // Full result logged for debugging if needed
-          logWithSession(`Rating statements completed with ${result.rating_statements?.length || 0} statements`);
-          
-          // Log if this looks like fallback data
-          if (result.extraction_error) {
-            console.warn('⚠️ WARNING: This looks like fallback rating statements!');
-          }
-          
-          // Update the meal document with rating statements
+          logWithSession(`Rating criteria completed with ${result.rating_criteria?.length || 0} criteria`);
+
+          // Update the meal document with rating criteria
           try {
-            const statementsUpdate = {
-              rating_statements_result: result,
-              statements_updated_at: firestore.FieldValue.serverTimestamp()
+            const criteriaUpdate = {
+              dish_rating_criteria: result,
+              criteria_updated_at: firestore.FieldValue.serverTimestamp()
             };
-            
-            await firestore().collection('mealEntries').doc(mealId).update(statementsUpdate);
-            logWithSession(`Rating statements saved successfully`);
-            
+
+            await firestore().collection('mealEntries').doc(mealId).update(criteriaUpdate);
+            logWithSession(`Rating criteria saved successfully`);
+
           } catch (firestoreError) {
-            console.error('❌ Error saving rating statements to Firestore:', firestoreError);
-            logWithSession(`Rating statements save error: ${firestoreError}`);
+            console.error('❌ Error saving rating criteria to Firestore:', firestoreError);
+            logWithSession(`Rating criteria save error: ${firestoreError}`);
           }
         } else {
-          console.warn('⚠️ Rating statements extraction failed');
-          logWithSession('Rating statements extraction failed');
+          console.warn('⚠️ Rating criteria extraction failed');
+          logWithSession('Rating criteria extraction failed');
         }
       }).catch(error => {
-        console.error('❌ Error with rating statements:', error);
-        logWithSession(`Rating statements error: ${error}`);
+        console.error('❌ Error with rating criteria:', error);
+        logWithSession(`Rating criteria error: ${error}`);
       });
       
       // Step 2: Start drink pairings immediately (parallel processing)
@@ -1178,72 +1197,78 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       } else {
         console.log('⚠️ Skipping dish history - missing meal name');
       }
-      
+
       // Step 3: Start pixel art with 1.5 second delay (staggered processing)
-      setTimeout(() => {
-        console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
-        console.log('🎨 Photo URI available:', !!photoUriRef.current);
-        const pixelArtPromise = generatePixelArtIcon(mealName, photoUriRef.current);
-      
-      // Handle pixel art result
-      pixelArtPromise.then(async (pixelArtResult) => {
-        if (pixelArtResult && pixelArtResult.image_data) {
-          console.log('✅ Pixel art generation completed');
-          logWithSession('Pixel art completed successfully');
-          
-          // Upload pixel art to Firebase Storage and save URL to Firestore
-          try {
-            // Get current user ID
-            const currentUser = auth().currentUser;
-            if (!currentUser) {
-              console.error('❌ No authenticated user for pixel art upload');
-              return;
+      // ONLY generate pixel art for camera captures, not gallery uploads
+      if (photoSource === 'camera') {
+        setTimeout(() => {
+          console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
+          console.log('🎨 Photo URI available:', !!photoUriRef.current);
+          const pixelArtPromise = generatePixelArtIcon(mealName, photoUriRef.current);
+
+        // Handle pixel art result
+        pixelArtPromise.then(async (pixelArtResult) => {
+          if (pixelArtResult && pixelArtResult.image_data) {
+            console.log('✅ Pixel art generation completed');
+            logWithSession('Pixel art completed successfully');
+
+            // Upload pixel art to Firebase Storage and save URL to Firestore
+            try {
+              // Get current user ID
+              const currentUser = auth().currentUser;
+              if (!currentUser) {
+                console.error('❌ No authenticated user for pixel art upload');
+                return;
+              }
+
+              // Create a unique filename for the pixel art
+              const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
+              const pixelArtStoragePath = `pixel_art/${currentUser.uid}/${pixelArtFileName}`;
+
+              // Convert base64 to data URI
+              const base64Data = pixelArtResult.image_data;
+              const dataUri = `data:image/png;base64,${base64Data}`;
+
+              console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
+              logWithSession(`Uploading pixel art to: ${pixelArtStoragePath}`);
+
+              // Upload to Firebase Storage
+              const storageRef = storage().ref(pixelArtStoragePath);
+              await storageRef.putString(dataUri, 'data_url');
+
+              // Get download URL
+              const downloadUrl = await storageRef.getDownloadURL();
+              console.log('✅ Pixel art uploaded, URL:', downloadUrl);
+
+              // Update meal with pixel art URL instead of base64 data
+              await firestore()
+                .collection('mealEntries')
+                .doc(mealId)
+                .update({
+                  pixel_art_url: downloadUrl,
+                  pixel_art_prompt: pixelArtResult.prompt_used,
+                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+                });
+
+              console.log('✅ Pixel art saved to Firestore');
+              logWithSession('Pixel art saved successfully');
+            } catch (firestoreError) {
+              console.error('❌ Error saving pixel art:', firestoreError);
+              logWithSession(`Pixel art save error: ${firestoreError}`);
             }
-
-            // Create a unique filename for the pixel art
-            const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
-            const pixelArtStoragePath = `pixel_art/${currentUser.uid}/${pixelArtFileName}`;
-
-            // Convert base64 to data URI
-            const base64Data = pixelArtResult.image_data;
-            const dataUri = `data:image/png;base64,${base64Data}`;
-
-            console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
-            logWithSession(`Uploading pixel art to: ${pixelArtStoragePath}`);
-
-            // Upload to Firebase Storage
-            const storageRef = storage().ref(pixelArtStoragePath);
-            await storageRef.putString(dataUri, 'data_url');
-
-            // Get download URL
-            const downloadUrl = await storageRef.getDownloadURL();
-            console.log('✅ Pixel art uploaded, URL:', downloadUrl);
-
-            // Update meal with pixel art URL instead of base64 data
-            await firestore()
-              .collection('mealEntries')
-              .doc(mealId)
-              .update({
-                pixel_art_url: downloadUrl,
-                pixel_art_prompt: pixelArtResult.prompt_used,
-                pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
-              });
-
-            console.log('✅ Pixel art saved to Firestore');
-            logWithSession('Pixel art saved successfully');
-          } catch (firestoreError) {
-            console.error('❌ Error saving pixel art:', firestoreError);
-            logWithSession(`Pixel art save error: ${firestoreError}`);
+          } else {
+            console.warn('⚠️ Pixel art generation failed');
+            logWithSession('Pixel art generation failed');
           }
-        } else {
-          console.warn('⚠️ Pixel art generation failed');
-          logWithSession('Pixel art generation failed');
-        }
-      }).catch(error => {
-        console.error('❌ Pixel art generation error:', error);
-        logWithSession(`Pixel art error: ${error}`);
-      });
-      }, 1500); // 1.5 second delay for pixel art generation
+        }).catch(error => {
+          console.error('❌ Pixel art generation error:', error);
+          logWithSession(`Pixel art error: ${error}`);
+        });
+        }, 1500); // 1.5 second delay for pixel art generation
+      } else {
+        console.log('📸 Skipping pixel art generation for gallery upload');
+        logWithSession('Skipping pixel art for gallery upload');
+      }
 
       // Step 4: Generate monument for city if it's a new city (2 second delay)
       setTimeout(async () => {
@@ -1342,9 +1367,41 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         mealId: mealId,
         _uniqueKey: sessionId
       };
-      
-      // Navigating directly to Result screen
-      navigation.navigate('Result', resultParams);
+
+      // Determine navigation based on photo source and meal type
+      const photoSource = route.params.photoSource;
+
+      if (isUnratedMeal) {
+        // Path 1: Unrated camera meal → Navigate to CropScreen for photo editing
+        logWithSession('Navigating to CropScreen for unrated camera meal');
+        navigation.navigate('Crop', {
+          photo: freshPhoto || route.params.photo,
+          mealId: mealId,
+          pendingMealData: {
+            dishName: mealName,
+            restaurant: restaurant,
+            location: location,
+          },
+          _uniqueKey: sessionId,
+        });
+      } else if (photoSource === 'gallery') {
+        // Path 2: Gallery upload → Navigate to CropScreen for photo editing
+        logWithSession('Navigating to CropScreen for gallery upload');
+        navigation.navigate('Crop', {
+          photo: freshPhoto,
+          mealId: mealId,
+          pendingMealData: {
+            dishName: mealName,
+            restaurant: restaurant,
+            location: location,
+          },
+          _uniqueKey: sessionId,
+        });
+      } else {
+        // Default flow: Navigate to Result screen
+        logWithSession('Navigating to ResultScreen (default flow)');
+        navigation.navigate('Result', resultParams);
+      }
     } catch (error) {
       logWithSession(`Error preparing image for Result screen: ${error}`);
       Alert.alert('Error', 'Failed to save rating. Please try again.');
@@ -1379,10 +1436,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         
         // Store the request in global scope so other screens can access it
         // This allows Results screen to wait for completion
-        const extractionPromise = extractRatingStatements(
+        const extractionPromise = extractDishRatingCriteria(
           mealName
         );
-        
+
         // Store in global for later retrieval WITH SESSION TRACKING
         (global as any).ratingStatementsExtractionPromise = extractionPromise;
         (global as any).ratingStatementsStartTime = Date.now();

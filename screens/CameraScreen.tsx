@@ -21,6 +21,15 @@ import ImageCropPicker from 'react-native-image-crop-picker';
 import Exif from 'react-native-exif';
 import { getMealSuggestions } from '../services/mealService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
+import { identifyDishFromPhoto } from '../services/dishIdentificationService';
+import { extractDishRatingCriteria } from '../services/dishRatingCriteriaService';
+import { extractRatingStatements } from '../services/ratingStatementsService';
+import { generatePixelArtIcon } from '../services/geminiPixelArtService';
+import { firebase, auth, firestore, storage } from '../firebaseConfig';
+import ImageResizer from 'react-native-image-resizer';
+import RNFS from 'react-native-fs';
+import { scheduleUnratedMealNotifications } from '../services/unratedMealNotificationService';
+import { uploadImageToFirebase } from '../services/imageUploadService';
 
 // Update the navigation prop type to use composite navigation
 type CameraScreenNavigationProp = CompositeNavigationProp<
@@ -140,6 +149,159 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
+  // Helper function for Path 1: Save unrated meal with background API calls
+  const saveUnratedMeal = async (photoUri: string, photoLocation: any) => {
+    try {
+      console.log('🚀 Path 1: Starting unrated meal save flow');
+
+      // Check if user is authenticated
+      const user = auth().currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to save your meal');
+        return;
+      }
+
+      // Step 1: Create Firestore document FIRST (with placeholder photoUrl)
+      // This is required for Firebase Storage security rules
+      console.log('📝 Creating Firestore document first...');
+
+      const basicMealData = {
+        userId: user.uid,
+        userName: user.displayName || 'Anonymous User',
+        userPhoto: user.photoURL || null,
+        photoUrl: null, // Placeholder - will update after upload
+        rating: 0,
+        meal: '', // Empty initially
+        restaurant: '', // Empty initially
+        mealType: 'Restaurant',
+        city: '',
+        isUnrated: true, // Flag for unrated meals
+        photoSource: 'camera', // Track source
+        location: photoLocation ? {
+          latitude: photoLocation.latitude,
+          longitude: photoLocation.longitude,
+          source: photoLocation.source || 'unknown'
+        } : null,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        platform: Platform.OS,
+        appVersion: '1.0.0',
+      };
+
+      const docRef = await firestore().collection('mealEntries').add(basicMealData);
+      const mealId = docRef.id;
+      console.log('✅ Firestore document created:', mealId);
+
+      // Step 2: Now upload photo to Firebase Storage (document exists, so security rules pass)
+      console.log('📤 Uploading photo to Firebase Storage...');
+      const photoUrl = await uploadImageToFirebase(photoUri, user.uid);
+      console.log('✅ Photo uploaded:', photoUrl);
+
+      // Step 3: Update document with photo URL
+      await firestore().collection('mealEntries').doc(mealId).update({
+        photoUrl: photoUrl,
+        imageUrl: photoUrl, // For compatibility
+      });
+      console.log('✅ Document updated with photo URL');
+
+      // Show brief loading message AFTER upload completes
+      Alert.alert('Photo Saved!', 'Analyzing your meal in the background...', [
+        { text: 'OK', onPress: () => navigation.navigate('FoodPassport', { tabIndex: 0 }) }
+      ]);
+
+      // Step 4: Start background API calls (non-blocking)
+      console.log('🔄 Starting background API calls...');
+
+      // Call 1: Identify dish from photo
+      identifyDishFromPhoto(photoUri).then(async (dishData) => {
+        if (dishData && dishData.dish_name) {
+          console.log('✅ Dish identified:', dishData.dish_name);
+
+          // Update meal with dish identification result
+          await firestore().collection('mealEntries').doc(mealId).update({
+            dish_identification_result: dishData,
+            meal: dishData.dish_name // Pre-populate meal name
+          });
+
+          // Call 2: Extract rating criteria based on dish name (for quick ratings UI)
+          extractDishRatingCriteria(dishData.dish_name).then(async (criteriaData) => {
+            if (criteriaData) {
+              console.log('✅ Rating criteria extracted (for quick ratings)');
+              await firestore().collection('mealEntries').doc(mealId).update({
+                dish_rating_criteria: criteriaData
+              });
+            }
+          }).catch(err => console.error('❌ Rating criteria error:', err));
+
+          // Call 3: Extract rating statements (for push notifications)
+          extractRatingStatements(dishData.dish_name).then(async (statementsData) => {
+            if (statementsData) {
+              console.log('✅ Rating statements extracted (for notifications)');
+              await firestore().collection('mealEntries').doc(mealId).update({
+                rating_statements_result: statementsData
+              });
+
+              // Schedule push notifications with top 3 rating statements
+              console.log('📬 Scheduling notifications with rating statements');
+              scheduleUnratedMealNotifications({
+                mealId: mealId,
+                dishName: dishData.dish_name,
+                restaurantName: undefined,
+                city: undefined,
+                ratingStatements: statementsData.rating_statements
+              }).catch(err => {
+                console.error('❌ Error scheduling notifications:', err);
+                // Don't fail the whole flow if notifications fail
+              });
+            }
+          }).catch(err => console.error('❌ Rating statements error:', err));
+
+          // Call 4: Generate pixel art icon (nano banana)
+          generatePixelArtIcon(dishData.dish_name, photoUri).then(async (pixelArtData) => {
+            if (pixelArtData && pixelArtData.image_data) {
+              console.log('✅ Pixel art generated');
+
+              // Upload pixel art to Firebase Storage and save URL
+              try {
+                const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
+                const pixelArtStoragePath = `pixel_art/${user.uid}/${pixelArtFileName}`;
+
+                // Convert base64 to data URI
+                const dataUri = `data:image/png;base64,${pixelArtData.image_data}`;
+
+                console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
+
+                // Upload to Firebase Storage
+                const storageRef = storage().ref(pixelArtStoragePath);
+                await storageRef.putString(dataUri, 'data_url');
+
+                // Get download URL
+                const downloadUrl = await storageRef.getDownloadURL();
+                console.log('✅ Pixel art uploaded, URL:', downloadUrl);
+
+                // Update meal with pixel art URL
+                await firestore().collection('mealEntries').doc(mealId).update({
+                  pixel_art_url: downloadUrl,
+                  pixel_art_prompt: pixelArtData.prompt_used,
+                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ Pixel art saved to Firestore');
+              } catch (uploadError) {
+                console.error('❌ Error uploading pixel art:', uploadError);
+              }
+            }
+          }).catch(err => console.error('❌ Pixel art error:', err));
+        }
+      }).catch(err => console.error('❌ Dish identification error:', err));
+
+      console.log('✅ Path 1 flow complete - meal saved as unrated');
+
+    } catch (error) {
+      console.error('❌ Error saving unrated meal:', error);
+      Alert.alert('Error', 'Failed to save meal. Please try again.');
+    }
+  };
+
   const takePicture = async () => {
       if (camera.current) {
         try {
@@ -239,36 +401,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 source: 'exif'
               };
 
-              // Start fetching restaurant suggestions as early as possible
-              console.log("Starting early fetch of restaurant suggestions after taking photo (EXIF location)");
-              setTimeout(() => {
-                getMealSuggestions(normalizedPath, exifLocation)
-                  .then(suggestions => {
-                    console.log("Early restaurant suggestions fetched successfully:",
-                      suggestions.restaurants?.length || 0, "restaurants");
-                    // Store in global app cache for later screens to use
-                    (global as any).prefetchedSuggestions = suggestions;
-                  })
-                  .catch(err => {
-                    console.log("Early restaurant suggestions fetch failed:", err);
-                  });
-              }, 0);
-
-              // Navigate directly to RatingScreen2 with EXIF location data
-              navigation.navigate('RatingScreen2', {
-                photo: {
-                  uri: normalizedPath,
-                  width: photo.width,
-                  height: photo.height,
-                },
-                location: exifLocation,
-                exifData: exifData, // Pass the full EXIF data for potential future use
-                photoSource: 'camera',
-                _uniqueKey: navigationKey,
-                rating: 0,
-                likedComment: '',
-                dislikedComment: ''
-              });
+              // PATH 1: Save as unrated meal with background API calls
+              console.log("Path 1: Saving unrated meal with EXIF location");
+              await saveUnratedMeal(normalizedPath, exifLocation);
               return;
             } else {
               console.log("No EXIF GPS data found in the captured photo, using device location");
@@ -278,37 +413,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             console.log("Falling back to device location");
           }
 
-          // Start fetching restaurant suggestions as early as possible
-          console.log("Starting early fetch of restaurant suggestions after taking photo (device location)");
-          if (location) {
-            setTimeout(() => {
-              getMealSuggestions(normalizedPath, location)
-                .then(suggestions => {
-                  console.log("Early restaurant suggestions fetched successfully:",
-                    suggestions.restaurants?.length || 0, "restaurants");
-                  // Store in global app cache for later screens to use
-                  (global as any).prefetchedSuggestions = suggestions;
-                })
-                .catch(err => {
-                  console.log("Early restaurant suggestions fetch failed:", err);
-                });
-            }, 0);
-          }
-
-          // Use device location as fallback - navigate directly to RatingScreen2
-          navigation.navigate('RatingScreen2', {
-            photo: {
-              uri: normalizedPath,
-              width: photo.width,
-              height: photo.height,
-            },
-            location: location, // Use the device location as fallback
-            photoSource: 'camera',
-            _uniqueKey: navigationKey, // Add unique key for component refresh
-            rating: 0,
-            likedComment: '',
-            dislikedComment: ''
-          });
+          // PATH 1: Save as unrated meal with device location as fallback
+          console.log("Path 1: Saving unrated meal with device location");
+          await saveUnratedMeal(normalizedPath, location);
           
         } catch (error) {
           console.error('Error taking photo:', error);
