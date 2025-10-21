@@ -962,6 +962,12 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         photoUrl: flagshipPhoto?.url || photos[0]?.url || meal.photoUrl, // Maintain backward compatibility
         updatedAt: firestore.FieldValue.serverTimestamp()
       };
+
+      // Include quick ratings if they exist
+      if (quickRatings && Object.keys(quickRatings).length > 0) {
+        updateData.quick_ratings = quickRatings;
+        console.log('EditMealScreen - Including quick ratings in save:', quickRatings);
+      }
       
       
       // Debug logging
@@ -997,6 +1003,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         hasPhotos: !!verifyData?.photos,
         photosLength: verifyData?.photos?.length,
         photosArray: verifyData?.photos
+      });
+
+      // Refresh user counts to update unique restaurants, cuisines, cities
+      const { refreshUserCounts } = await import('../services/countRefreshService');
+      refreshUserCounts().catch(err => {
+        console.error('Error refreshing user counts:', err);
+        // Don't block the save if this fails
       });
 
       // Handle challenge generation asynchronously - don't block the save

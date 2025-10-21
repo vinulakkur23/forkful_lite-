@@ -102,6 +102,12 @@ class NotificationService {
         if (notification.userInteraction) {
           console.log('User tapped on notification');
 
+          // Ignore taps on tip/statement notifications (non-interactive)
+          if (notification.userInfo?.type === 'unrated-meal-statement') {
+            console.log('Ignoring tap on tip notification - these are non-interactive');
+            return;
+          }
+
           // Navigate to EditMealScreen for unrated meal reminders
           if (notification.userInfo?.navigateToEditMeal && notification.userInfo?.mealId) {
             const mealId = notification.userInfo.mealId;

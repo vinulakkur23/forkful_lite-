@@ -1046,7 +1046,32 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         mealId = docRef.id;
         logWithSession(`Basic meal saved: ${mealId}`);
       }
-      
+
+      // Extract 5 rating criteria based on dish name and 3 rating statements
+      // This happens AFTER user enters restaurant + dish name
+      logWithSession('Extracting 5 rating criteria for quick ratings...');
+      try {
+        // Get the rating statements from Firestore (saved during camera capture)
+        const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+        const mealData = mealDoc.data();
+        const ratingStatements = mealData?.rating_statements_result?.rating_statements;
+
+        console.log('📊 Rating statements for criteria generation:', ratingStatements);
+
+        // Call API with dish name and rating statements
+        const criteriaData = await extractDishRatingCriteria(mealName || '', ratingStatements);
+
+        if (criteriaData) {
+          console.log('✅ Rating criteria extracted with rating statements context');
+          await firestore().collection('mealEntries').doc(mealId).update({
+            dish_rating_criteria: criteriaData
+          });
+        }
+      } catch (err) {
+        console.error('❌ Rating criteria error:', err);
+        // Don't block the save if this fails
+      }
+
       // Check if this meal completes any active challenges (in background)
       const checkChallengeCompletion = async () => {
         try {

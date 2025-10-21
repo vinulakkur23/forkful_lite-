@@ -76,6 +76,7 @@ export const scheduleUnratedMealNotifications = async (
             playSound: true,
             soundName: 'default',
             invokeApp: false, // Don't open app when notification is tapped
+            ignoreInForeground: false, // Show notification even when app is open
             userInfo: {
               type: 'unrated-meal-statement',
               mealId: mealData.mealId,
@@ -103,6 +104,7 @@ export const scheduleUnratedMealNotifications = async (
       allowWhileIdle: true,
       playSound: true,
       soundName: 'default',
+      ignoreInForeground: false, // Show notification even when app is open
       // invokeApp is true by default - will open app and navigate to EditMealScreen
       userInfo: {
         type: 'unrated-meal-reminder',

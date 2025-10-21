@@ -2438,6 +2438,7 @@ const styles = StyleSheet.create({
         ...typography.h2,
         marginHorizontal: spacing.md,
         marginTop: spacing.md,
+        marginBottom: spacing.sm,
         color: colors.charcoal,
     },
     stampItem: {

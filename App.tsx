@@ -261,58 +261,9 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 // Custom tab bar component wrapped with React.memo to prevent unnecessary re-renders
 const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
-  // State for photo source modal
-  const [showPhotoSourceModal, setShowPhotoSourceModal] = React.useState(false);
-
-  // Handler for camera option
-  const handleCameraPress = () => {
-    setShowPhotoSourceModal(false);
-    // Navigate to Camera screen
+  // Handler to navigate directly to camera
+  const handleAddPress = () => {
     navigation.navigate('Camera' as any);
-  };
-
-  // Handler for upload option
-  const handleUploadPress = async () => {
-    setShowPhotoSourceModal(false);
-
-    // Get photo from library
-    try {
-      const photoAsset = await getPhotoWithMetadata();
-
-      if (!photoAsset) {
-        console.log('No photo selected from library');
-        return;
-      }
-
-      console.log('Photo selected from gallery (App.tsx):', {
-        uri: photoAsset.uri,
-        hasLocation: !!photoAsset.location,
-      });
-
-      // Navigate to RatingScreen2 with the photo
-      navigation.navigate('RatingScreen2' as any, {
-        photo: {
-          uri: photoAsset.uri,
-          width: photoAsset.width,
-          height: photoAsset.height,
-          originalUri: photoAsset.originalUri,
-          fromGallery: true,
-          assetId: photoAsset.assetId,
-        },
-        location: photoAsset.location || null,
-        exifData: photoAsset.exifData,
-        photoSource: 'gallery',
-        _uniqueKey: `gallery_photo_${Date.now()}`,
-        rating: 0,
-        thoughts: '',
-        meal: '',
-        restaurant: '',
-        isEditingExisting: false
-      });
-    } catch (error) {
-      console.error('Error selecting photo from library:', error);
-      Alert.alert('Error', 'Failed to select photo. Please try again.');
-    }
   };
 
   // Pre-load and cache all tab bar icons using React.useMemo
@@ -403,7 +354,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         {/* Center button - Add Meal */}
         <View style={styles.centerButtonContainer}>
           <TouchableOpacity
-            onPress={() => setShowPhotoSourceModal(true)}
+            onPress={handleAddPress}
             style={styles.centerButton}
             activeOpacity={0.9}
           >
@@ -446,49 +397,6 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
           );
         })()}
       </View>
-
-      {/* Photo Source Modal */}
-      <Modal
-        visible={showPhotoSourceModal}
-        transparent={true}
-        animationType="none"
-        onRequestClose={() => setShowPhotoSourceModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.photoSourceModalContainer}
-          activeOpacity={1}
-          onPress={() => setShowPhotoSourceModal(false)}
-        >
-          <View style={styles.photoSourceModalContent}>
-            <TouchableOpacity
-              style={styles.photoSourceOption}
-              onPress={handleCameraPress}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={require('./assets/icons/camera-inactive.png')}
-                style={styles.photoSourceIcon}
-              />
-              <Text style={styles.photoSourceOptionText}>Eating? Capture your meal</Text>
-            </TouchableOpacity>
-
-            <View style={styles.photoSourceDivider} />
-
-            <TouchableOpacity
-              style={styles.photoSourceOption}
-              onPress={handleUploadPress}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={require('./assets/icons/upload-inactive.png')}
-                style={styles.photoSourceIcon}
-              />
-              <Text style={styles.photoSourceOptionText}>Done? Upload from gallery</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
     </>
   );
 });
@@ -1001,42 +909,6 @@ const styles = StyleSheet.create({
   },
   tabIconContainer: {
     position: 'relative',
-  },
-  photoSourceModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  photoSourceModalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    width: '80%',
-    maxWidth: 300,
-  },
-  photoSourceOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 10,
-  },
-  photoSourceIcon: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
-  },
-  photoSourceOptionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginLeft: 20,
-    flex: 1,
-  },
-  photoSourceDivider: {
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 5,
   },
 });
 

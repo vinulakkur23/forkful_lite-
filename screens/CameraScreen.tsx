@@ -222,17 +222,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             meal: dishData.dish_name // Pre-populate meal name
           });
 
-          // Call 2: Extract rating criteria based on dish name (for quick ratings UI)
-          extractDishRatingCriteria(dishData.dish_name).then(async (criteriaData) => {
-            if (criteriaData) {
-              console.log('✅ Rating criteria extracted (for quick ratings)');
-              await firestore().collection('mealEntries').doc(mealId).update({
-                dish_rating_criteria: criteriaData
-              });
-            }
-          }).catch(err => console.error('❌ Rating criteria error:', err));
-
-          // Call 3: Extract rating statements (for push notifications)
+          // Call 2: Extract rating statements (for push notifications)
           extractRatingStatements(dishData.dish_name).then(async (statementsData) => {
             if (statementsData) {
               console.log('✅ Rating statements extracted (for notifications)');
@@ -255,7 +245,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             }
           }).catch(err => console.error('❌ Rating statements error:', err));
 
-          // Call 4: Generate pixel art icon (nano banana)
+          // Call 3: Generate pixel art icon (nano banana)
           generatePixelArtIcon(dishData.dish_name, photoUri).then(async (pixelArtData) => {
             if (pixelArtData && pixelArtData.image_data) {
               console.log('✅ Pixel art generated');
@@ -669,13 +659,13 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         // Try to match preview with actual photo output
         videoAspectRatio={1}
       />
-      
+
       {/* Square framing guide that matches capture area */}
       <View style={styles.guideCenterer}>
         <View style={[styles.framingGuide, { width: guideSize, height: guideSize }]}>
           {/* Semi-transparent overlay to show capture area */}
           <View style={styles.captureAreaOverlay} />
-          
+
           {/* Corner guides */}
           <View style={[styles.cornerGuide, styles.topLeftCorner]} />
           <View style={[styles.cornerGuide, styles.topRightCorner]} />
@@ -683,8 +673,14 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           <View style={[styles.cornerGuide, styles.bottomRightCorner]} />
         </View>
       </View>
-      
-      
+
+      {/* Instructional text at top */}
+      <View style={styles.instructionalTextContainer}>
+        <Text style={styles.instructionalText}>
+          Capture your meal for taste tips and a custom emoji
+        </Text>
+      </View>
+
       <TouchableOpacity style={styles.closeButton} onPress={goBack}>
         <Image
           source={require('../assets/icons/back-icon.png')}
@@ -810,6 +806,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     padding: 8,
     borderRadius: 4,
+  },
+  instructionalTextContainer: {
+    position: 'absolute',
+    top: 110,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  instructionalText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 12,
+    borderRadius: 8,
   },
   closeButton: {
     position: 'absolute',

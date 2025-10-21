@@ -27,27 +27,35 @@ export interface DishRatingCriteriaResponse {
 /**
  * Extract 5 rating criteria for evaluating a good version of a dish
  * Only requires dish name (no image needed)
+ * Can optionally accept rating statements for context
  */
 export const extractDishRatingCriteria = async (
-  dishName: string
+  dishName: string,
+  ratingStatements?: Array<{title: string, description: string}>
 ): Promise<DishRatingCriteriaData | null> => {
   console.log('🚨 DishRatingCriteriaService: FUNCTION CALLED - extractDishRatingCriteria');
-  console.log('🚨 DishRatingCriteriaService: Parameters received:', { dishName });
-  
+  console.log('🚨 DishRatingCriteriaService: Parameters received:', { dishName, hasRatingStatements: !!ratingStatements });
+
   try {
     console.log('🚀 DishRatingCriteriaService: Starting rating criteria extraction');
     console.log('🍽️ DishRatingCriteriaService: Dish name:', dishName);
-    
+
     if (!dishName || dishName.trim().length === 0) {
       console.error('❌ DishRatingCriteriaService: No dish name provided');
       return null;
     }
-    
+
     // Create FormData for text-only request
     const formData = new FormData();
-    
+
     // Add dish name (required)
     formData.append('dish_name', dishName);
+
+    // Add rating statements if provided
+    if (ratingStatements && ratingStatements.length > 0) {
+      console.log('📊 DishRatingCriteriaService: Including rating statements:', ratingStatements);
+      formData.append('rating_statements', JSON.stringify(ratingStatements));
+    }
     
     console.log('🌐 DishRatingCriteriaService: Making API call to extract-dish-rating-criteria');
     console.log('🌐 DishRatingCriteriaService: URL:', `${BASE_URL}/extract-dish-rating-criteria`);
