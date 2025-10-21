@@ -49,21 +49,33 @@ export const scheduleUnratedMealNotifications = async (
       ];
 
       top3Statements.forEach((statement, index) => {
-        // Handle both new format (object with title) and old format (string)
-        const message = typeof statement === 'string' ? statement : `Look for: ${statement.title}`;
+        // Handle both new format (object with title+description) and old format (string)
+        let notificationTitle: string;
+        let notificationMessage: string;
 
-        if (message && message.trim()) {
+        if (typeof statement === 'string') {
+          // Old format - use generic title
+          notificationTitle = `🍽️ What to Look For`;
+          notificationMessage = statement;
+        } else {
+          // New format - use statement title as notification title, description as message
+          notificationTitle = `🍽️ ${statement.title}`;
+          notificationMessage = statement.description;
+        }
+
+        if (notificationTitle && notificationMessage && notificationMessage.trim()) {
           const notificationTime = new Date(baseTime.getTime() + delays[index]);
 
           PushNotification.localNotificationSchedule({
             id: `unrated-meal-statement-${mealData.mealId}-${index}`,
             channelId: 'meal-insights',
-            title: `🍽️ What to Look For`,
-            message: message,
+            title: notificationTitle,
+            message: notificationMessage,
             date: notificationTime,
             allowWhileIdle: true,
             playSound: true,
             soundName: 'default',
+            invokeApp: false, // Don't open app when notification is tapped
             userInfo: {
               type: 'unrated-meal-statement',
               mealId: mealData.mealId,
@@ -72,6 +84,8 @@ export const scheduleUnratedMealNotifications = async (
           });
 
           console.log(`📬 Statement notification ${index + 1} scheduled for:`, notificationTime.toLocaleTimeString());
+          console.log(`   Title: ${notificationTitle}`);
+          console.log(`   Message: ${notificationMessage.substring(0, 50)}...`);
         }
       });
     }
@@ -83,17 +97,19 @@ export const scheduleUnratedMealNotifications = async (
     PushNotification.localNotificationSchedule({
       id: `unrated-meal-reminder-${mealData.mealId}`,
       channelId: 'meal-reminders',
-      title: '⏰ Rate your meal!',
-      message: `Don't forget to rate your ${mealData.dishName}${mealData.restaurantName ? ` from ${mealData.restaurantName}` : ''}`,
+      title: '⏰ How was your meal?',
+      message: `Don't forget to rate your ${mealData.dishName} and check out your custom emoji!`,
       date: reminderTime,
       allowWhileIdle: true,
       playSound: true,
       soundName: 'default',
+      // invokeApp is true by default - will open app and navigate to EditMealScreen
       userInfo: {
         type: 'unrated-meal-reminder',
         mealId: mealData.mealId,
         dishName: mealData.dishName,
-        checkReviewStatus: true // Will verify meal is still unrated before showing
+        checkReviewStatus: true, // Will verify meal is still unrated before showing
+        navigateToEditMeal: true // Signal to navigate to EditMealScreen
       }
     });
 

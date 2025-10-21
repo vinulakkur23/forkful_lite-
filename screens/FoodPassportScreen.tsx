@@ -130,6 +130,7 @@ interface Cuisine {
 interface Restaurant {
   name: string;
   mealCount: number;
+  emojiUrls?: string[]; // Pixel art emojis for meals at this restaurant
 }
 
 // Define the tab routes
@@ -984,13 +985,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const userData = userDoc.data();
             const uniqueRestaurants = userData?.uniqueRestaurants || [];
 
-            // Get meal counts per restaurant
+            // Get meal counts and emojis per restaurant
             const mealsQuery = await firestore()
                 .collection('mealEntries')
                 .where('userId', '==', targetUserId)
                 .get();
 
             const restaurantMealCounts: { [restaurant: string]: number } = {};
+            const restaurantEmojiUrls: { [restaurant: string]: string[] } = {};
+
             mealsQuery.docs.forEach(doc => {
                 const data = doc.data();
                 if (data.restaurant) {
@@ -1004,6 +1007,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
                     if (restaurantName && restaurantName !== '' && restaurantName.toLowerCase() !== 'unknown' && restaurantName.toLowerCase() !== 'n/a') {
                         restaurantMealCounts[restaurantName] = (restaurantMealCounts[restaurantName] || 0) + 1;
+
+                        // Collect pixel art emoji URLs
+                        if (data.pixel_art_url) {
+                            if (!restaurantEmojiUrls[restaurantName]) {
+                                restaurantEmojiUrls[restaurantName] = [];
+                            }
+                            restaurantEmojiUrls[restaurantName].push(data.pixel_art_url);
+                        }
                     }
                 }
             });
@@ -1016,7 +1027,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 if (mealCount > 0) {
                     restaurantsWithData.push({
                         name: restaurantName,
-                        mealCount: mealCount
+                        mealCount: mealCount,
+                        emojiUrls: restaurantEmojiUrls[restaurantName] || []
                     });
                 }
             }
@@ -1580,6 +1592,19 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             <Text style={styles.restaurantListName} numberOfLines={1}>
                 {item.name}
             </Text>
+            {/* Display meal emojis on the right */}
+            {item.emojiUrls && item.emojiUrls.length > 0 && (
+                <View style={styles.restaurantEmojiContainer}>
+                    {item.emojiUrls.slice(0, 5).map((url, index) => (
+                        <Image
+                            key={index}
+                            source={{ uri: url }}
+                            style={styles.restaurantEmoji}
+                            resizeMode="contain"
+                        />
+                    ))}
+                </View>
+            )}
         </TouchableOpacity>
     );
 
@@ -2584,12 +2609,26 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xs,
         borderRadius: spacing.xs,
         ...shadows.light,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     restaurantListName: {
         fontFamily: 'Unna',
         fontSize: 16,
         fontWeight: '500',
         color: colors.textPrimary,
+        flex: 1,
+    },
+    restaurantEmojiContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: spacing.sm,
+    },
+    restaurantEmoji: {
+        width: 20,
+        height: 20,
+        marginLeft: 2,
     },
     pieChartContainer: {
         alignItems: 'center',

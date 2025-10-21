@@ -24,7 +24,44 @@ class NotificationService {
       onNotification: async function (notification) {
         console.log('NOTIFICATION:', notification);
 
-        // Handle conditional meal reminders
+        // Handle unrated meal reminders (check if still unrated)
+        if (notification.userInfo?.type === 'unrated-meal-reminder' && notification.userInfo?.checkReviewStatus) {
+          const mealId = notification.userInfo.mealId;
+          const dishName = notification.userInfo.dishName;
+
+          try {
+            // Import Firebase here to avoid circular imports
+            const { firestore } = await import('../firebaseConfig');
+
+            console.log('Checking meal review status for unrated meal reminder:', mealId);
+
+            // Get meal document from Firestore
+            const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+
+            if (mealDoc.exists) {
+              const mealData = mealDoc.data();
+              const rating = mealData?.rating || 0;
+
+              // Only show notification if meal is still unrated
+              if (rating === 0 || !rating) {
+                console.log('Meal is still unrated, showing notification:', mealId);
+                // Notification will display normally since meal is unrated
+              } else {
+                console.log('Meal already rated, canceling notification:', { mealId, rating });
+                // Cancel the notification since meal is already rated
+                PushNotification.cancelLocalNotifications({
+                  id: `unrated-meal-reminder-${mealId}`
+                });
+                return; // Don't process notification further
+              }
+            }
+          } catch (error) {
+            console.error('Error checking meal rating status in notification:', error);
+            // If check fails, show notification anyway as fallback
+          }
+        }
+
+        // Handle conditional meal reminders (legacy)
         if (notification.userInfo?.type === 'meal-reminder-conditional' && notification.userInfo?.checkReviewStatus) {
           const mealId = notification.userInfo.mealId;
           const dishName = notification.userInfo.dishName;
@@ -61,10 +98,41 @@ class NotificationService {
           }
         }
 
-        // Handle notification tap
+        // Handle notification tap - navigate to EditMealScreen if needed
         if (notification.userInteraction) {
           console.log('User tapped on notification');
-          // You can navigate to specific screen here if needed
+
+          // Navigate to EditMealScreen for unrated meal reminders
+          if (notification.userInfo?.navigateToEditMeal && notification.userInfo?.mealId) {
+            const mealId = notification.userInfo.mealId;
+            console.log('Navigating to EditMealScreen for meal:', mealId);
+
+            try {
+              // Import navigation service
+              const { navigate } = await import('./navigationService');
+              const { firestore } = await import('../firebaseConfig');
+
+              // Fetch meal data to pass to EditMealScreen
+              const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+
+              if (mealDoc.exists) {
+                const mealData = { id: mealDoc.id, ...mealDoc.data() };
+
+                // Navigate to EditMealScreen with meal data
+                navigate('EditMeal', {
+                  mealId: mealId,
+                  meal: mealData,
+                  previousScreen: 'Notification'
+                });
+
+                console.log('Successfully navigated to EditMealScreen from notification');
+              } else {
+                console.error('Meal not found for navigation:', mealId);
+              }
+            } catch (error) {
+              console.error('Error navigating from notification:', error);
+            }
+          }
         }
 
         // IMPORTANT: For iOS, must call finish to allow foreground notifications

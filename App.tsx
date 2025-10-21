@@ -451,7 +451,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
       <Modal
         visible={showPhotoSourceModal}
         transparent={true}
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setShowPhotoSourceModal(false)}
       >
         <TouchableOpacity
@@ -465,8 +465,11 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               onPress={handleCameraPress}
               activeOpacity={0.7}
             >
-              <Icon name="camera-alt" size={40} color="#5B8A72" />
-              <Text style={styles.photoSourceOptionText}>Take Photo</Text>
+              <Image
+                source={require('./assets/icons/camera-inactive.png')}
+                style={styles.photoSourceIcon}
+              />
+              <Text style={styles.photoSourceOptionText}>Eating? Capture your meal</Text>
             </TouchableOpacity>
 
             <View style={styles.photoSourceDivider} />
@@ -476,8 +479,11 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               onPress={handleUploadPress}
               activeOpacity={0.7}
             >
-              <Icon name="photo-library" size={40} color="#5B8A72" />
-              <Text style={styles.photoSourceOptionText}>Upload Photo</Text>
+              <Image
+                source={require('./assets/icons/upload-inactive.png')}
+                style={styles.photoSourceIcon}
+              />
+              <Text style={styles.photoSourceOptionText}>Done? Upload from gallery</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1015,11 +1021,17 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 10,
   },
+  photoSourceIcon: {
+    width: 40,
+    height: 40,
+    resizeMode: 'contain',
+  },
   photoSourceOptionText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginLeft: 20,
+    flex: 1,
   },
   photoSourceDivider: {
     height: 1,

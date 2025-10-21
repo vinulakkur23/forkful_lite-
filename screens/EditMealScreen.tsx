@@ -581,17 +581,26 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleCloseRestaurantHistory = (): void => {
     setShowRestaurantHistory(false);
-    // Navigate to meal detail after closing restaurant history
-    navigation.navigate('MealDetail', { 
-      mealId: mealId,
-      justEdited: true,
-      // Pass through navigation context
-      previousScreen: route.params?.previousScreen,
-      previousTabIndex: route.params?.previousTabIndex,
-      passportUserId: route.params?.passportUserId,
-      passportUserName: route.params?.passportUserName,
-      passportUserPhoto: route.params?.passportUserPhoto
-    });
+    // Navigate to FoodPassport after closing restaurant history
+    const passportUserId = route.params?.passportUserId;
+    const passportUserName = route.params?.passportUserName;
+    const passportUserPhoto = route.params?.passportUserPhoto;
+    const previousTabIndex = route.params?.previousTabIndex;
+
+    if (passportUserId) {
+      // Navigate back to the specific user's passport
+      navigation.navigate('FoodPassport', {
+        userId: passportUserId,
+        userName: passportUserName,
+        userPhoto: passportUserPhoto,
+        tabIndex: previousTabIndex || 0
+      });
+    } else {
+      // Navigate back to own passport
+      navigation.navigate('FoodPassport', {
+        tabIndex: previousTabIndex || 0
+      });
+    }
   };
 
   // Helper function to render text with bold formatting
@@ -1068,20 +1077,30 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         console.log('Path 2: Showing thank you modal');
         setShowThankYouModal(true);
       } else {
-        // Default: Show restaurant history overlay or go to meal detail
+        // Default: Show restaurant history overlay or go to FoodPassport
         if (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) {
           setShowRestaurantHistory(true);
         } else {
-          // No restaurant history, go straight to meal detail
-          navigation.navigate('MealDetail', {
-            mealId: mealId,
-            justEdited: true,
-            previousScreen: route.params?.previousScreen,
-            previousTabIndex: route.params?.previousTabIndex,
-            passportUserId: route.params?.passportUserId,
-            passportUserName: route.params?.passportUserName,
-            passportUserPhoto: route.params?.passportUserPhoto
-          });
+          // No restaurant history, go straight to FoodPassport
+          const passportUserId = route.params?.passportUserId;
+          const passportUserName = route.params?.passportUserName;
+          const passportUserPhoto = route.params?.passportUserPhoto;
+          const previousTabIndex = route.params?.previousTabIndex;
+
+          if (passportUserId) {
+            // Navigate back to the specific user's passport
+            navigation.navigate('FoodPassport', {
+              userId: passportUserId,
+              userName: passportUserName,
+              userPhoto: passportUserPhoto,
+              tabIndex: previousTabIndex || 0
+            });
+          } else {
+            // Navigate back to own passport
+            navigation.navigate('FoodPassport', {
+              tabIndex: previousTabIndex || 0
+            });
+          }
         }
       }
     } catch (error) {
