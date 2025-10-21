@@ -1006,14 +1006,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     }
 
                     if (restaurantName && restaurantName !== '' && restaurantName.toLowerCase() !== 'unknown' && restaurantName.toLowerCase() !== 'n/a') {
-                        restaurantMealCounts[restaurantName] = (restaurantMealCounts[restaurantName] || 0) + 1;
+                        // Normalize restaurant name for consistent matching
+                        const normalizedName = restaurantName;
 
-                        // Collect pixel art emoji URLs
+                        restaurantMealCounts[normalizedName] = (restaurantMealCounts[normalizedName] || 0) + 1;
+
+                        // Collect pixel art emoji URLs (check both URL and data fields)
                         if (data.pixel_art_url) {
-                            if (!restaurantEmojiUrls[restaurantName]) {
-                                restaurantEmojiUrls[restaurantName] = [];
+                            if (!restaurantEmojiUrls[normalizedName]) {
+                                restaurantEmojiUrls[normalizedName] = [];
                             }
-                            restaurantEmojiUrls[restaurantName].push(data.pixel_art_url);
+                            restaurantEmojiUrls[normalizedName].push(data.pixel_art_url);
+                        } else if (data.pixel_art_data) {
+                            // If it's base64 data, convert to data URI
+                            if (!restaurantEmojiUrls[normalizedName]) {
+                                restaurantEmojiUrls[normalizedName] = [];
+                            }
+                            restaurantEmojiUrls[normalizedName].push(`data:image/png;base64,${data.pixel_art_data}`);
                         }
                     }
                 }
@@ -1022,13 +1031,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const restaurantsWithData: Restaurant[] = [];
 
             for (const restaurantName of uniqueRestaurants) {
-                const mealCount = restaurantMealCounts[restaurantName] || 0;
+                // Normalize the restaurant name from uniqueRestaurants too
+                const normalizedUniqueName = restaurantName.trim();
+                const mealCount = restaurantMealCounts[normalizedUniqueName] || 0;
 
                 if (mealCount > 0) {
+                    const emojis = restaurantEmojiUrls[normalizedUniqueName] || [];
+
                     restaurantsWithData.push({
-                        name: restaurantName,
+                        name: normalizedUniqueName,
                         mealCount: mealCount,
-                        emojiUrls: restaurantEmojiUrls[restaurantName] || []
+                        emojiUrls: emojis
                     });
                 }
             }
