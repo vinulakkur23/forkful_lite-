@@ -47,6 +47,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPermission, setHasPermission] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [showFlash, setShowFlash] = useState(false);
   
   // Get device dimensions
   const screenWidth = Dimensions.get('window').width;
@@ -191,9 +192,31 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       const mealId = docRef.id;
       console.log('✅ Firestore document created:', mealId);
 
-      // Step 2: Now upload photo to Firebase Storage (document exists, so security rules pass)
-      console.log('📤 Uploading photo to Firebase Storage...');
-      const photoUrl = await uploadImageToFirebase(photoUri, user.uid);
+      // Step 1.5: Resize image before upload to reduce file size
+      console.log('🔄 Resizing image for upload and API calls...');
+      const resizedImage = await ImageResizer.createResizedImage(
+        photoUri,
+        1400, // Max width - matches gallery flow
+        1400, // Max height - matches gallery flow
+        'JPEG',
+        95, // Quality - high quality for display
+        0, // Rotation
+        undefined, // Output path (auto-generated)
+        false, // Keep metadata
+        {
+          mode: 'contain', // Maintain aspect ratio
+          onlyScaleDown: true, // Don't upscale if image is smaller
+        }
+      );
+      console.log('✅ Image resized:', {
+        original: photoUri,
+        resized: resizedImage.uri,
+        dimensions: `${resizedImage.width}x${resizedImage.height}`
+      });
+
+      // Step 2: Now upload resized photo to Firebase Storage (document exists, so security rules pass)
+      console.log('📤 Uploading resized photo to Firebase Storage...');
+      const photoUrl = await uploadImageToFirebase(resizedImage.uri, user.uid);
       console.log('✅ Photo uploaded:', photoUrl);
 
       // Step 3: Update document with photo URL
@@ -203,16 +226,16 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       });
       console.log('✅ Document updated with photo URL');
 
-      // Show brief loading message AFTER upload completes
-      Alert.alert('Photo Saved!', 'Analyzing your meal in the background...', [
-        { text: 'OK', onPress: () => navigation.navigate('FoodPassport', { tabIndex: 0 }) }
-      ]);
+      // Navigate immediately to Food Passport - no blocking alert
+      // User will see meal appear in their passport instantly
+      console.log('📱 Navigating to Food Passport');
+      navigation.navigate('FoodPassport', { tabIndex: 0 });
 
       // Step 4: Start background API calls (non-blocking)
       console.log('🔄 Starting background API calls...');
 
-      // Call 1: Identify dish from photo
-      identifyDishFromPhoto(photoUri).then(async (dishData) => {
+      // Call 1: Identify dish from resized photo (saves API costs and processing time)
+      identifyDishFromPhoto(resizedImage.uri).then(async (dishData) => {
         if (dishData && dishData.dish_name) {
           console.log('✅ Dish identified:', dishData.dish_name);
 
@@ -245,8 +268,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             }
           }).catch(err => console.error('❌ Rating statements error:', err));
 
-          // Call 3: Generate pixel art icon (nano banana)
-          generatePixelArtIcon(dishData.dish_name, photoUri).then(async (pixelArtData) => {
+          // Call 3: Generate pixel art icon from resized photo (saves API costs)
+          generatePixelArtIcon(dishData.dish_name, resizedImage.uri).then(async (pixelArtData) => {
             if (pixelArtData && pixelArtData.image_data) {
               console.log('✅ Pixel art generated');
 
@@ -268,9 +291,41 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 const downloadUrl = await storageRef.getDownloadURL();
                 console.log('✅ Pixel art uploaded, URL:', downloadUrl);
 
-                // Update meal with pixel art URL
+                // Save pixel art locally for notification display
+                let localPixelArtPath = null;
+                try {
+                  // Use shared app group directory so notifications can access it
+                  // Format: group.{bundle-id} - will need to be configured in Xcode
+                  const sharedDir = RNFS.LibraryDirectoryPath; // Falls back to app directory if no app group
+                  const pixelArtDir = `${sharedDir}/PixelArt`;
+
+                  // Create directory if it doesn't exist
+                  const dirExists = await RNFS.exists(pixelArtDir);
+                  if (!dirExists) {
+                    await RNFS.mkdir(pixelArtDir);
+                  }
+
+                  // Save pixel art as PNG file
+                  const localFileName = `pixel_art_${mealId}.png`;
+                  localPixelArtPath = `${pixelArtDir}/${localFileName}`;
+
+                  // Write base64 data to file
+                  await RNFS.writeFile(localPixelArtPath, pixelArtData.image_data, 'base64');
+                  console.log('✅ Pixel art saved locally:', localPixelArtPath);
+
+                  // Update the pixel art notification to include the image attachment
+                  // Import and call helper to re-schedule notification with image
+                  const { updatePixelArtNotificationWithImage } = await import('../services/pixelArtNotificationHelper');
+                  await updatePixelArtNotificationWithImage(mealId, dishData.dish_name, localPixelArtPath);
+                } catch (localSaveError) {
+                  console.error('⚠️ Error saving pixel art locally (notification may not show image):', localSaveError);
+                  // Don't fail the whole process if local save fails
+                }
+
+                // Update meal with pixel art URL and local path
                 await firestore().collection('mealEntries').doc(mealId).update({
                   pixel_art_url: downloadUrl,
+                  pixel_art_local_path: localPixelArtPath, // Store local path for notifications
                   pixel_art_prompt: pixelArtData.prompt_used,
                   pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
                 });
@@ -341,6 +396,10 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             // Ensure photo matches preview dimensions
             enableShutterSound: false
           });
+
+          // Show camera flash animation immediately for feedback
+          setShowFlash(true);
+          setTimeout(() => setShowFlash(false), 200);
 
           // Verify we got a valid photo
           if (!photo || !photo.path) {
@@ -674,6 +733,11 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
+      {/* Camera flash overlay for snap feedback */}
+      {showFlash && (
+        <View style={styles.flashOverlay} />
+      )}
+
       {/* Instructional text at top */}
       <View style={styles.instructionalTextContainer}>
         <Text style={styles.instructionalText}>
@@ -791,6 +855,16 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(255,255,255,0.05)', // Very subtle overlay to show capture area
+  },
+  flashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'white',
+    opacity: 0.8,
+    zIndex: 10,
   },
   overlay: {
     position: 'absolute',

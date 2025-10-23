@@ -518,7 +518,7 @@ const App: React.FC = () => {
   const prevStateRef = useRef<NavigationState | null>(null);
 
 
-  // Configure Google Sign-In and warm up backend
+  // Configure Google Sign-In, notifications, and warm up backend
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '219668861569-qm93jan5voigimfur98slrudb78r6uvp.apps.googleusercontent.com',
@@ -526,6 +526,40 @@ const App: React.FC = () => {
 
     // Initialize notification channels for unrated meals
     initializeUnratedMealNotificationChannels();
+
+    // Request notification permissions early (for both react-native-push-notification and Notifee)
+    const requestNotificationPermissions = async () => {
+      try {
+        // Request permissions for Notifee (iOS & Android)
+        const notifee = (await import('@notifee/react-native')).default;
+        const { EventType } = await import('@notifee/react-native');
+
+        const settings = await notifee.requestPermission();
+        console.log('📱 Notifee permission requested at startup:', settings.authorizationStatus);
+
+        // Set up Notifee event handler to prevent app from opening on tap
+        notifee.onForegroundEvent(({ type, detail }) => {
+          if (type === EventType.PRESS) {
+            // Check if this is a non-interactive notification
+            const notificationData = detail.notification?.data;
+            if (notificationData?.ignoreTap === 'true' || notificationData?.type === 'unrated-meal-pixel-art') {
+              console.log('Ignoring tap on non-interactive Notifee notification');
+              // Don't do anything - prevents app from opening
+              return;
+            }
+          }
+        });
+
+        // Request permissions for react-native-push-notification (iOS)
+        const notificationService = (await import('./services/notificationService')).default;
+        await notificationService.requestPermissions();
+        console.log('📱 Push notification permissions requested at startup');
+      } catch (error) {
+        console.error('Error requesting notification permissions:', error);
+      }
+    };
+
+    requestNotificationPermissions();
 
     // PERFORMANCE: Warm up the backend service to reduce first API call delay
     warmupQuickCriteriaService().then(success => {

@@ -108,6 +108,12 @@ class NotificationService {
             return;
           }
 
+          // Ignore taps on pixel art notifications (non-interactive)
+          if (notification.userInfo?.type === 'unrated-meal-pixel-art' || notification.data?.ignoreTap === 'true') {
+            console.log('Ignoring tap on pixel art notification - these are non-interactive');
+            return;
+          }
+
           // Navigate to EditMealScreen for unrated meal reminders
           if (notification.userInfo?.navigateToEditMeal && notification.userInfo?.mealId) {
             const mealId = notification.userInfo.mealId;

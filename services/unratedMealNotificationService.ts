@@ -43,9 +43,9 @@ export const scheduleUnratedMealNotifications = async (
       // Schedule notifications every 1 minute (for testing)
       const baseTime = new Date();
       const delays = [
+        0.5 * 60 * 1000, // 30 seconds (for faster testing)
         1 * 60 * 1000, // 1 minute
-        2 * 60 * 1000, // 2 minutes
-        3 * 60 * 1000, // 3 minutes
+        1.5 * 60 * 1000, // 1.5 minutes
       ];
 
       top3Statements.forEach((statement, index) => {
@@ -90,6 +90,41 @@ export const scheduleUnratedMealNotifications = async (
         }
       });
     }
+
+    // Schedule pixel art reveal notification for 2 minutes later (for testing)
+    // By then, pixel art will be generated and saved locally
+    const pixelArtTime = new Date();
+    pixelArtTime.setMinutes(pixelArtTime.getMinutes() + 2);
+
+    // Note: The pixel art local path will be fetched when this notification fires
+    // We'll update the notification dynamically if we detect the file is ready
+    PushNotification.localNotificationSchedule({
+      id: `unrated-meal-pixel-art-${mealData.mealId}`,
+      channelId: 'meal-insights',
+      title: '🎨 Your custom emoji is ready!',
+      message: `Check out the unique emoji we created for your ${mealData.dishName}`,
+      date: pixelArtTime,
+      allowWhileIdle: true,
+      playSound: true,
+      soundName: 'default',
+      ignoreInForeground: false,
+      invokeApp: false, // Don't open app automatically
+      // iOS: For notification attachments to work, we need to:
+      // 1. Pass local file path in notification data
+      // 2. iOS will automatically load and display the image
+      // Note: This requires the pixel art to be saved locally first (done in CameraScreen)
+      userInfo: {
+        type: 'unrated-meal-pixel-art',
+        mealId: mealData.mealId,
+        dishName: mealData.dishName,
+        showPixelArt: true,
+        // The local path will be fetched from Firestore when notification fires
+        needsPixelArtPath: true
+      }
+    });
+
+    console.log('📬 Pixel art reveal scheduled for:', pixelArtTime.toLocaleTimeString());
+    console.log('   Note: Pixel art image will be attached if local file path is available');
 
     // Schedule rating reminder notification for 2 hours later
     const reminderTime = new Date();
@@ -136,6 +171,9 @@ export const cancelUnratedMealNotifications = (mealId: string): void => {
     // Also cancel old format for backward compatibility
     PushNotification.cancelLocalNotification(`unrated-meal-criteria-${mealId}-${i}`);
   }
+
+  // Cancel pixel art reveal notification
+  PushNotification.cancelLocalNotification(`unrated-meal-pixel-art-${mealId}`);
 
   // Cancel reminder notification
   PushNotification.cancelLocalNotification(`unrated-meal-reminder-${mealId}`);
