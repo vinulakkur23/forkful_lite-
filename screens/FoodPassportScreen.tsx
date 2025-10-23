@@ -166,7 +166,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     
     // Photo selection menu state
     const [showPhotoMenu, setShowPhotoMenu] = useState(false);
-    
+
+    // Restaurant modal state
+    const [showRestaurantModal, setShowRestaurantModal] = useState(false);
+    const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
 
     // Tab view state
     const [tabIndex, setTabIndex] = useState(0);
@@ -1579,28 +1582,35 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         </TouchableOpacity>
     );
 
+    // Handle restaurant tap - show modal
+    const handleRestaurantPress = (restaurant: Restaurant) => {
+        setSelectedRestaurant(restaurant);
+        setShowRestaurantModal(true);
+    };
+
+    // Handle viewing meals for a restaurant
+    const handleViewRestaurantMeals = (restaurant: Restaurant) => {
+        setShowRestaurantModal(false);
+        if (navigation && onFilterChange && onTabChange) {
+            // Create restaurant filter
+            const restaurantFilter: FilterItem = {
+                type: 'restaurant',
+                value: restaurant.name,
+                label: restaurant.name
+            };
+
+            // Set the filter
+            onFilterChange([restaurantFilter]);
+
+            // Switch to meals tab (index 0)
+            onTabChange(0);
+        }
+    };
+
     const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
         <TouchableOpacity
             style={styles.restaurantListItem}
-            onPress={() => {
-                if (navigation && onFilterChange && onTabChange) {
-                    // Create restaurant filter
-                    const restaurantFilter: FilterItem = {
-                        type: 'restaurant',
-                        value: item.name,
-                        label: item.name
-                    };
-
-                    // Set the filter
-                    onFilterChange([restaurantFilter]);
-
-                    // Switch to meals tab (index 0)
-                    onTabChange(0);
-                } else {
-                    // Fallback if functions not available
-                    Alert.alert('View Restaurant', `Showing meals for ${item.name}`);
-                }
-            }}
+            onPress={() => handleRestaurantPress(item)}
         >
             <Text style={styles.restaurantListName} numberOfLines={1}>
                 {item.name}
@@ -2105,6 +2115,63 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             </View>
                         </View>
                     </TouchableOpacity>
+                </View>
+            </Modal>
+
+            {/* Restaurant Fact Modal */}
+            <Modal
+                visible={showRestaurantModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowRestaurantModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.restaurantModalContent}>
+                        {selectedRestaurant && (
+                            <>
+                                <View style={styles.restaurantModalHeader}>
+                                    <View style={styles.restaurantModalTitleContainer}>
+                                        <Text style={styles.restaurantModalTitle}>
+                                            {selectedRestaurant.name}
+                                        </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.modalCloseButton}
+                                        onPress={() => setShowRestaurantModal(false)}
+                                    >
+                                        <Text style={styles.modalCloseText}>✕</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.restaurantDescriptionSection}>
+                                    <Text style={styles.restaurantDescriptionText}>
+                                        Brief description of restaurant
+                                    </Text>
+                                </View>
+
+                                {/* Display meal emojis */}
+                                {selectedRestaurant.emojiUrls && selectedRestaurant.emojiUrls.length > 0 && (
+                                    <View style={styles.restaurantModalEmojiContainer}>
+                                        {selectedRestaurant.emojiUrls.map((url, index) => (
+                                            <Image
+                                                key={index}
+                                                source={{ uri: url }}
+                                                style={styles.restaurantModalEmoji}
+                                                resizeMode="contain"
+                                            />
+                                        ))}
+                                    </View>
+                                )}
+
+                                <TouchableOpacity
+                                    style={styles.viewMealsButton}
+                                    onPress={() => handleViewRestaurantMeals(selectedRestaurant)}
+                                >
+                                    <Text style={styles.viewMealsButtonText}>View Meals</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
                 </View>
             </Modal>
         </SafeAreaView>
@@ -2751,6 +2818,96 @@ const styles = StyleSheet.create({
         ...typography.bodySmall,
         color: colors.charcoal,
         fontWeight: '600',
+    },
+    // Restaurant Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    restaurantModalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    restaurantModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+    },
+    restaurantModalIcon: {
+        fontSize: 32,
+        marginRight: 12,
+    },
+    restaurantModalTitleContainer: {
+        flex: 1,
+    },
+    restaurantModalTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#1a2b49',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        marginBottom: 4,
+    },
+    restaurantModalSubtitle: {
+        fontSize: 14,
+        color: '#666',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    modalCloseButton: {
+        padding: 4,
+    },
+    modalCloseText: {
+        fontSize: 24,
+        color: '#999',
+        fontWeight: '300',
+    },
+    restaurantDescriptionSection: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 20,
+    },
+    restaurantDescriptionText: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#888',
+        fontStyle: 'italic',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        textAlign: 'center',
+    },
+    restaurantModalEmojiContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        gap: 12,
+    },
+    restaurantModalEmoji: {
+        width: 48,
+        height: 48,
+    },
+    viewMealsButton: {
+        backgroundColor: '#4a90e2',
+        borderRadius: 8,
+        paddingVertical: 14,
+        alignItems: 'center',
+    },
+    viewMealsButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
+        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     },
 });
 

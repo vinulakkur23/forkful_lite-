@@ -789,6 +789,16 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.titleContent}>
             <View style={styles.mealInfoColumn}>
               <View style={styles.mealNameRow}>
+                {/* Pixel art emoji */}
+                {(meal.pixel_art_url || meal.pixel_art_data) && (
+                  <Image
+                    source={{
+                      uri: meal.pixel_art_url || `data:image/png;base64,${meal.pixel_art_data}`
+                    }}
+                    style={styles.pixelArtEmoji}
+                    resizeMode="contain"
+                  />
+                )}
                 <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
                 {justEdited && (
                   <View style={styles.editedBadge}>
@@ -1205,7 +1215,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       */}
       
       {/* Comments Section - appears before the action buttons */}
-      <CommentsSection 
+      <CommentsSection
         mealId={mealId}
         scrollViewRef={scrollViewRef}
         onUserPress={(userId, userName, userPhoto) => {
@@ -1218,7 +1228,20 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         }}
       />
-      
+
+      {/* Dish History Section */}
+      {meal.dish_insights?.dish_history && (
+        <View style={styles.dishHistoryContainer}>
+          <View style={styles.dishHistoryHeader}>
+            <Text style={styles.dishHistoryIcon}>📚</Text>
+            <Text style={styles.dishHistoryTitle}>Dish History</Text>
+          </View>
+          <Text style={styles.dishHistoryText}>
+            {renderTextWithBold(meal.dish_insights.dish_history)}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.actionsContainer}>
         {meal.userId === auth().currentUser?.uid ? (
           // If user is the owner, show all buttons with equal sizing and spacing
@@ -1688,6 +1711,37 @@ const styles = StyleSheet.create({
     color: '#999',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
+  // Dish History styles
+  dishHistoryContainer: {
+    backgroundColor: '#fff9e6',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f39c12',
+  },
+  dishHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dishHistoryIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  dishHistoryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  dishHistoryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#2c3e50',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   // Metadata styles
   metadataContainer: {
     padding: 20,
@@ -1929,6 +1983,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  pixelArtEmoji: {
+    width: 32,
+    height: 32,
+    marginRight: 8,
   },
   // Button column for wishlist and cheers buttons
   buttonColumn: {

@@ -134,8 +134,23 @@ export const getMostActiveUsers = async (
       .doc(currentUser.uid)
       .collection('following')
       .get();
-    
+
     const followingSet = new Set(followingSnapshot.docs.map(doc => doc.id));
+
+    // Get total meal counts for each user
+    const totalMealCounts = new Map<string, number>();
+    for (const userId of userIds) {
+      try {
+        const userMealsSnapshot = await firestore()
+          .collection('mealEntries')
+          .where('userId', '==', userId)
+          .get();
+        totalMealCounts.set(userId, userMealsSnapshot.size);
+      } catch (error) {
+        console.log('Error fetching total meal count for user:', userId, error);
+        totalMealCounts.set(userId, userMealMap.get(userId)?.mealCount || 0);
+      }
+    }
 
     // Convert to user objects
     const activeUsers: NearbyUser[] = [];
@@ -143,7 +158,7 @@ export const getMostActiveUsers = async (
     userMealMap.forEach((userData, userId) => {
       // Get enhanced user data if available
       const enhancedUserData = userDataMap.get(userId);
-      
+
       activeUsers.push({
         id: userId,
         displayName: enhancedUserData?.displayName || userData.userName,
@@ -154,7 +169,7 @@ export const getMostActiveUsers = async (
           city: userData.location.city
         } : { latitude: 0, longitude: 0 },
         distance: 0, // Not using distance anymore
-        recentMealCount: userData.mealCount,
+        recentMealCount: totalMealCounts.get(userId) || userData.mealCount,
         lastActiveAt: userData.lastMealDate,
         isFollowing: followingSet.has(userId)
       });

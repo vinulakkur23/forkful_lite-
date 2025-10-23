@@ -1072,6 +1072,33 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         // Don't block the save if this fails
       }
 
+      // Extract 3 dish insights (history, restaurant fact, cultural insight)
+      // This happens AFTER user enters restaurant + dish name
+      logWithSession('Extracting dish insights (history, restaurant fact, cultural)...');
+      try {
+        const { extractDishInsights } = await import('../services/dishInsightsService');
+
+        const insightsData = await extractDishInsights(
+          mealName || '',
+          restaurant || undefined,
+          cityInfo || undefined
+        );
+
+        if (insightsData) {
+          console.log('✅ Dish insights extracted:', {
+            has_history: !!insightsData.dish_history,
+            has_restaurant_fact: !!insightsData.restaurant_fact,
+            has_cultural_insight: !!insightsData.cultural_insight
+          });
+          await firestore().collection('mealEntries').doc(mealId).update({
+            dish_insights: insightsData
+          });
+        }
+      } catch (err) {
+        console.error('❌ Dish insights error:', err);
+        // Don't block the save if this fails
+      }
+
       // Check if this meal completes any active challenges (in background)
       const checkChallengeCompletion = async () => {
         try {

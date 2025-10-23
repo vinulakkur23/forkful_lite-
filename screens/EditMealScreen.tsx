@@ -1779,6 +1779,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     borderRadius: 8,
   },
+  culturalInsightContainer: {
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4a90e2',
+  },
+  culturalInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  culturalInsightIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  culturalInsightTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a2b49',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  culturalInsightText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#2c3e50',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
   buttonText: {
     color: '#1a2b49',
     fontWeight: '600',
