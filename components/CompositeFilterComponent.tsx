@@ -3,6 +3,8 @@ import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import SimpleFilterComponent, { FilterItem } from './SimpleFilterComponent';
 import RatingFilterComponent from './RatingFilterComponent';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 export type SortOption = 'chronological' | 'rating';
 
@@ -60,57 +62,13 @@ const CompositeFilterComponent: React.FC<CompositeFilterComponentProps> = ({
           />
         </View>
 
-        {/* Sort button with dropdown */}
-        <View style={styles.sortContainer}>
-          <TouchableOpacity
-            style={styles.sortButton}
-            onPress={handleSortDropdownToggle}
-          >
-            <Icon name="sort" size={20} color="#1a2b49" />
-          </TouchableOpacity>
-
-          {showSortDropdown && (
-            <View style={styles.sortDropdownContainer}>
-              <View style={styles.sortDropdownContent}>
-                <TouchableOpacity
-                  style={[
-                    styles.sortOption,
-                    currentSort === 'chronological' && styles.sortOptionActive
-                  ]}
-                  onPress={() => handleSortChange('chronological')}
-                >
-                  <Text style={[
-                    styles.sortOptionText,
-                    currentSort === 'chronological' && styles.sortOptionTextActive
-                  ]}>
-                    Recent
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.sortOption,
-                    currentSort === 'rating' && styles.sortOptionActive
-                  ]}
-                  onPress={() => handleSortChange('rating')}
-                >
-                  <Text style={[
-                    styles.sortOptionText,
-                    currentSort === 'rating' && styles.sortOptionTextActive
-                  ]}>
-                    Rating
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
         <RatingFilterComponent
           onRatingFilterChange={onRatingFilterChange}
           initialRatings={initialRatings}
           showDropdown={showRatingDropdown}
           onDropdownToggle={handleRatingDropdownToggle}
+          onSortChange={onSortChange}
+          initialSort={initialSort}
         />
       </View>
     </View>
@@ -129,56 +87,51 @@ const styles = StyleSheet.create({
   },
   searchFilterContainer: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   sortContainer: {
     position: 'relative',
     zIndex: 1000,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   sortButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.mediumGray,
   },
   sortDropdownContainer: {
     position: 'absolute',
     top: 45,
     right: 0,
     zIndex: 1001,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    ...shadows.medium,
   },
   sortDropdownContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
     width: 120,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.mediumGray,
   },
   sortOption: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.lightGray,
   },
   sortOptionActive: {
     backgroundColor: '#e8f5e9',
   },
   sortOptionText: {
-    fontSize: 14,
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
   },
   sortOptionTextActive: {
     color: '#5B8A72',

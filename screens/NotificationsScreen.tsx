@@ -16,6 +16,8 @@ import { RootStackParamList } from '../App';
 import { auth } from '../firebaseConfig';
 import inAppNotificationService, { InAppNotification } from '../services/inAppNotificationService';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -183,43 +185,41 @@ const NotificationsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: colors.lightTan,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   backButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
   backIcon: {
     width: 24,
     height: 24,
-    tintColor: '#1a2b49',
+    tintColor: colors.textPrimary,
     resizeMode: 'contain',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
+    ...typography.h2,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    marginLeft: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
+    marginLeft: spacing.sm,
   },
   markAllButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   markAllText: {
-    color: '#ffc008',
-    fontSize: 14,
+    color: colors.warmTaupe,
+    ...typography.bodyMedium,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   loadingContainer: {
     flex: 1,
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContainer: {
-    paddingVertical: 8,
+    paddingVertical: spacing.xs,
   },
   emptyListContainer: {
     flex: 1,
@@ -235,18 +235,18 @@ const styles = StyleSheet.create({
   notificationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.lightGray,
   },
   unreadNotification: {
     backgroundColor: '#fef9f3',
   },
   notificationLeft: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: spacing.sm,
   },
   userAvatar: {
     width: 44,
@@ -254,35 +254,34 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   defaultAvatar: {
-    backgroundColor: '#1a2b49',
+    backgroundColor: colors.warmTaupe,
     justifyContent: 'center',
     alignItems: 'center',
   },
   defaultAvatarText: {
-    color: 'white',
+    color: colors.white,
     fontSize: 18,
     fontWeight: 'bold',
   },
   notificationContent: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.xs,
   },
   notificationMessage: {
-    fontSize: 14,
-    color: '#333',
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
     lineHeight: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   commentText: {
-    fontSize: 13,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     fontStyle: 'italic',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   timeAgo: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   unreadDot: {
     width: 10,
@@ -297,18 +296,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyText: {
-    fontSize: 18,
+    ...typography.bodyLarge,
     fontWeight: 'bold',
-    color: '#333',
-    marginTop: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
+    marginTop: spacing.md,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#666',
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginTop: spacing.xs,
   },
 });
 

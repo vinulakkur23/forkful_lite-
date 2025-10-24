@@ -7,6 +7,8 @@ import { RootStackParamList } from '../App';
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 // Import GoogleAuthProvider
 import { GoogleAuthProvider } from '@react-native-firebase/auth';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -205,7 +207,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   if (initializing) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#ff6b6b" />
+        <ActivityIndicator size="large" color={colors.warmTaupe} />
       </View>
     );
   }
@@ -214,7 +216,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.logoContainer}>
         <Image 
-          source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+          source={require('../assets/forkful_logos/forkful_logo_cursive2.png')} 
           style={styles.logoImage}
           resizeMode="contain"
         />
@@ -260,8 +262,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    padding: 20,
+    backgroundColor: colors.lightTan,
+    padding: spacing.screenPadding,
   },
   loadingContainer: {
     justifyContent: 'center',
@@ -269,68 +271,67 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: spacing.xxxl,
   },
   logoImage: {
     width: 200,
     height: 67,
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontFamily: 'Lobster-Regular',
-    fontSize: 64,
-    color: '#E63946',
-    marginBottom: 20,
+    ...typography.h1,
+    color: colors.warmTaupe,
+    marginBottom: spacing.lg,
   },
   subtitle: {
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    fontSize: 14,
-    color: '#1a2b49',
+    ...typography.bodyLarge,
+    color: colors.textPrimary,
     textAlign: 'center',
   },
   buttonContainer: {
     width: '100%',
-    marginBottom: 30,
+    marginBottom: spacing.xl,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4285F4',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginBottom: 15,
+    backgroundColor: colors.warmTaupe,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: spacing.borderRadius.sm,
+    marginBottom: spacing.md,
+    ...shadows.light,
   },
   googleIcon: {
     width: 24,
     height: 24,
-    marginRight: 10,
-    backgroundColor: 'white',
+    marginRight: spacing.sm,
+    backgroundColor: colors.white,
     borderRadius: 12,
   },
   googleButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.buttonLarge,
+    color: colors.white,
   },
   guestButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ededed',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.warmTaupe,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: spacing.borderRadius.sm,
   },
   guestButtonText: {
-    color: '#555',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.buttonLarge,
+    color: colors.warmTaupe,
   },
   termsText: {
-    fontSize: 12,
-    color: '#999',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   }
 });

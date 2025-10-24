@@ -11,7 +11,7 @@ export const colors = {
 
   // Background Colors
   white: '#FFFFFF',            // Primary background - clean, lets food photos shine
-  lightTan: '#F5F0E8',         // Warmer tan background - complements sage green
+  lightTan: '#F8F6F2',         // Warmer tan background - complements sage green
                                // Other options: '#E8F3F1' (light blue), '#FAF8F5' (very light tan)
   lightGray: '#F7F7F7',        // Secondary background - subtle sections/cards
   mediumGray: '#EBEBEB',       // Tertiary - dividers, borders, disabled states

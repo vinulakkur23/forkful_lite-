@@ -25,7 +25,7 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ visible, onComple
       title: "Welcome to DishItOut!",
       description: "It's Instagram meets Yelp. Kind of.\nThis one is focused on MEALS.",
       type: 'welcome',
-      image: require('../assets/onboarding/welcome-logo.png'),
+      image: require('../assets/forkful_logos/forkful_logo_cursive2.png'),
     },
     {
       title: "Share your food journey.",

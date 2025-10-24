@@ -54,6 +54,8 @@ import { getOrGenerateMonument, MonumentData } from '../services/monumentPixelAr
 import Geolocation from '@react-native-community/geolocation';
 // Import Firebase for saving meal data
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Extend the TabParamList to include all necessary parameters for RatingScreen2
 declare module '../App' {
@@ -1794,7 +1796,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               {showAutocomplete && autocompleteRestaurants.length > 0 && (
                 <View style={styles.autocompleteDropdown}>
                   {isSearchingRestaurants && (
-                    <ActivityIndicator size="small" color="#ffc008" style={styles.autocompleteLoading} />
+                    <ActivityIndicator size="small" color="#5B8A72" style={styles.autocompleteLoading} />
                   )}
                   <FlatList
                     data={autocompleteRestaurants}
@@ -1935,7 +1937,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             {/* Loading indicator */}
             {isLoadingSuggestions && (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#ffc008" />
+                <ActivityIndicator size="small" color="#5B8A72" />
                 <Text style={styles.loadingText}>Getting suggestions...</Text>
               </View>
             )}
@@ -1945,7 +1947,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: mealName.trim() ? '#1a2b49' : '#cccccc' }
+              { backgroundColor: mealName.trim() ? '#5B8A72' : '#cccccc' }
             ]}
             onPress={saveRating}
             disabled={!mealName.trim() || isProcessing}
@@ -2155,45 +2157,41 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6', // Light off-white color matching HomeScreen
+    backgroundColor: colors.lightTan,
   },
   scrollContainer: {
     flexGrow: 1,
     paddingBottom: 40,
-    backgroundColor: '#FAF9F6', // Light off-white background
+    backgroundColor: colors.lightTan,
   },
   contentContainer: {
-    padding: 15,
+    padding: spacing.md,
     alignItems: 'center',
-    backgroundColor: '#FAF9F6', // Light off-white background
+    backgroundColor: colors.lightTan,
     overflow: 'visible', // Allow dropdowns to extend outside
   },
   headerContainer: {
     width: '100%',
-    paddingVertical: 5,
-    paddingHorizontal: 5,
-    marginBottom: 10,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.sm,
     alignItems: 'center',
   },
   headerText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.h3,
+    fontFamily: 'Inter',
+    fontWeight: 'normal',
+    color: colors.textPrimary,
   },
   imageContainer: {
     width: '100%',
-    height: 450, // Increased height from 400 to 450 for bigger image
-    borderRadius: 12, // Matching card radius from HomeScreen
+    height: 450,
+    borderRadius: spacing.borderRadius.md,
     overflow: 'hidden',
-    backgroundColor: '#FAF3E0', // Card background color from HomeScreen
-    marginVertical: 15,
+    backgroundColor: colors.white,
+    marginVertical: spacing.md,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadows.light,
   },
   image: {
     width: '100%',
@@ -2207,42 +2205,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   errorImageText: {
-    marginTop: 10,
-    color: '#999',
-    fontSize: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginTop: spacing.sm,
+    color: colors.textTertiary,
+    ...typography.bodyMedium,
   },
   addPhotoContainer: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
+    backgroundColor: colors.lightGray,
+    borderRadius: spacing.borderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: colors.mediumGray,
     borderStyle: 'dashed',
   },
   plusIcon: {
     fontSize: 120,
     fontWeight: '300',
-    color: '#1a2b49',
+    color: colors.textPrimary,
     lineHeight: 120,
   },
   addPhotoText: {
-    fontSize: 18,
+    ...typography.bodyLarge,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    marginTop: 10,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
+    marginTop: spacing.sm,
   },
   addPhotoSubtext: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 5,
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
     textAlign: 'center',
-    paddingHorizontal: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    paddingHorizontal: spacing.screenPadding,
   },
   processingOverlay: {
     position: 'absolute',
@@ -2255,54 +2250,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   processingText: {
-    color: 'white',
-    marginTop: 10,
-    fontSize: 16,
+    color: colors.white,
+    marginTop: spacing.sm,
+    ...typography.bodyMedium,
   },
   // Restaurant and meal info styles
   infoSection: {
     width: '100%',
-    marginBottom: 10,
-    backgroundColor: '#FFFFFF', // White background
-    borderRadius: 12,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    padding: spacing.md,
+    ...shadows.light,
     overflow: 'visible', // Allow dropdown to extend outside
     zIndex: 10, // Ensure this section is above the image
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
   infoLabel: {
     width: 100,
-    fontSize: 16,
+    ...typography.bodyMedium,
     fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    color: colors.textPrimary,
   },
   infoInput: {
     flex: 1,
     height: 40,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    backgroundColor: 'white',
-    marginRight: 8, // Add margin to separate from the button
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    borderColor: colors.mediumGray,
+    borderRadius: spacing.borderRadius.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.white,
+    marginRight: spacing.xs,
+    color: colors.textPrimary,
+    ...typography.bodyMedium,
   },
   suggestButton: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -2315,7 +2305,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   suggestButtonActive: {
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -2354,16 +2344,15 @@ const styles = StyleSheet.create({
   saveButton: {
     width: '100%',
     paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 12,
+    paddingVertical: spacing.md,
+    borderRadius: spacing.borderRadius.md,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: spacing.sm,
   },
   saveButtonText: {
-    color: 'white',
-    fontSize: 18,
+    color: colors.white,
+    ...typography.bodyLarge,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Autocomplete styles
   autocompleteContainer: {
@@ -2377,16 +2366,13 @@ const styles = StyleSheet.create({
     top: 45,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
-    borderRadius: 8,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.sm,
     borderWidth: 1,
-    borderColor: '#ddd',
-    zIndex: 9999, // Very high z-index to ensure it's above everything
-    elevation: 999, // Very high elevation for Android
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    borderColor: colors.mediumGray,
+    zIndex: 9999,
+    elevation: 999,
+    ...shadows.medium,
     maxHeight: 300,
   },
   autocompleteList: {
@@ -2395,29 +2381,29 @@ const styles = StyleSheet.create({
   autocompleteItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   autocompleteIcon: {
-    marginRight: 10,
+    marginRight: spacing.sm,
   },
   autocompleteTextContainer: {
     flex: 1,
   },
   autocompleteItemName: {
-    fontSize: 14,
+    ...typography.bodyMedium,
     fontWeight: '500',
   },
   autocompleteItemAddress: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   locationBadgeSmall: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -2446,84 +2432,77 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '95%',
     height: '85%',
-    backgroundColor: '#FFFFFF', // White background for consistency
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    padding: spacing.screenPadding,
+    ...shadows.medium,
   },
   modalTitle: {
-    fontSize: 18,
+    ...typography.h3,
+    fontFamily: 'Inter',
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: spacing.xs,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    color: colors.textPrimary,
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
     textAlign: 'center',
     fontStyle: 'italic',
   },
   restaurantItem: {
-    padding: 15,
+    padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   restaurantName: {
-    fontSize: 16,
+    ...typography.bodyMedium,
     fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    color: colors.textPrimary,
   },
   restaurantAddress: {
-    fontSize: 14,
-    color: '#1a2b49',
-    marginTop: 5,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    marginTop: spacing.xs,
   },
   menuItem: {
-    padding: 15,
+    padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   menuItemText: {
-    fontSize: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
   },
   closeButton: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: '#ffc008',
-    borderRadius: 12,
+    marginTop: spacing.screenPadding,
+    padding: spacing.sm,
+    backgroundColor: colors.warmTaupe,
+    borderRadius: spacing.borderRadius.md,
     alignItems: 'center',
   },
   closeButtonText: {
-    color: '#1a2b49',
+    color: colors.white,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
   },
   noResultsText: {
     textAlign: 'center',
-    padding: 20,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    padding: spacing.screenPadding,
+    color: colors.textPrimary,
+    ...typography.bodyMedium,
   },
   topSuggestion: {
     backgroundColor: '#FAF3E0',
     borderLeftWidth: 3,
-    borderLeftColor: '#ffc008',
+    borderLeftColor: '#5B8A72',
   },
   topBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -2545,7 +2524,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   reloadButton: {
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     padding: 10,
     borderRadius: 12,
     alignItems: 'center',
@@ -2556,9 +2535,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ccc',
   },
   reloadButtonText: {
-    color: 'white',
+    color: colors.white,
     fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
   },
   photoSourceModalContainer: {
     flex: 1,
@@ -2567,41 +2546,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   photoSourceModalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 8,
-    paddingHorizontal: 20,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    padding: spacing.xs,
+    paddingHorizontal: spacing.screenPadding,
     flexDirection: 'row',
     alignItems: 'center',
     width: 240,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...shadows.medium,
   },
   photoSourceOption: {
     alignItems: 'center',
-    padding: 12,
+    padding: spacing.sm,
     flex: 1,
   },
   photoSourceOptionImage: {
     width: 40,
     height: 40,
-    tintColor: '#1a2b49',
+    tintColor: colors.textPrimary,
   },
   photoSourceOptionText: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: spacing.xs,
+    ...typography.bodyMedium,
     fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
   },
   modalSeparator: {
     width: 1,
     height: 50,
-    backgroundColor: '#1a2b49',
-    marginHorizontal: 8,
+    backgroundColor: colors.textPrimary,
+    marginHorizontal: spacing.xs,
   },
 });
 

@@ -23,6 +23,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import ImageCropPicker from 'react-native-image-crop-picker';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 import { searchNearbyRestaurants } from '../services/placesService';
 // import { getMenuSuggestionsForRestaurant } from '../services/menuSuggestionService'; // DISABLED FOR PERFORMANCE
 import Geolocation from '@react-native-community/geolocation';
@@ -996,14 +998,14 @@ const styles = StyleSheet.create({
   // New edit screen styles
   editContainer: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.lightTan,
   },
   editImageContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAF9F6',
-    paddingVertical: 10,
+    backgroundColor: colors.lightTan,
+    paddingVertical: spacing.sm,
   },
   editPreviewImage: {
     width: screenWidth - 80, // Smaller preview for better performance
@@ -1011,11 +1013,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   editControlsContainer: {
-    backgroundColor: '#FAF3E0',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
-    paddingHorizontal: 20,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: spacing.borderRadius.lg,
+    borderTopRightRadius: spacing.borderRadius.lg,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.screenPadding,
     minHeight: 320,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -1038,12 +1040,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   editAdjustmentValue: {
     fontSize: 11,
     color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
     minWidth: 35,
     textAlign: 'right',
   },
@@ -1056,7 +1058,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   editContinueButton: {
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     paddingVertical: 14,
     borderRadius: 25,
     alignItems: 'center',
@@ -1068,7 +1070,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
 });
 

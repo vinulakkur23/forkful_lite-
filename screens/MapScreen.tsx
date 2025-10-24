@@ -25,6 +25,8 @@ import { RootStackParamList } from '../App';
 import Geolocation from '@react-native-community/geolocation';
 import { FilterItem } from '../components/SimpleFilterComponent';
 import EmojiDisplay from '../components/EmojiDisplay';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Custom button icons - replace these with actual assets when available
 const MAP_ICONS = {
@@ -1396,33 +1398,33 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 20,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: spacing.borderRadius.lg,
+    borderTopRightRadius: spacing.borderRadius.lg,
+    paddingBottom: spacing.screenPadding,
     maxHeight: '50%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.screenPadding,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   modalTitle: {
-    fontSize: 18,
+    ...typography.bodyLarge,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.textPrimary,
     flex: 1,
-    marginRight: 10,
+    marginRight: spacing.sm,
   },
   modalCloseButton: {
-    padding: 5,
+    padding: spacing.xs,
   },
   modalScrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: spacing.md,
   },
   modalMealCard: {
     width: 150,

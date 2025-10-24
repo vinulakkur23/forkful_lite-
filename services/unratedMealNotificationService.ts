@@ -40,12 +40,12 @@ export const scheduleUnratedMealNotifications = async (
       // Use top 3 rating statements for notifications
       const top3Statements = statements.slice(0, 3);
 
-      // Schedule notifications every 1 minute (for testing)
+      // Schedule notifications at 3 minute intervals
       const baseTime = new Date();
       const delays = [
-        0.5 * 60 * 1000, // 30 seconds (for faster testing)
         1 * 60 * 1000, // 1 minute
-        1.5 * 60 * 1000, // 1.5 minutes
+        4 * 60 * 1000, // 4 minutes
+        7 * 60 * 1000, // 7 minutes
       ];
 
       top3Statements.forEach((statement, index) => {
@@ -91,10 +91,10 @@ export const scheduleUnratedMealNotifications = async (
       });
     }
 
-    // Schedule pixel art reveal notification for 2 minutes later (for testing)
+    // Schedule pixel art reveal notification for 10 minutes later
     // By then, pixel art will be generated and saved locally
     const pixelArtTime = new Date();
-    pixelArtTime.setMinutes(pixelArtTime.getMinutes() + 2);
+    pixelArtTime.setMinutes(pixelArtTime.getMinutes() + 10);
 
     // Note: The pixel art local path will be fetched when this notification fires
     // We'll update the notification dynamically if we detect the file is ready

@@ -26,7 +26,7 @@ import { FilterItem } from '../components/SimpleFilterComponent';
 import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
 
 const { width } = Dimensions.get('window');
-const STAMP_SIZE = (width - 60) / 3; // 3 per row with some spacing
+const STAMP_SIZE = (width - 70) / 3.5; // 3.5 per row - slightly smaller than before
 
 interface AchievementDisplayItem {
   id: string;

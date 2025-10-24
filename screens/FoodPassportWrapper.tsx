@@ -13,7 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth, firestore } from '../firebaseConfig';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
-import TooltipOnboarding from '../components/TooltipOnboarding';
+// import TooltipOnboarding from '../components/TooltipOnboarding'; // Commented out for custom onboarding
 import ProfileCard from '../components/ProfileCard';
 import { followUser, unfollowUser, isFollowing } from '../services/followService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -142,9 +142,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [activeRatingFilters, setActiveRatingFilters] = useState<number[] | null>(null);
   const [sortOption, setSortOption] = useState<'chronological' | 'rating'>('chronological');
 
-  // Tooltip onboarding state
-  const [showTooltips, setShowTooltips] = useState(false);
-  const [tabBarLayout, setTabBarLayout] = useState<any>(null);
+  // Tooltip onboarding state - COMMENTED OUT FOR CUSTOM ONBOARDING
+  // const [showTooltips, setShowTooltips] = useState(false);
+  // const [tabBarLayout, setTabBarLayout] = useState<any>(null);
   
   // Notification state
   const [unreadCount, setUnreadCount] = useState(0);
@@ -200,7 +200,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     }
   }, [activeFilters]);
 
-  // Handle tooltip completion
+  // Handle tooltip completion - COMMENTED OUT FOR CUSTOM ONBOARDING
+  /*
   const handleTooltipComplete = async () => {
     try {
       const onboardingService = (await import('../services/onboardingService')).default;
@@ -216,6 +217,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const handleTooltipSkip = () => {
     handleTooltipComplete();
   };
+  */
 
   // Handle notification press
   const handleNotificationPress = () => {
@@ -301,17 +303,18 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     }
   };
 
-  // Check if should show tooltips whenever screen comes into focus
+  // Check if should show tooltips whenever screen comes into focus - COMMENTED OUT FOR CUSTOM ONBOARDING
+  /*
   useFocusEffect(
     React.useCallback(() => {
       console.log('🚀 FoodPassport: Screen focused, checking tooltips...');
       const checkTooltips = async () => {
         try {
           const onboardingService = (await import('../services/onboardingService')).default;
-          
+
           const shouldShow = await onboardingService.shouldShowFoodPassportTooltips();
           console.log('🔍 FoodPassport: Should show tooltips?', shouldShow);
-          
+
           if (shouldShow) {
             console.log('🎯 FoodPassport: Setting showTooltips to TRUE');
             setShowTooltips(true);
@@ -322,15 +325,18 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           console.error('❌ Error checking tooltips:', error);
         }
       };
-      
+
       checkTooltips();
     }, [])
   );
-  
-  // Debug log whenever showTooltips changes
+  */
+
+  // Debug log whenever showTooltips changes - COMMENTED OUT FOR CUSTOM ONBOARDING
+  /*
   React.useEffect(() => {
     console.log('🎭 FoodPassport: showTooltips changed to:', showTooltips);
   }, [showTooltips]);
+  */
 
   React.useEffect(() => {
     loadUserProfile();
@@ -503,13 +509,14 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         />
         
         {/* Tab navigation */}
-        <View 
+        <View
           style={styles.tabBarContainer}
-          onLayout={(event) => {
-            const layout = event.nativeEvent.layout;
-            console.log('📐 FoodPassport: Tab bar layout detected:', layout);
-            setTabBarLayout(layout);
-          }}
+          // onLayout commented out for custom onboarding
+          // onLayout={(event) => {
+          //   const layout = event.nativeEvent.layout;
+          //   console.log('📐 FoodPassport: Tab bar layout detected:', layout);
+          //   setTabBarLayout(layout);
+          // }}
         >
           {routes.map((route, i) => (
             <TouchableOpacity
@@ -586,7 +593,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         </View>
       </ScrollView>
       
-      {/* Tooltip Onboarding */}
+      {/* Tooltip Onboarding - COMMENTED OUT FOR CUSTOM ONBOARDING */}
+      {/*
       <TooltipOnboarding
         steps={[
           {
@@ -627,6 +635,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         onComplete={handleTooltipComplete}
         onSkip={handleTooltipSkip}
       />
+      */}
     </SafeAreaView>
   );
 };
@@ -687,18 +696,18 @@ const styles = StyleSheet.create({
   tabButton: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomColor: '#5B8A72', // Sage green
     backgroundColor: 'transparent', // Explicitly set transparent background
   },
   tabIcon: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 1,
     textAlign: 'center',
     fontFamily: 'Inter-SemiBold',
   },

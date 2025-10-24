@@ -13,6 +13,8 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { UserChallenge } from '../services/userChallengesService';
 import { navigate } from '../services/navigationService';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 interface ChallengeNotificationProps {
   challenge: UserChallenge;
@@ -160,20 +162,17 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'ios' ? 60 : 40,
     left: 0,
     right: 0,
-    backgroundColor: '#ffffff', // White background
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingTop: 18,
-    paddingBottom: 18,
-    paddingLeft: 18,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    paddingLeft: spacing.md,
     paddingRight: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...shadows.medium,
     elevation: 10,
     zIndex: 10000,
     overflow: 'visible',
@@ -191,7 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: spacing.md,
     overflow: 'hidden',
   },
   challengeEmojiImage: {
@@ -202,42 +201,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 12,
+    ...typography.bodySmall,
     fontWeight: '600',
     color: '#ff6b6b',
-    marginBottom: 3,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    marginBottom: spacing.xs,
   },
   completedTitle: {
-    fontSize: 14,
+    ...typography.bodyMedium,
     fontWeight: '600',
-    color: '#ff6b6b', // Keep consistent with main app colors
-    marginBottom: 3,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#ff6b6b',
+    marginBottom: spacing.xs,
   },
   cheersText: {
-    fontSize: 14,
+    ...typography.bodyMedium,
     fontWeight: 'bold',
-    color: '#1a2b49', // Navy blue for the cheers reward
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
   },
   challengeName: {
-    fontSize: 16,
+    ...typography.bodyMedium,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    marginBottom: 5,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
   description: {
-    fontSize: 14,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
   },
   closeButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    padding: 10,
+    top: spacing.xs,
+    right: spacing.xs,
+    padding: spacing.sm,
     height: 40,
     width: 40,
     alignItems: 'center',
@@ -246,11 +240,11 @@ const styles = StyleSheet.create({
   },
   closeButtonX: {
     fontSize: 20,
-    color: '#1a2b49',
+    color: colors.textPrimary,
     fontWeight: 'bold',
     lineHeight: 20,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
   },
   imageLoadingContainer: {
     position: 'relative',

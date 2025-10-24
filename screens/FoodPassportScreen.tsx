@@ -112,7 +112,8 @@ interface MealEntry {
 
 const { width } = Dimensions.get('window');
 const itemWidth = (width - 30) / 2; // 2 items per row with more even spacing (for meal cards)
-const STAMP_SIZE = (width - 50) / 2.5; // ~2.5 items per row for challenges/cities/cuisines (bigger stamps)
+const STAMP_SIZE = (width - 70) / 3.5; // 3.5 per row for challenges/cuisines - smaller cards
+const CITY_SIZE = (width - 50) / 2.5; // ~2.5 items per row for cities (keep original size)
 
 // Define interfaces for accolades section
 interface City {
@@ -2635,15 +2636,15 @@ const styles = StyleSheet.create({
         borderRadius: spacing.borderRadius.md,
     },
     cityItem: {
-        width: STAMP_SIZE,
-        height: STAMP_SIZE + 25,
+        width: CITY_SIZE,
+        height: CITY_SIZE + 25,
         margin: spacing.xs,
         alignItems: 'center',
         justifyContent: 'flex-start',
     },
     cityImageContainer: {
-        width: STAMP_SIZE - 16,
-        height: STAMP_SIZE - 50,
+        width: CITY_SIZE - 16,
+        height: CITY_SIZE - 50,
         borderRadius: spacing.borderRadius.sm,
         backgroundColor: 'transparent',
         justifyContent: 'center',

@@ -20,6 +20,8 @@ import * as ImagePicker from 'react-native-image-picker';
 import ImageResizer from 'react-native-image-resizer';
 import Geolocation from '@react-native-community/geolocation';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Navigation types
 type EditMealScreenNavigationProp = CompositeNavigationProp<
@@ -1197,7 +1199,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           />
           {uploadingPhoto && (
             <View style={styles.uploadingOverlay}>
-              <ActivityIndicator size="small" color="#ffc008" />
+              <ActivityIndicator size="small" color="#5B8A72" />
               <Text style={styles.uploadingText}>Uploading photo...</Text>
             </View>
           )}
@@ -1522,7 +1524,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 />
               ) : (
                 <View style={{ alignItems: 'center', justifyContent: 'center', width: 100, height: 100 }}>
-                  <ActivityIndicator size="large" color="#ffc008" />
+                  <ActivityIndicator size="large" color="#5B8A72" />
                   <Text style={{ fontSize: 12, color: '#666', marginTop: 8, textAlign: 'center' }}>
                     Art Generating...
                   </Text>
@@ -1578,27 +1580,27 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.lightTan,
   },
   headerSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#FAF9F6',
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.lightTan,
   },
   backButtonHeader: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: spacing.borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.h3,
+    fontFamily: 'Inter',
+    fontWeight: 'normal',
+    color: colors.textPrimary,
   },
   headerRightButton: {
     width: 44,
@@ -1606,40 +1608,35 @@ const styles = StyleSheet.create({
   headerButtonIcon: {
     width: 24,
     height: 24,
-    tintColor: '#1a2b49',
+    tintColor: colors.textPrimary,
     resizeMode: 'contain',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.lightTan,
   },
   scrollContainer: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.lightTan,
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
+    ...typography.bodyLarge,
+    marginTop: spacing.sm,
     textAlign: 'center',
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textSecondary,
   },
   imageCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
     overflow: 'hidden',
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: spacing.md,
+    ...shadows.light,
   },
   photosSection: {
     marginBottom: 15,
@@ -1664,8 +1661,8 @@ const styles = StyleSheet.create({
   uploadingText: {
     marginLeft: 8,
     fontSize: 12,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   detailsCard: {
     padding: 20,
@@ -1687,8 +1684,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18, // Increased from 16 to 18 for larger font
     fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   sectionTitleContainer: {
     flexDirection: 'row',
@@ -1699,14 +1696,14 @@ const styles = StyleSheet.create({
     fontSize: 15, // Font size for rating statements
     fontWeight: '400', // Reduced font weight
     marginBottom: 10,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   sectionSubtitle: {
     fontSize: 12,
-    color: '#1a2b49',
+    color: '#1A1A1A',
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
     marginLeft: 8, // Space from the main title
   },
   ratingContainer: {
@@ -1724,10 +1721,10 @@ const styles = StyleSheet.create({
   },
   ratingDescription: {
     fontSize: 12,
-    color: '#1a2b49',
+    color: '#1A1A1A',
     textAlign: 'center',
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   commentsSection: {
     marginTop: 20,
@@ -1742,10 +1739,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     textAlignVertical: 'top',
     fontSize: 15,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
     borderLeftWidth: 3,
-    borderLeftColor: '#FFC008',
+    borderLeftColor: '#5B8A72',
   },
   helperText: {
     fontSize: 12,
@@ -1753,7 +1750,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 20,
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -1767,7 +1764,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#1a2b49',
+    borderColor: '#5B8A72',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 8,
@@ -1783,7 +1780,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#1a2b49',
+    borderColor: '#5B8A72',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 8,
@@ -1808,20 +1805,20 @@ const styles = StyleSheet.create({
   culturalInsightTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   culturalInsightText: {
     fontSize: 14,
     lineHeight: 20,
     color: '#2c3e50',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   buttonText: {
-    color: '#1a2b49',
+    color: '#1A1A1A',
     fontWeight: '600',
     fontSize: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Overlay Styles
   overlayContainer: {
@@ -1858,7 +1855,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   statementContainer: {
     marginBottom: 30,
@@ -1866,10 +1863,10 @@ const styles = StyleSheet.create({
   },
   statementText: {
     fontSize: 16,
-    color: '#1a2b49',
+    color: '#1A1A1A',
     textAlign: 'center',
     lineHeight: 24,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   customEmojiRating: {
     flexDirection: 'row',
@@ -1879,8 +1876,8 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   // City History Styles
   cityHistorySection: {
@@ -1891,20 +1888,20 @@ const styles = StyleSheet.create({
     marginTop: 15,
     marginBottom: 10,
     borderLeftWidth: 4,
-    borderLeftColor: '#FFC008',
+    borderLeftColor: '#5B8A72',
   },
   cityHistoryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1a2b49',
+    color: '#1A1A1A',
     marginBottom: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   cityHistoryText: {
     fontSize: 14,
-    color: '#1a2b49',
+    color: '#1A1A1A',
     lineHeight: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
     fontStyle: 'italic',
   },
   // Fact Overlay Styles
@@ -1916,24 +1913,24 @@ const styles = StyleSheet.create({
   factTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
     textAlign: 'center',
     marginBottom: 12,
     marginTop: -8,
   },
   factText: {
     fontSize: 15,
-    color: '#1a2b49',
+    color: '#1A1A1A',
     textAlign: 'center',
     lineHeight: 22,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   successTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -1942,7 +1939,7 @@ const styles = StyleSheet.create({
     // No additional styling needed - uses text styling
   },
   inlineCloseText: {
-    color: '#1a2b49',
+    color: '#1A1A1A',
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
@@ -1962,15 +1959,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#1a2b49',
+    borderColor: '#5B8A72',
     borderRadius: 20,
     marginTop: 20,
   },
   askMeMoreButtonText: {
-    color: '#1a2b49',
+    color: '#1A1A1A',
     fontSize: 14,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   belowRatingContainer: {
     marginTop: 20,
@@ -2003,8 +2000,8 @@ const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   navButtonTextDisabled: {
     color: '#999',
@@ -2013,7 +2010,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   photoSourceModalContainer: {
     flex: 1,
@@ -2043,19 +2040,19 @@ const styles = StyleSheet.create({
   photoSourceOptionImage: {
     width: 40,
     height: 40,
-    tintColor: '#1a2b49',
+    tintColor: '#5B8A72',
   },
   photoSourceOptionText: {
     marginTop: 8,
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   modalSeparator: {
     width: 1,
     height: 50,
-    backgroundColor: '#1a2b49',
+    backgroundColor: '#5B8A72',
     marginHorizontal: 8,
   },
   emojiModalContainer: {
@@ -2075,9 +2072,9 @@ const styles = StyleSheet.create({
   emojiModalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1a2b49',
+    color: '#1A1A1A',
     marginBottom: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   emojiDisplay: {
     marginVertical: 20,
@@ -2087,7 +2084,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginBottom: 25,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   emojiModalButton: {
     backgroundColor: '#5B8A72',
@@ -2099,7 +2096,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
 });
 

@@ -18,6 +18,8 @@ import { processImageMetadata } from '../services/aiMetadataService';
 import { getDishCriteria, linkCriteriaToMeal } from '../services/dishCriteriaService';
 // Import achievement service - DISABLED
 // import { checkAchievements } from '../services/achievementService';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 // import { Achievement } from '../types/achievements';
 // Enhanced metadata facts service for background processing
 // REMOVED: Facts service no longer used
@@ -1892,12 +1894,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    position: 'relative', // Make sure relative positioning is set for absolute children
+    backgroundColor: colors.lightTan,
+    position: 'relative',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.lightTan,
   },
   scrollContent: {
     paddingHorizontal: 16,

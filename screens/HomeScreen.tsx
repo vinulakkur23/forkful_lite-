@@ -34,7 +34,9 @@ import { getFollowing } from '../services/followService';
 import Geolocation from '@react-native-community/geolocation';
 import { fonts } from '../src/theme/fonts';
 import { RootStackParamList } from '../App';
-import TooltipOnboarding from '../components/TooltipOnboarding';
+// import TooltipOnboarding from '../components/TooltipOnboarding'; // Commented out for custom onboarding
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Map toggle icons
 const MAP_HOME_ICONS = {
@@ -134,13 +136,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   // Carousel refresh trigger
   const [carouselRefreshTrigger, setCarouselRefreshTrigger] = useState(0);
   
-  // Tooltip onboarding state
-  const [showTooltips, setShowTooltips] = useState(false);
-  const [feedLayout, setFeedLayout] = useState<any>(null);
-  const [searchLayout, setSearchLayout] = useState<any>(null);
-  const [mapButtonLayout, setMapButtonLayout] = useState<any>(null);
+  // Tooltip onboarding state - COMMENTED OUT FOR CUSTOM ONBOARDING
+  // const [showTooltips, setShowTooltips] = useState(false);
+  // const [feedLayout, setFeedLayout] = useState<any>(null);
+  // const [searchLayout, setSearchLayout] = useState<any>(null);
+  // const [mapButtonLayout, setMapButtonLayout] = useState<any>(null);
   
-  // Check if should show tooltips whenever screen comes into focus
+  // Check if should show tooltips whenever screen comes into focus - COMMENTED OUT FOR CUSTOM ONBOARDING
+  /*
   useFocusEffect(
     useCallback(() => {
       console.log('🚀 HomeScreen: Screen focused, checking tooltips...');
@@ -149,7 +152,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           const onboardingService = (await import('../services/onboardingService')).default;
           const shouldShow = await onboardingService.shouldShowDiscoverTooltips();
           console.log('🔍 HomeScreen: Should show tooltips?', shouldShow);
-          
+
           if (shouldShow) {
             console.log('🎯 HomeScreen: Setting showTooltips to TRUE');
             // Small delay to let the UI render
@@ -163,12 +166,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           console.error('Error checking discover tooltips:', error);
         }
       };
-      
+
       checkTooltips();
     }, [])
   );
+  */
 
-  // Handle tooltip completion
+  // Handle tooltip completion - COMMENTED OUT FOR CUSTOM ONBOARDING
+  /*
   const handleTooltipComplete = async () => {
     try {
       const onboardingService = (await import('../services/onboardingService')).default;
@@ -184,6 +189,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleTooltipSkip = () => {
     handleTooltipComplete();
   };
+  */
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1196,11 +1202,6 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
                   )}
                 </View>
 
-                {/* Star rating overlay */}
-                <View style={styles.ratingOverlay}>
-                  {renderEmoji(item.rating)}
-                </View>
-
                 {/* Photo dots indicator */}
                 {photos.length > 1 && (
                   <View style={styles.photoDotsContainer}>
@@ -1219,23 +1220,37 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
           </View>
-          
+
           {/* Content area with tap functionality */}
           <TouchableOpacity
             style={styles.mealCardContent}
             onPress={handleDoubleTap}
             activeOpacity={0.9}
           >
-            <View style={styles.infoRow}>
-              <Text style={styles.mealName} numberOfLines={1}>
-                {item.meal || 'Delicious meal'}
-              </Text>
-              
-              {item.distance !== undefined && (
-                <Text style={styles.distanceText}>
-                  {formatDistance(item.distance, item)}
+            <View style={styles.cardInfoRow}>
+              {/* Left side: meal name and restaurant stacked */}
+              <View style={styles.leftInfoGroup}>
+                <Text style={styles.mealName} numberOfLines={1}>
+                  {item.meal || 'Delicious meal'}
                 </Text>
-              )}
+                {item.restaurant && (
+                  <Text style={styles.restaurantName} numberOfLines={1}>
+                    {item.restaurant}
+                  </Text>
+                )}
+              </View>
+
+              {/* Right side: distance above, emoji below */}
+              <View style={styles.rightInfoGroup}>
+                {item.distance !== undefined && (
+                  <Text style={styles.distanceText}>
+                    {formatDistance(item.distance, item)}
+                  </Text>
+                )}
+                <View style={styles.ratingOverlay}>
+                  <EmojiDisplay rating={item.rating} size={18} />
+                </View>
+              </View>
             </View>
           </TouchableOpacity>
         </View>
@@ -1363,16 +1378,17 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Updated Header with Map Toggle */}
       <View style={styles.headerContainer}>
         <Image 
-          source={require('../assets/forkful_logos/forkful_logo_headspace.png')} 
+          source={require('../assets/forkful_logos/forkful_logo_cursive2.png')} 
           style={styles.headerLogo}
           resizeMode="contain"
         />
         <TouchableOpacity
           style={styles.mapToggleButton}
           onPress={() => setIndex(index === 0 ? 1 : 0)}
-          onLayout={(event) => {
-            setMapButtonLayout(event.nativeEvent.layout);
-          }}
+          // onLayout commented out for custom onboarding
+          // onLayout={(event) => {
+          //   setMapButtonLayout(event.nativeEvent.layout);
+          // }}
         >
           <Image 
             source={index === 1 ? MAP_HOME_ICONS.mapActive : MAP_HOME_ICONS.mapInactive} 
@@ -1383,11 +1399,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
       
       {/* Multi Filter Component */}
-      <View 
+      <View
         style={styles.filterArea}
-        onLayout={(event) => {
-          setSearchLayout(event.nativeEvent.layout);
-        }}
+        // onLayout commented out for custom onboarding
+        // onLayout={(event) => {
+        //   setSearchLayout(event.nativeEvent.layout);
+        // }}
       >
         <CompositeFilterComponent 
           key="home-filter"
@@ -1411,11 +1428,12 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.tabView}>
         <View 
           style={[styles.tabContent, index !== 0 && styles.hiddenTab]}
-          onLayout={(event) => {
-            if (index === 0) { // Only set layout when feed is visible
-              setFeedLayout(event.nativeEvent.layout);
-            }
-          }}
+          // onLayout commented out for custom onboarding
+          // onLayout={(event) => {
+          //   if (index === 0) { // Only set layout when feed is visible
+          //     setFeedLayout(event.nativeEvent.layout);
+          //   }
+          // }}
         >
           <FeedViewComponent />
         </View>
@@ -1438,7 +1456,8 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </View>
       
-      {/* Tooltip Onboarding */}
+      {/* Tooltip Onboarding - COMMENTED OUT FOR CUSTOM ONBOARDING */}
+      {/*
       {searchLayout && mapButtonLayout && (
         <TooltipOnboarding
           steps={[
@@ -1482,6 +1501,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           onSkip={handleTooltipSkip}
         />
       )}
+      */}
     </SafeAreaView>
   );
 };
@@ -1489,69 +1509,64 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6', // Back to original
-    paddingTop: Platform.OS === 'ios' ? -10 : 0, // Move content up on iOS
+    backgroundColor: colors.lightTan,
+    paddingTop: Platform.OS === 'ios' ? -10 : 0,
   },
   headerContainer: {
     backgroundColor: 'transparent',
-    paddingTop: 10, // Reduced from 20 to 10
-    paddingBottom: 2, // Reduced from 5 to 2
-    paddingHorizontal: 20,
+    paddingTop: spacing.sm,
+    paddingBottom: 2,
+    paddingHorizontal: spacing.screenPadding,
     zIndex: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   filterArea: {
-    paddingHorizontal: 15,
-    paddingTop: 0, // Removed top padding
-    paddingBottom: 8, // Reduced from 10 to 8
-    backgroundColor: '#FAF9F6', // Match the container background
+    paddingHorizontal: spacing.md,
+    paddingTop: 0,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.lightTan,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.mediumGray,
     zIndex: 5,
   },
   headerTitle: {
-    fontFamily: 'Lobster-Regular',
-    fontSize: 38, // Made even bigger
-    color: '#E63946', // Red color
-    textAlign: 'left', // Left-aligned text
-    fontWeight: undefined, // Clear any default weight that might interfere
-    marginBottom: 0, // Removed spacing below the title
+    ...typography.h1,
+    color: colors.warmTaupe,
+    textAlign: 'left',
+    marginBottom: 0,
   },
   headerLogo: {
     width: 150,
     height: 50,
+    marginLeft: -16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 50,
+    paddingBottom: spacing.xxxl,
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    ...typography.bodyLarge,
+    marginTop: spacing.sm,
+    color: colors.textSecondary,
   },
   feedContainer: {
-    paddingBottom: 20,
+    paddingBottom: spacing.screenPadding,
   },
   mealCard: {
-    backgroundColor: '#fff', // White like search bar
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    ...shadows.light,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    aspectRatio: 1, // Square aspect ratio
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    aspectRatio: 1,
+    borderTopLeftRadius: spacing.borderRadius.md,
+    borderTopRightRadius: spacing.borderRadius.md,
     overflow: 'hidden',
   },
   swipeArea: {
@@ -1573,8 +1588,8 @@ const styles = StyleSheet.create({
   imageWrapper: {
     width: '100%',
     height: '100%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    borderTopLeftRadius: spacing.borderRadius.md,
+    borderTopRightRadius: spacing.borderRadius.md,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     overflow: 'hidden',
@@ -1587,7 +1602,7 @@ const styles = StyleSheet.create({
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9F8E5', // Light cream for placeholder
+    backgroundColor: colors.lightGray,
     width: '100%',
     height: '100%',
   },
@@ -1611,56 +1626,57 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 1)',
   },
   ratingOverlay: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    backgroundColor: 'rgba(250, 248, 230, 0.8)', // Cream color with 80% opacity
-    borderRadius: 20,
-    padding: 4,
-    paddingHorizontal: 5,
+    // Removed absolute positioning - now in flex container
   },
   mealCardContent: {
-    padding: 14,
-    paddingBottom: 16, // Restored to original
+    padding: spacing.sm,
+    position: 'relative',
   },
-  infoRow: {
+  cardInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
+  },
+  leftInfoGroup: {
+    flex: 1,
+    marginRight: spacing.xs,
   },
   mealName: {
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    fontSize: 16,
-    fontWeight: 'normal',
-    flex: 1,
-    marginRight: 8,
-    color: '#1a2b49',
+    fontFamily: 'Unna',
+    fontSize: 18,
+    color: colors.textPrimary,
+  },
+  restaurantName: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  rightInfoGroup: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
   },
   distanceText: {
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    fontSize: 13,
-    color: '#1a2b49',
-    textAlign: 'right',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   emptyContainer: {
-    padding: 40,
+    padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 60,
+    marginTop: spacing.xxxl,
   },
   emptyText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 18,
-    color: '#666',
-    marginTop: 16,
+    ...typography.bodyLarge,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
     textAlign: 'center',
   },
   emptySubtext: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    ...typography.bodyMedium,
+    color: colors.textTertiary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   // Map toggle button style
@@ -1686,9 +1702,9 @@ const styles = StyleSheet.create({
   },
   // Meal card container
   mealCardContainer: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   heartIcon: {
     position: 'absolute',
@@ -1729,7 +1745,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   markerPhotoPlaceholder: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1737,15 +1753,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     position: 'absolute',
     bottom: -10,
-    backgroundColor: 'white',
-    paddingHorizontal: 4,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.xs,
     paddingVertical: 2,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
+    borderRadius: spacing.borderRadius.sm,
+    ...shadows.light,
   },
   pagerDot: {
     width: 6,
@@ -1769,14 +1781,10 @@ const styles = StyleSheet.create({
     width: 220,
   },
   calloutContent: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.sm,
+    padding: spacing.sm,
+    ...shadows.medium,
   },
   calloutImageLarge: {
     width: '100%',
@@ -1787,20 +1795,20 @@ const styles = StyleSheet.create({
   calloutImageLargePlaceholder: {
     width: '100%',
     height: 140,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    borderRadius: spacing.borderRadius.sm,
+    backgroundColor: colors.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   calloutTitle: {
+    ...typography.bodyLarge,
     fontWeight: 'bold',
-    fontSize: 14,
     marginBottom: 3,
   },
   calloutSubtitle: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     marginBottom: 3,
   },
   calloutRatingRow: {
@@ -1814,8 +1822,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 1,
   },
   calloutUserName: {
-    fontSize: 11,
-    color: '#888',
+    ...typography.caption,
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 2,
@@ -1837,8 +1845,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   calloutInstruction: {
+    ...typography.caption,
     fontSize: 9,
-    color: '#666',
+    color: colors.textSecondary,
     fontStyle: 'italic',
     marginTop: 3,
     textAlign: 'center',
@@ -1846,25 +1855,21 @@ const styles = StyleSheet.create({
   // Map button styles
   mapButtonContainer: {
     position: 'absolute',
-    right: 16,
-    bottom: 16,
+    right: spacing.md,
+    bottom: spacing.md,
     flexDirection: 'column',
     alignItems: 'flex-end',
   },
   floatingLocationButton: {
-    backgroundColor: 'white',
+    backgroundColor: colors.white,
     width: 48,
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
     borderWidth: 1,
-    borderColor: '#E63946',
+    borderColor: colors.warmTaupe,
+    ...shadows.medium,
   },
   limitedResultsIndicator: {
     position: 'absolute',
@@ -1876,8 +1881,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   limitedResultsText: {
-    color: 'white',
-    fontSize: 12,
+    ...typography.bodySmall,
+    color: colors.white,
     fontWeight: '500',
     textAlign: 'center',
   },

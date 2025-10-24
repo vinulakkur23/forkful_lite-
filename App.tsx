@@ -17,6 +17,8 @@ import GlobalAchievementListener from './components/GlobalAchievementListener';
 import GlobalChallengeListener from './components/GlobalChallengeListener';
 import { warmupQuickCriteriaService } from './services/quickCriteriaService';
 import { initializeUnratedMealNotificationChannels } from './services/unratedMealNotificationService';
+// Import theme
+import { colors, typography, spacing, shadows } from './themes';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -28,6 +30,8 @@ import ResultScreen from './screens/ResultScreen';
 import LoginScreen from './screens/LoginScreen';
 import MealDetailScreen from './screens/MealDetailScreen';
 import EditMealScreen from './screens/EditMealScreen';
+import EnjoyMealScreen from './screens/EnjoyMealScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
 import NotificationsScreen from './screens/NotificationsScreen';
@@ -35,6 +39,7 @@ import NotificationsScreen from './screens/NotificationsScreen';
 // Define the types for our navigation parameters
 export type RootStackParamList = {
   Login: undefined;
+  Onboarding: undefined;
   MainTabs: { screen?: string; params?: any }; // Added params for deep linking to tabs
   Home: { tabIndex?: number } | undefined; // Kept for potential direct stack navigation, though usually via MainTabs
   Camera: undefined; // Kept for potential direct stack navigation
@@ -148,6 +153,9 @@ export type RootStackParamList = {
     passportUserPhoto?: string;
   };
   Notifications: undefined;
+  EnjoyMeal: {
+    photoUri: string;
+  };
 };
 
 // Define separate types for tab navigation (screens directly in Tab.Navigator)
@@ -165,6 +173,7 @@ export type TabParamList = {
   MealDetail: RootStackParamList['MealDetail'];
   EditMeal: RootStackParamList['EditMeal'];
   Notifications: RootStackParamList['Notifications'];
+  EnjoyMeal: RootStackParamList['EnjoyMeal'];
 };
 
 // ResourceManager to track and clean temporary files and resources
@@ -293,7 +302,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         icon: (focused: boolean) => (
           <Image
             source={focused ? tabIcons.passport.active : tabIcons.passport.inactive}
-            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : '#858585' }}
+            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : colors.textTertiary }}
             key={`passport-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
@@ -304,7 +313,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
         icon: (focused: boolean) => (
           <Image
             source={focused ? tabIcons.place.active : tabIcons.place.inactive}
-            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : '#858585' }}
+            style={{ width: 32, height: 32, tintColor: focused ? '#5B8A72' : colors.textTertiary }}
             key={`home-icon-${focused ? 'active' : 'inactive'}`}
           />
         )
@@ -344,7 +353,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               <View style={styles.tabIconContainer}>
                 {tab.icon(isFocused)}
               </View>
-              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : '#858585' }]}>
+              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : colors.textTertiary }]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -390,7 +399,7 @@ const CustomTabBar = React.memo(({ state, descriptors, navigation }: BottomTabBa
               activeOpacity={0.7}
             >
               {tab.icon(isFocused)}
-              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : '#858585' }]}>
+              <Text style={[styles.tabLabel, { color: isFocused ? '#5B8A72' : colors.textTertiary }]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -504,6 +513,14 @@ function TabNavigator() {
           tabBarButton: () => null, // Hide from tab bar
         }}
       />
+      <Tab.Screen
+        name="EnjoyMeal"
+        component={EnjoyMealScreen}
+        options={{
+          headerShown: false,
+          tabBarButton: () => null, // Hide from tab bar
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -512,7 +529,8 @@ const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [pendingChallengeId, setPendingChallengeId] = useState<string | null>(null);
-  
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+
   // Track previous and current state to identify screen changes
   const routeNameRef = useRef<string | undefined>();
   const prevStateRef = useRef<NavigationState | null>(null);
@@ -669,7 +687,42 @@ const App: React.FC = () => {
     const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
     return subscriber;
   }, []);
-  
+
+  // Check if onboarding has been completed
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const completed = await AsyncStorage.getItem('@onboarding_completed');
+        setOnboardingCompleted(completed === 'true');
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+        setOnboardingCompleted(false); // Default to showing onboarding on error
+      }
+    };
+    checkOnboarding();
+  }, []);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    setOnboardingCompleted(true);
+    // Navigate to MainTabs after onboarding completion
+    if (navigationRef.current) {
+      navigationRef.current.navigate('MainTabs' as never);
+    }
+  };
+
+  // Navigate after login based on onboarding status
+  useEffect(() => {
+    if (!initializing && user && onboardingCompleted !== null && navigationRef.current) {
+      // User just logged in - check if we need to show onboarding
+      if (!onboardingCompleted) {
+        navigationRef.current.navigate('Onboarding' as never);
+      } else {
+        navigationRef.current.navigate('MainTabs' as never);
+      }
+    }
+  }, [user, onboardingCompleted, initializing]);
+
   // Function to accept a shared challenge
   const handleAcceptChallenge = useCallback(async (challengeId: string) => {
     try {
@@ -846,14 +899,25 @@ const App: React.FC = () => {
   };
 
   // Show loading while initializing
-  if (initializing) {
+  if (initializing || onboardingCompleted === null) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1a2b49" />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Image
+          source={require('./assets/forkful_logos/forkful_logo_cursive2.png')}
+          style={styles.loadingLogo}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color="#5B8A72" style={styles.loadingSpinner} />
       </View>
     );
   }
+
+  // Determine initial route based on auth and onboarding status
+  const getInitialRoute = () => {
+    if (!user) return "Login";
+    if (!onboardingCompleted) return "Onboarding";
+    return "MainTabs";
+  };
 
   return (
     <>
@@ -862,11 +926,19 @@ const App: React.FC = () => {
           ref={navigationRef}
           onStateChange={onNavigationStateChange}
         >
-          <Stack.Navigator initialRouteName={user ? "MainTabs" : "Login"} screenOptions={{ headerShown: false }}>
+          <Stack.Navigator initialRouteName={getInitialRoute()} screenOptions={{ headerShown: false }}>
             <Stack.Screen
               name="Login"
               component={LoginScreen}
             />
+            <Stack.Screen
+              name="Onboarding"
+              options={{ gestureEnabled: false }}
+            >
+              {(props) => (
+                <OnboardingScreen {...props} onComplete={handleOnboardingComplete} />
+              )}
+            </Stack.Screen>
             <Stack.Screen
               name="MainTabs"
               component={TabNavigator}
@@ -891,19 +963,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: colors.lightTan,
+  },
+  loadingLogo: {
+    width: 200,
+    height: 67,
+    marginBottom: spacing.xl,
+  },
+  loadingSpinner: {
+    marginTop: spacing.md,
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    ...typography.bodyLarge,
+    marginTop: spacing.sm,
+    color: colors.textSecondary,
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    height: Platform.OS === 'ios' ? 80 : 70, // Increased height for labels
+    backgroundColor: colors.white,
+    height: Platform.OS === 'ios' ? 80 : 70,
     paddingBottom: Platform.OS === 'ios' ? 25 : 15,
-    paddingTop: 8,
+    paddingTop: spacing.sm,
     zIndex: 5,
   },
   tabButton: {
@@ -923,7 +1003,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -937,8 +1017,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 4,
-    color: '#1a2b49', // Always navy blue
+    marginTop: spacing.xs,
+    color: colors.textPrimary,
     fontFamily: 'Inter-SemiBold',
   },
   tabIconContainer: {

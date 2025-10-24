@@ -27,6 +27,8 @@ import { DishCriteria } from '../services/dishCriteriaService';
 import { CombinedResponse } from '../services/combinedMetadataCriteriaService';
 // Import count refresh service
 import { refreshUserCounts } from '../services/countRefreshService';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -950,6 +952,16 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* Dish History Section */}
+        {meal.dish_insights?.dish_history && (
+          <View style={styles.dishHistoryContainer}>
+            <Text style={styles.dishHistoryLabel}>Dish History</Text>
+            <Text style={styles.dishHistoryText}>
+              {renderTextWithBold(meal.dish_insights.dish_history)}
+            </Text>
+          </View>
+        )}
+
         {/* Quick Ratings Section - only show rated statements */}
         {quickRatings && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
           <View style={styles.quickRatingsSection}>
@@ -1229,19 +1241,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         }}
       />
 
-      {/* Dish History Section */}
-      {meal.dish_insights?.dish_history && (
-        <View style={styles.dishHistoryContainer}>
-          <View style={styles.dishHistoryHeader}>
-            <Text style={styles.dishHistoryIcon}>📚</Text>
-            <Text style={styles.dishHistoryTitle}>Dish History</Text>
-          </View>
-          <Text style={styles.dishHistoryText}>
-            {renderTextWithBold(meal.dish_insights.dish_history)}
-          </Text>
-        </View>
-      )}
-
       <View style={styles.actionsContainer}>
         {meal.userId === auth().currentUser?.uid ? (
           // If user is the owner, show all buttons with equal sizing and spacing
@@ -1369,19 +1368,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     color: '#4682b4',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.lightTan,
   },
   headerSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#FAF9F6',
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.lightTan,
   },
   backButtonHeader: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
@@ -1390,10 +1389,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.h3,
+    fontFamily: 'Inter',
+    fontWeight: 'normal',
+    color: colors.textPrimary,
   },
   headerRightButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
@@ -1432,7 +1431,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   errorContainer: {
     flex: 1,
@@ -1497,7 +1496,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#999',
     fontSize: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   photosSection: {
     marginHorizontal: 16,
@@ -1536,8 +1535,8 @@ const styles = StyleSheet.create({
   mealName: {
     fontSize: 24,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#1a2b49',
+    fontFamily: 'Unna',
+    color: '#1A1A1A',
     flex: 1,
   },
   mapIcon: {
@@ -1555,7 +1554,7 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontSize: 12,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   infoRow: {
     flexDirection: 'row',
@@ -1578,7 +1577,7 @@ const styles = StyleSheet.create({
   restaurantName: {
     fontSize: 16,
     marginLeft: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Unna',
   },
   restaurantRow: {
     flexDirection: 'row',
@@ -1593,8 +1592,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
     color: '#1a2b49',
-    textDecorationLine: 'underline',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Unna',
   },
   userIconContainer: {
     width: 24, 
@@ -1628,12 +1626,12 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'left', // Left-align the text
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   ratingLabel: {
     fontSize: 16,
     marginRight: 10,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   starsContainer: {
     flexDirection: 'row',
@@ -1653,13 +1651,13 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   cityText: {
     fontSize: 14,
     color: '#999',
     marginLeft: 5,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   cityLabel: {
     fontWeight: 'bold',
@@ -1669,32 +1667,37 @@ const styles = StyleSheet.create({
     color: '#888',
     fontStyle: 'italic',
     marginTop: 2,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   feedbackSection: {
     marginTop: 12,
     marginBottom: 12,
-    backgroundColor: '#FAF9F6',
-    borderRadius: 8,
-    padding: 15,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FFC008',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F8F6F2',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   feedbackItem: {
     marginBottom: 12,
   },
   feedbackLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1a2b49',
-    marginBottom: 4,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontWeight: 'normal',
+    color: '#858585',
+    marginBottom: 6,
+    fontFamily: 'Inter',
   },
   feedbackText: {
     fontSize: 15,
-    color: '#333',
-    lineHeight: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    lineHeight: 22,
+    fontFamily: 'Unna',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -1709,38 +1712,35 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 14,
     color: '#999',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Dish History styles
   dishHistoryContainer: {
-    backgroundColor: '#fff9e6',
+    marginTop: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
+    borderWidth: 1,
+    borderColor: '#F8F6F2',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  dishHistoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dishHistoryIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  dishHistoryTitle: {
+  dishHistoryLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontWeight: 'normal',
+    color: '#858585',
+    marginBottom: 6,
+    fontFamily: 'Inter',
   },
   dishHistoryText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#2c3e50',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontSize: 15,
+    color: '#1A1A1A',
+    lineHeight: 22,
+    fontFamily: 'Unna',
   },
   // Metadata styles
   metadataContainer: {
@@ -1760,7 +1760,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#333',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataGrid: {
     flexDirection: 'row',
@@ -1781,13 +1781,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataValue: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataButtonsRow: {
     flexDirection: 'row',
@@ -1843,7 +1843,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#1a2b49', // Navy blue text
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   buttonIcon: {
     width: 20,
@@ -1905,7 +1905,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a2b49',
     marginBottom: 10,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataTagsContainer: {
     flexDirection: 'row',
@@ -1913,7 +1913,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   metadataTag: {
-    backgroundColor: '#ffc008',
+    backgroundColor: '#5B8A72',
     borderRadius: 16,
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -1930,7 +1930,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Header cheers icon (moved from title area)
   headerCheersIcon: {
@@ -1972,7 +1972,7 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     fontSize: 12,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // New styles for meal info layout
   mealInfoColumn: {
@@ -2022,7 +2022,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a2b49',
     marginBottom: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataRow: {
     flexDirection: 'row',
@@ -2034,13 +2034,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1a2b49',
     minWidth: 120,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   metadataValue: {
     fontSize: 14,
     color: '#333',
     flex: 1,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   interestingIngredient: {
     fontWeight: 'bold',
@@ -2062,7 +2062,7 @@ const styles = StyleSheet.create({
     color: '#2d5016', // Dark green for mindful eating theme
     marginBottom: 4,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   dishCriteriaSubtitle: {
     fontSize: 14,
@@ -2070,7 +2070,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionItem: {
     marginBottom: 12,
@@ -2093,14 +2093,14 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   userRatingNote: {
     fontSize: 12,
     color: '#666',
     marginTop: 4,
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   ratingSummary: {
     marginTop: 16,
@@ -2115,7 +2115,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1a2b49',
     marginBottom: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   averageRatingContainer: {
     flexDirection: 'row',
@@ -2125,12 +2125,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginRight: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   averageRatingValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionNumber: {
     fontSize: 14,
@@ -2138,21 +2138,21 @@ const styles = StyleSheet.create({
     color: '#2d5016',
     marginRight: 8,
     minWidth: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#2d5016',
     flex: 1,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionDescription: {
     fontSize: 13,
     color: '#4a6741',
     lineHeight: 18,
     marginLeft: 28,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criteriaFooter: {
     fontSize: 12,
@@ -2160,7 +2160,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   loadingSection: {
     flexDirection: 'row',
@@ -2173,7 +2173,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Combined test section styles
   combinedTestSection: {
@@ -2191,7 +2191,7 @@ const styles = StyleSheet.create({
     color: '#f57f17', // Darker yellow/orange for testing
     marginBottom: 8,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   combinedTestSubtitle: {
     fontSize: 16,
@@ -2199,7 +2199,7 @@ const styles = StyleSheet.create({
     color: '#ef6c00',
     marginTop: 12,
     marginBottom: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Quick Ratings Styles
   quickRatingsSection: {
@@ -2229,8 +2229,8 @@ const styles = StyleSheet.create({
   statementText: {
     flex: 1,
     fontSize: 13,
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
     marginRight: 12,
     lineHeight: 18,
   },
@@ -2244,8 +2244,6 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Edit metadata modal styles
   modalOverlay: {
@@ -2272,7 +2270,7 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     marginBottom: 20,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   modalInput: {
     borderWidth: 1,
@@ -2283,7 +2281,7 @@ const styles = StyleSheet.create({
     color: '#1a2b49',
     marginBottom: 20,
     minHeight: 60,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   modalButtons: {
     flexDirection: 'row',
@@ -2306,13 +2304,13 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
 });
 

@@ -33,9 +33,9 @@ export const updatePixelArtNotificationWithImage = async (
     PushNotification.cancelLocalNotification(`unrated-meal-pixel-art-${mealId}`);
     console.log('✅ Cancelled original pixel art notification (react-native-push-notification)');
 
-    // Calculate when it should fire (2 minutes from now - for testing)
+    // Calculate when it should fire (10 minutes from now)
     const notificationTime = new Date();
-    notificationTime.setMinutes(notificationTime.getMinutes() + 2);
+    notificationTime.setMinutes(notificationTime.getMinutes() + 10);
 
     console.log('📬 Scheduling pixel art notification with image (Notifee)');
     console.log('   File path:', localPixelArtPath);
@@ -61,7 +61,7 @@ export const updatePixelArtNotificationWithImage = async (
       {
         id: `unrated-meal-pixel-art-${mealId}`,
         title: '', // Empty title so image shows first
-        body: 'Rate your meal to unlock your emoji', // Text as body instead
+        body: 'Rate to unlock!', // Text as body instead
         ios: {
           // iOS-specific configuration with image attachment
           attachments: [{

@@ -28,28 +28,35 @@ export interface RatingStatementsResponse {
 /**
  * Extract 6 rating statements for immediate display in ResultScreen
  * OPTIMIZED: Works with dish name only, no image processing needed
+ * @param mealName - The name of the dish
+ * @param isDescriptive - Whether this is a descriptive name (low confidence) vs specific dish name
  */
 export const extractRatingStatements = async (
-  mealName: string
+  mealName: string,
+  isDescriptive: boolean = false
 ): Promise<RatingStatementsData | null> => {
   console.log('🚨 RatingStatementsService: FUNCTION CALLED - extractRatingStatements (text-only)');
-  console.log('🚨 RatingStatementsService: Parameters received:', { mealName });
-  
+  console.log('🚨 RatingStatementsService: Parameters received:', { mealName, isDescriptive });
+
   try {
     console.log('🚀 RatingStatementsService: Starting rating statements extraction (no image)');
     console.log('🍽️ RatingStatementsService: Meal name:', mealName);
-    
+    console.log('🔍 RatingStatementsService: Is descriptive name:', isDescriptive);
+
     if (!mealName || mealName.trim().length === 0) {
       console.error('❌ RatingStatementsService: No meal name provided');
       return null;
     }
-    
+
     // No image compression needed - text-only request
     // Create FormData for text-only request
     const formData = new FormData();
-    
+
     // Add meal name (required for text-only mode)
     formData.append('meal_name', mealName);
+
+    // Add descriptive flag to help backend adjust prompt
+    formData.append('is_descriptive', isDescriptive ? 'true' : 'false');
     
     console.log('🌐 RatingStatementsService: Making API call to extract-rating-statements');
     console.log('🌐 RatingStatementsService: URL:', `${BASE_URL}/extract-rating-statements`);

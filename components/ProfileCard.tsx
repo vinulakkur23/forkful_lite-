@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { auth } from '../firebaseConfig';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 interface ProfileCardProps {
   userProfile: {
@@ -132,11 +134,11 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
 const styles = StyleSheet.create({
   profileCard: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.lightGray,
   },
   profileRow: {
     flexDirection: 'row',
@@ -146,30 +148,29 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    marginRight: 10,
+    marginRight: spacing.sm,
   },
   placeholderImage: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1a2b49',
+    backgroundColor: colors.warmTaupe,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: spacing.sm,
   },
   placeholderText: {
-    color: 'white',
-    fontSize: 14,
+    color: colors.white,
+    ...typography.bodyMedium,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'normal',
-    color: '#1a2b49',
+    color: colors.textPrimary,
     fontFamily: 'Unna',
     marginBottom: 2,
   },
@@ -178,60 +179,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statText: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   statSeparator: {
-    fontSize: 12,
-    color: '#ccc',
-    marginHorizontal: 6,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodySmall,
+    color: colors.mediumGray,
+    marginHorizontal: spacing.xs,
   },
   signOutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 8,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
     borderWidth: 1,
-    borderColor: '#858585',
+    borderColor: colors.textTertiary,
   },
   signOutText: {
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-    color: '#858585',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     fontWeight: '500',
-    fontSize: 11,
   },
   followButton: {
     width: 28,
     height: 28,
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: '#1a2b49',
+    borderColor: colors.warmTaupe,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   followButtonActive: {
-    backgroundColor: '#1a2b49',
+    backgroundColor: colors.warmTaupe,
   },
   followButtonIcon: {
-    color: '#1a2b49',
+    color: colors.warmTaupe,
     fontWeight: 'bold',
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 16,
   },
   followButtonIconActive: {
-    color: '#ffffff',
+    color: colors.white,
   },
   rightSideContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.xs,
   },
   notificationButton: {
-    padding: 4,
+    padding: spacing.xs,
     position: 'relative',
   },
   notificationIcon: {
@@ -249,13 +247,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: colors.white,
   },
   notificationBadgeText: {
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 10,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodySmall,
     lineHeight: 12,
   },
 });

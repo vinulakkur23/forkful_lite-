@@ -328,21 +328,21 @@ const styles = StyleSheet.create({
   plusIcon: {
     fontSize: 120,
     fontWeight: '300',
-    color: '#1a2b49',
+    color: '#5B8A72',
     lineHeight: 120,
   },
   addPhotoButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a2b49',
+    color: '#5B8A72',
     marginTop: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   noPhotoText: {
     marginTop: 10,
     color: '#999',
     fontSize: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   // Flagship badge styles removed - no longer shown to users
   photoDotsContainer: {
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   removeButtonText: {
-    color: '#ffc008',
+    color: '#5B8A72',
     fontSize: 24,
     fontWeight: 'bold',
     lineHeight: 24,
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   thumbnailSelected: {
-    borderColor: '#ffc008',
+    borderColor: '#5B8A72',
   },
   thumbnailImage: {
     width: '100%',
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1a2b49',
+    borderColor: '#5B8A72',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   },
   addPhotoPlus: {
     fontSize: 36,
-    color: '#1a2b49',
+    color: '#5B8A72',
     fontWeight: '400',
     textAlign: 'center',
     lineHeight: 36,
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     right: 12,
   },
   editOverlayBackground: {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(91, 138, 114, 0.9)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   }
 });
 

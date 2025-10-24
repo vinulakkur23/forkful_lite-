@@ -140,8 +140,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a2b49',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: '#1A1A1A',
+    fontFamily: 'Inter',
   },
   averageContainer: {
     flexDirection: 'row',
@@ -155,18 +155,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginRight: 4,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   averageScore: {
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   subtitle: {
     fontSize: 14,
     color: '#666',
     marginBottom: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionContainer: {
     marginBottom: 24,
@@ -182,17 +182,17 @@ const styles = StyleSheet.create({
   criterionNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1a2b49',
+    color: '#1A1A1A',
     marginRight: 8,
     minWidth: 20,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a2b49',
+    color: '#1A1A1A',
     flex: 1,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   criterionDescription: {
     fontSize: 14,
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
     marginLeft: 28,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   sliderContainer: {
     flexDirection: 'row',
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontWeight: '500',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   currentRatingContainer: {
     flexDirection: 'row',
@@ -229,12 +229,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginRight: 8,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   currentRatingValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
   footer: {
     marginTop: 16,
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    fontFamily: 'Inter',
   },
 });
 

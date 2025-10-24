@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Achievement } from '../types/achievements';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 interface AchievementNotificationProps {
   achievement: Achievement;
@@ -147,35 +149,32 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40, // Increased top spacing to avoid status bar
+    top: Platform.OS === 'ios' ? 60 : 40,
     left: 0,
     right: 0,
-    backgroundColor: '#ffffff', // White background for consistency
-    borderRadius: 12, // Match food card radius
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingTop: 18,
-    paddingBottom: 18,
-    paddingLeft: 18,
-    paddingRight: 50, // Extra padding on right to ensure close button has space
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    paddingLeft: spacing.md,
+    paddingRight: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 10, // Increased elevation for Android
-    zIndex: 10000, // Increased z-index
-    overflow: 'visible', // Ensure nothing is clipped
+    ...shadows.medium,
+    elevation: 10,
+    zIndex: 10000,
+    overflow: 'visible',
   },
   iconContainer: {
-    width: 80, // Increased from 60
-    height: 80, // Increased from 60
+    width: 80,
+    height: 80,
     borderRadius: 40,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: spacing.md,
     overflow: 'hidden',
   },
   stampImage: {
@@ -186,29 +185,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 14,
+    ...typography.bodyMedium,
     fontWeight: '600',
-    color: '#E63946', // Changed to Lobster red for DishItOut
-    marginBottom: 3,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.warmTaupe,
+    marginBottom: spacing.xs,
   },
   achievementName: {
-    fontSize: 18, // Increased from 16
+    ...typography.bodyLarge,
     fontWeight: 'bold',
-    color: '#1a2b49', // Match HomeScreen text color
-    marginBottom: 5,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
   description: {
-    fontSize: 14, // Increased from 12
-    color: '#1a2b49', // Match HomeScreen text color
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
   },
   closeButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    padding: 10,
+    top: spacing.xs,
+    right: spacing.xs,
+    padding: spacing.sm,
     height: 40,
     width: 40,
     alignItems: 'center',
@@ -217,11 +213,11 @@ const styles = StyleSheet.create({
   },
   closeButtonX: {
     fontSize: 20,
-    color: '#1a2b49',
+    color: colors.textPrimary,
     fontWeight: 'bold',
     lineHeight: 20,
     textAlign: 'center',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    ...typography.bodyMedium,
   },
 });
 

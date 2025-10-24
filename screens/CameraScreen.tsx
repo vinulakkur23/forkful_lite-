@@ -32,6 +32,8 @@ import RNFS from 'react-native-fs';
 import { scheduleUnratedMealNotifications } from '../services/unratedMealNotificationService';
 import { uploadImageToFirebase } from '../services/imageUploadService';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 // Update the navigation prop type to use composite navigation
 type CameraScreenNavigationProp = CompositeNavigationProp<
@@ -51,7 +53,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [saveToCameraRoll, setSaveToCameraRoll] = useState(false);
-  const [showSavingOverlay, setShowSavingOverlay] = useState(false);
   
   // Get device dimensions
   const screenWidth = Dimensions.get('window').width;
@@ -80,7 +81,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // Reset any necessary state when screen is focused
       setIsLoading(true);
       setIsTakingPicture(false);
-      setShowSavingOverlay(false); // Reset saving overlay when returning to camera
 
       // IMPORTANT: Clear any global prefetched suggestions to prevent caching issues
       if ((global as any).prefetchedSuggestions) {
@@ -167,6 +167,11 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
+      // Navigate to Enjoy Meal screen immediately - don't wait for upload
+      console.log('📱 Navigating to Enjoy Meal screen immediately');
+      navigation.navigate('EnjoyMeal', { photoUri: photoUri });
+
+      // Now do everything else in the background
       // Step 1: Create Firestore document FIRST (with placeholder photoUrl)
       // This is required for Firebase Storage security rules
       console.log('📝 Creating Firestore document first...');
@@ -231,12 +236,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       });
       console.log('✅ Document updated with photo URL');
 
-      // Navigate immediately to Food Passport - no blocking alert
-      // User will see meal appear in their passport instantly
-      console.log('📱 Navigating to Food Passport');
-      setShowSavingOverlay(false); // Hide overlay before navigation
-      navigation.navigate('FoodPassport', { tabIndex: 0 });
-
       // Step 4: Start background API calls (non-blocking)
       console.log('🔄 Starting background API calls...');
 
@@ -252,7 +251,11 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           });
 
           // Call 2: Extract rating statements (for push notifications)
-          extractRatingStatements(dishData.dish_name).then(async (statementsData) => {
+          // Check if confidence is below 85% to indicate descriptive name
+          const isDescriptive = dishData.confidence_level < 0.85 || dishData.is_descriptive;
+          console.log(`📊 Dish confidence: ${dishData.confidence_level}, is_descriptive: ${isDescriptive}`);
+
+          extractRatingStatements(dishData.dish_name, isDescriptive).then(async (statementsData) => {
             if (statementsData) {
               console.log('✅ Rating statements extracted (for notifications)');
               await firestore().collection('mealEntries').doc(mealId).update({
@@ -407,7 +410,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           setShowFlash(true);
           setTimeout(() => {
             setShowFlash(false);
-            setShowSavingOverlay(true); // Show saving overlay after flash
           }, 200);
 
           // Verify we got a valid photo
@@ -759,14 +761,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.flashOverlay} />
       )}
 
-      {/* Saving overlay */}
-      {showSavingOverlay && (
-        <View style={styles.savingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.savingText}>Saving meal...</Text>
-        </View>
-      )}
-
       {/* Instructional text at top */}
       <View style={styles.instructionalTextContainer}>
         <Text style={styles.instructionalText}>
@@ -909,24 +903,6 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     zIndex: 10,
   },
-  savingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20,
-  },
-  savingText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-  },
   overlay: {
     position: 'absolute',
     top: 80,
@@ -948,16 +924,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.screenPadding,
   },
   instructionalText: {
-    color: 'white',
-    fontSize: 13,
+    color: colors.white,
+    ...typography.bodySmall,
     fontWeight: '600',
     textAlign: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 12,
-    borderRadius: 8,
+    padding: spacing.sm,
+    borderRadius: spacing.borderRadius.sm,
   },
   closeButton: {
     position: 'absolute',
@@ -1102,10 +1078,9 @@ const styles = StyleSheet.create({
     tintColor: 'white',
   },
   uploadButtonTextLarge: {
-    color: 'white',
-    fontSize: 14,
+    color: colors.white,
+    ...typography.bodyMedium,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   // Save to camera roll checkbox styles
   saveToRollContainer: {
@@ -1140,10 +1115,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   saveToRollText: {
-    color: 'white',
-    fontSize: 12,
+    color: colors.white,
+    ...typography.bodySmall,
     fontWeight: '600',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
     textAlign: 'center',
     lineHeight: 14,
   },

@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiDisplay from './EmojiDisplay';
+// Import theme
+import { colors, typography, spacing, shadows } from '../themes';
 
 const { width } = Dimensions.get('window');
 
@@ -18,21 +20,28 @@ export interface RatingFilterItem {
   label: string; // Display text
 }
 
+export type SortOption = 'chronological' | 'rating';
+
 interface RatingFilterComponentProps {
   onRatingFilterChange: (ratings: number[] | null) => void;
   initialRatings?: number[] | null;
   showDropdown?: boolean;
   onDropdownToggle?: (isOpen: boolean) => void;
+  onSortChange?: (sort: SortOption) => void;
+  initialSort?: SortOption;
 }
 
 const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
   onRatingFilterChange,
   initialRatings = null,
   showDropdown: controlledShowDropdown,
-  onDropdownToggle
+  onDropdownToggle,
+  onSortChange,
+  initialSort = 'chronological'
 }) => {
   const [selectedRatings, setSelectedRatings] = useState<number[]>(initialRatings || []);
   const [internalShowDropdown, setInternalShowDropdown] = useState(false);
+  const [currentSort, setCurrentSort] = useState<SortOption>(initialSort);
 
   // Use controlled state if provided, otherwise use internal state
   const showDropdown = controlledShowDropdown !== undefined ? controlledShowDropdown : internalShowDropdown;
@@ -74,7 +83,12 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
     setSelectedRatings([]);
   };
 
-
+  const handleSortChange = (sort: SortOption) => {
+    setCurrentSort(sort);
+    if (onSortChange) {
+      onSortChange(sort);
+    }
+  };
 
   const handleToggleDropdown = () => {
     if (onDropdownToggle) {
@@ -122,6 +136,41 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
               ))}
             </ScrollView>
 
+            {/* Sort Toggle Section */}
+            <View style={styles.sortSection}>
+              <Text style={styles.sortLabel}>Sort by:</Text>
+              <View style={styles.sortButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.sortButton,
+                    currentSort === 'chronological' && styles.sortButtonActive
+                  ]}
+                  onPress={() => handleSortChange('chronological')}
+                >
+                  <Text style={[
+                    styles.sortButtonText,
+                    currentSort === 'chronological' && styles.sortButtonTextActive
+                  ]}>
+                    Date
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.sortButton,
+                    currentSort === 'rating' && styles.sortButtonActive
+                  ]}
+                  onPress={() => handleSortChange('rating')}
+                >
+                  <Text style={[
+                    styles.sortButtonText,
+                    currentSort === 'rating' && styles.sortButtonTextActive
+                  ]}>
+                    Rating
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <TouchableOpacity
               style={styles.dropdownFilterButton}
               onPress={handleCloseDropdown}
@@ -143,64 +192,100 @@ const styles = StyleSheet.create({
   dropdownToggleButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.mediumGray,
   },
   dropdownToggleButtonActive: {
-    backgroundColor: '#ffc008',
-    borderColor: '#ffc008',
+    backgroundColor: colors.legacyGold,
+    borderColor: colors.legacyGold,
   },
   dropdownContainer: {
     position: 'absolute',
-    top: 45, // Just below the button
+    top: 45,
     right: 0,
     zIndex: 1001,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    ...shadows.medium,
   },
   dropdownContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    width: 80, // Made thinner since we removed the Clear button
-    maxHeight: 280, // Reduced since we removed action buttons section
+    backgroundColor: colors.white,
+    borderRadius: spacing.borderRadius.md,
+    width: 140,
+    maxHeight: 360,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.mediumGray,
   },
   ratingsContainer: {
-    maxHeight: 240, // Height to show all 6 ratings without scrolling
+    maxHeight: 240,
   },
   ratingItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8, // Reduced from 12 to 8 for more compact rows
+    padding: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.lightGray,
   },
   ratingItemSelected: {
     backgroundColor: '#fff8e1',
   },
   dropdownFilterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: colors.mediumGray,
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    backgroundColor: colors.lightGray,
+    borderBottomLeftRadius: spacing.borderRadius.md,
+    borderBottomRightRadius: spacing.borderRadius.md,
   },
   dropdownFilterButtonText: {
-    color: '#1a2b49',
+    ...typography.bodySmall,
+    color: colors.textPrimary,
     fontWeight: '600',
-    fontSize: 12,
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  sortSection: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.mediumGray,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.mediumGray,
+  },
+  sortLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  sortButtons: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  sortButton: {
+    flex: 1,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    borderRadius: spacing.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.mediumGray,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+  },
+  sortButtonActive: {
+    backgroundColor: '#5B8A72',
+    borderColor: '#5B8A72',
+  },
+  sortButtonText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  sortButtonTextActive: {
+    color: colors.white,
+    fontWeight: '600',
   },
 });
 
