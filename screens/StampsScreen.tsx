@@ -1965,8 +1965,8 @@ const styles = StyleSheet.create({
     marginRight: 6, // Space between carousel items
   },
   emojiItem: {
-    width: 120, // Bigger for better visibility
-    height: 120,
+    width: 85,
+    height: 85,
     alignItems: 'center',
     justifyContent: 'center',
   },

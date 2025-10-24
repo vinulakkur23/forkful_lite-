@@ -21,14 +21,22 @@ export interface RatingFilterItem {
 interface RatingFilterComponentProps {
   onRatingFilterChange: (ratings: number[] | null) => void;
   initialRatings?: number[] | null;
+  showDropdown?: boolean;
+  onDropdownToggle?: (isOpen: boolean) => void;
 }
 
 const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
   onRatingFilterChange,
-  initialRatings = null
+  initialRatings = null,
+  showDropdown: controlledShowDropdown,
+  onDropdownToggle
 }) => {
   const [selectedRatings, setSelectedRatings] = useState<number[]>(initialRatings || []);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [internalShowDropdown, setInternalShowDropdown] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const showDropdown = controlledShowDropdown !== undefined ? controlledShowDropdown : internalShowDropdown;
+  const setShowDropdown = onDropdownToggle || setInternalShowDropdown;
 
   // Available ratings 1-6 (only rated meals)
   const availableRatings = [1, 2, 3, 4, 5, 6];
@@ -68,6 +76,22 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
 
 
 
+  const handleToggleDropdown = () => {
+    if (onDropdownToggle) {
+      onDropdownToggle(!showDropdown);
+    } else {
+      setInternalShowDropdown(!showDropdown);
+    }
+  };
+
+  const handleCloseDropdown = () => {
+    if (onDropdownToggle) {
+      onDropdownToggle(false);
+    } else {
+      setInternalShowDropdown(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -75,7 +99,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
           styles.dropdownToggleButton,
           selectedRatings.length > 0 && styles.dropdownToggleButtonActive
         ]}
-        onPress={() => setShowDropdown(!showDropdown)}
+        onPress={handleToggleDropdown}
       >
         <EmojiDisplay rating={3} size={20} />
       </TouchableOpacity>
@@ -100,7 +124,7 @@ const RatingFilterComponent: React.FC<RatingFilterComponentProps> = ({
 
             <TouchableOpacity
               style={styles.dropdownFilterButton}
-              onPress={() => setShowDropdown(false)}
+              onPress={handleCloseDropdown}
             >
               <Text style={styles.dropdownFilterButtonText}>Filter</Text>
             </TouchableOpacity>

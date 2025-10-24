@@ -2255,7 +2255,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    width: '90%',
+    width: '95%',
+    minHeight: 250,
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 25,
@@ -2277,10 +2278,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    padding: 16,
+    fontSize: 18,
     color: '#1a2b49',
     marginBottom: 20,
+    minHeight: 60,
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   modalButtons: {

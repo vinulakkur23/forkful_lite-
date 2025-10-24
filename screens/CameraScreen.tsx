@@ -8,7 +8,8 @@ import {
   StatusBar,
   Platform,
   Dimensions,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
@@ -30,6 +31,7 @@ import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
 import { scheduleUnratedMealNotifications } from '../services/unratedMealNotificationService';
 import { uploadImageToFirebase } from '../services/imageUploadService';
+import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 
 // Update the navigation prop type to use composite navigation
 type CameraScreenNavigationProp = CompositeNavigationProp<
@@ -48,6 +50,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
+  const [saveToCameraRoll, setSaveToCameraRoll] = useState(false);
+  const [showSavingOverlay, setShowSavingOverlay] = useState(false);
   
   // Get device dimensions
   const screenWidth = Dimensions.get('window').width;
@@ -76,17 +80,18 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // Reset any necessary state when screen is focused
       setIsLoading(true);
       setIsTakingPicture(false);
-      
+      setShowSavingOverlay(false); // Reset saving overlay when returning to camera
+
       // IMPORTANT: Clear any global prefetched suggestions to prevent caching issues
       if ((global as any).prefetchedSuggestions) {
         console.log('!!! CLEARING GLOBAL PREFETCHED SUGGESTIONS IN CAMERA SCREEN !!!');
         (global as any).prefetchedSuggestions = null;
         delete (global as any).prefetchedSuggestions;
       }
-      
+
       // Get location again
       getLocation();
-      
+
       // Reset loading after a short delay to ensure devices are properly initialized
       setTimeout(() => {
         setIsLoading(false);
@@ -229,6 +234,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // Navigate immediately to Food Passport - no blocking alert
       // User will see meal appear in their passport instantly
       console.log('📱 Navigating to Food Passport');
+      setShowSavingOverlay(false); // Hide overlay before navigation
       navigation.navigate('FoodPassport', { tabIndex: 0 });
 
       // Step 4: Start background API calls (non-blocking)
@@ -399,7 +405,10 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
 
           // Show camera flash animation immediately for feedback
           setShowFlash(true);
-          setTimeout(() => setShowFlash(false), 200);
+          setTimeout(() => {
+            setShowFlash(false);
+            setShowSavingOverlay(true); // Show saving overlay after flash
+          }, 200);
 
           // Verify we got a valid photo
           if (!photo || !photo.path) {
@@ -420,6 +429,18 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           }
 
           console.log("Normalized photo path:", normalizedPath);
+
+          // Save to camera roll if user opted in
+          if (saveToCameraRoll) {
+            try {
+              console.log("Saving photo to camera roll...");
+              await CameraRoll.save(normalizedPath, { type: 'photo' });
+              console.log("✅ Photo saved to camera roll successfully");
+            } catch (saveError) {
+              console.error("❌ Failed to save to camera roll:", saveError);
+              // Don't block the flow if save fails - just log it
+            }
+          }
 
           // Add a timestamp to create a unique navigation key
           const timestamp = new Date().getTime();
@@ -738,6 +759,14 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.flashOverlay} />
       )}
 
+      {/* Saving overlay */}
+      {showSavingOverlay && (
+        <View style={styles.savingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.savingText}>Saving meal...</Text>
+        </View>
+      )}
+
       {/* Instructional text at top */}
       <View style={styles.instructionalTextContainer}>
         <Text style={styles.instructionalText}>
@@ -771,6 +800,20 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.captureButtonInner} />
         </TouchableOpacity>
       </View>
+
+      {/* Save to Camera Roll checkbox - positioned right */}
+      <TouchableOpacity
+        style={styles.saveToRollContainer}
+        onPress={() => setSaveToCameraRoll(!saveToCameraRoll)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkbox, saveToCameraRoll && styles.checkboxChecked]}>
+          {saveToCameraRoll && (
+            <Text style={styles.checkmark}>✓</Text>
+          )}
+        </View>
+        <Text style={styles.saveToRollText}>Save to{'\n'}camera roll</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -865,6 +908,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     opacity: 0.8,
     zIndex: 10,
+  },
+  savingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  savingText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
   overlay: {
     position: 'absolute',
@@ -1024,7 +1085,7 @@ const styles = StyleSheet.create({
   uploadButtonLarge: {
     position: 'absolute',
     bottom: 50,
-    left: 40,
+    left: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -1045,6 +1106,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+  },
+  // Save to camera roll checkbox styles
+  saveToRollContainer: {
+    position: 'absolute',
+    bottom: 50,
+    right: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minWidth: 100,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  checkboxChecked: {
+    backgroundColor: '#5B8A72',
+    borderColor: '#5B8A72',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  saveToRollText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });
 

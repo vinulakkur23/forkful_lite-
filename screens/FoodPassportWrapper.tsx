@@ -140,7 +140,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   // Shared filter state for both tabs - now an array of filters
   const [activeFilters, setActiveFilters] = useState<FilterItem[] | null>(null);
   const [activeRatingFilters, setActiveRatingFilters] = useState<number[] | null>(null);
-  
+  const [sortOption, setSortOption] = useState<'chronological' | 'rating'>('chronological');
+
   // Tooltip onboarding state
   const [showTooltips, setShowTooltips] = useState(false);
   const [tabBarLayout, setTabBarLayout] = useState<any>(null);
@@ -177,6 +178,12 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const handleRatingFilterChange = (ratings: number[] | null) => {
     console.log('FoodPassportWrapper: Rating filters changed to:', ratings);
     setActiveRatingFilters(ratings);
+  };
+
+  // Handle sort changes
+  const handleSortChange = (sort: 'chronological' | 'rating') => {
+    console.log('FoodPassportWrapper: Sort changed to:', sort);
+    setSortOption(sort);
   };
 
   // Scroll to top when filters change
@@ -408,10 +415,11 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       case 'passport':
         return (
           <ErrorBoundary navigation={navigation}>
-            <FoodPassportScreen 
+            <FoodPassportScreen
               navigation={navigation}
               activeFilters={activeFilters}
               activeRatingFilters={activeRatingFilters}
+              sortOption={sortOption}
               userId={targetUserId}
               userName={userName}
               userPhoto={userPhoto}
@@ -530,12 +538,14 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         
         {/* Shared filter component */}
         <View style={styles.filterArea}>
-          <CompositeFilterComponent 
+          <CompositeFilterComponent
             key="shared-passport-filter"
             onFilterChange={handleFilterChange}
             onRatingFilterChange={handleRatingFilterChange}
+            onSortChange={handleSortChange}
             initialFilters={activeFilters}
             initialRatings={activeRatingFilters}
+            initialSort={sortOption}
             onUserSelect={(searchUserId, searchUserName, searchUserPhoto) => {
               console.log('FoodPassport: Switching to user profile:', searchUserName, searchUserId, 'Photo:', searchUserPhoto);
               

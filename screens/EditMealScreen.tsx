@@ -1084,6 +1084,28 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       if (photoSource === 'camera') {
         // Path 1: Camera capture → Show emoji award modal
         console.log('Path 1: Showing emoji award modal');
+
+        // Reload pixel art from Firestore for THIS meal only (clear cached data first)
+        setPixelArtUrl(null);
+        setPixelArtData(null);
+
+        try {
+          const freshMealDoc = await firestore().collection('mealEntries').doc(route.params.mealId).get();
+          const freshMealData = freshMealDoc.data();
+
+          if (freshMealData?.pixel_art_url) {
+            console.log('✅ Pixel art URL found for this meal');
+            setPixelArtUrl(freshMealData.pixel_art_url);
+          } else if (freshMealData?.pixel_art_data) {
+            console.log('✅ Pixel art data found for this meal');
+            setPixelArtData(freshMealData.pixel_art_data);
+          } else {
+            console.log('⏳ Pixel art not ready yet for this meal');
+          }
+        } catch (error) {
+          console.error('❌ Error loading pixel art:', error);
+        }
+
         setShowEmojiAwardModal(true);
       } else if (photoSource === 'gallery') {
         // Path 2: Gallery upload → Show thank you modal (no emoji)
@@ -1158,7 +1180,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
         enableAutomaticScroll={true}
-        enableResetScrollToCoords={false}
         keyboardOpeningTime={0}
         extraScrollHeight={100}
         extraHeight={130}
@@ -1333,20 +1354,6 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               value={thoughts}
               onChangeText={setThoughts}
               maxLength={600}
-              onFocus={() => {
-                // Scroll to show the text input with some extra space
-                setTimeout(() => {
-                  if (textInputRef.current) {
-                    textInputRef.current.measureInWindow((x, y, width, height) => {
-                      // Calculate the position to scroll to
-                      const scrollToY = y - 100; // Offset to show some content above
-                      if (scrollViewRef.current && scrollViewRef.current.scrollToPosition) {
-                        scrollViewRef.current.scrollToPosition(0, scrollToY, true);
-                      }
-                    });
-                  }
-                }, 300);
-              }}
             />
             <Text style={styles.helperText}>
               Sharing will help others find your review helpful and allow us to give you better recommendations.
@@ -1501,9 +1508,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       >
         <View style={styles.emojiModalContainer}>
           <View style={styles.emojiModalContent}>
-            <Text style={styles.emojiModalTitle}>🎉 Meal Rated!</Text>
+            <Text style={styles.emojiModalTitle}>{meal.meal} Rated!</Text>
             <View style={styles.emojiDisplay}>
-              {/* Show pixel art icon if available, otherwise fallback to emoji rating */}
+              {/* Show pixel art icon if available for THIS meal, otherwise show generating message */}
               {(pixelArtUrl || pixelArtData) ? (
                 <Image
                   source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }}
@@ -1514,12 +1521,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                   }}
                 />
               ) : (
-                <EmojiDisplay rating={rating} size={80} />
+                <View style={{ alignItems: 'center', justifyContent: 'center', width: 100, height: 100 }}>
+                  <ActivityIndicator size="large" color="#ffc008" />
+                  <Text style={{ fontSize: 12, color: '#666', marginTop: 8, textAlign: 'center' }}>
+                    Art Generating...
+                  </Text>
+                </View>
               )}
             </View>
-            <Text style={styles.emojiModalText}>
-              You've earned this {(pixelArtUrl || pixelArtData) ? 'pixel art icon' : 'emoji'} for your {meal.meal}!
-            </Text>
             <TouchableOpacity
               style={styles.emojiModalButton}
               onPress={() => {

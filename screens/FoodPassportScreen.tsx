@@ -54,6 +54,7 @@ type Props = {
   navigation: FoodPassportScreenNavigationProp;
   activeFilters: FilterItem[] | null;
   activeRatingFilters?: number[] | null;
+  sortOption?: 'chronological' | 'rating';
   userId?: string;
   userName?: string;
   userPhoto?: string;
@@ -139,7 +140,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -233,9 +234,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     
     // Apply filter whenever meals or active filters change
     useEffect(() => {
-        console.log('FoodPassportScreen: activeFilters or activeRatingFilters changed:', activeFilters, activeRatingFilters);
+        console.log('FoodPassportScreen: activeFilters, activeRatingFilters, or sortOption changed:', activeFilters, activeRatingFilters, sortOption);
         applyFilter();
-    }, [meals, activeFilters, activeRatingFilters]);
+    }, [meals, activeFilters, activeRatingFilters, sortOption]);
 
     // Load accolades data when component mounts or userId changes
     useEffect(() => {
@@ -526,10 +527,26 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             });
         }
         
-        // If no filters are active, show all meals (but still need to check for rating filters)
+        // If no filters are active, show all meals (but still need to apply sorting)
         if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
-            console.log('No active filters, showing all meals');
-            setFilteredMeals(meals);
+            console.log('No active filters, showing all meals with sorting');
+            let sortedMeals = [...meals];
+
+            // Apply sorting
+            if (sortOption === 'rating') {
+                console.log('FoodPassportScreen: Sorting by rating (highest first)');
+                sortedMeals.sort((a, b) => b.rating - a.rating);
+            } else {
+                // Chronological (most recent first)
+                console.log('FoodPassportScreen: Sorting chronologically (most recent first)');
+                sortedMeals.sort((a, b) => {
+                    const aTime = a.createdAt?.toMillis?.() || 0;
+                    const bTime = b.createdAt?.toMillis?.() || 0;
+                    return bTime - aTime;
+                });
+            }
+
+            setFilteredMeals(sortedMeals);
             return;
         }
         
@@ -740,7 +757,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             result = result.filter(meal => activeRatingFilters.includes(meal.rating));
             console.log(`FoodPassportScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
         }
-        
+
+        // Apply sorting
+        if (sortOption === 'rating') {
+            console.log('FoodPassportScreen: Sorting by rating (highest first)');
+            result.sort((a, b) => b.rating - a.rating);
+        } else {
+            // Chronological (most recent first) - sort by createdAt
+            console.log('FoodPassportScreen: Sorting chronologically (most recent first)');
+            result.sort((a, b) => {
+                const aTime = a.createdAt?.toMillis?.() || 0;
+                const bTime = b.createdAt?.toMillis?.() || 0;
+                return bTime - aTime;
+            });
+        }
+
         setFilteredMeals(result);
     };
     
@@ -2593,8 +2624,8 @@ const styles = StyleSheet.create({
         marginRight: spacing.xs,
     },
     emojiItem: {
-        width: 100,
-        height: 100,
+        width: 85,
+        height: 85,
         alignItems: 'center',
         justifyContent: 'center',
     },

@@ -46,6 +46,8 @@ export const updatePixelArtNotificationWithImage = async (
       id: 'meal-insights',
       name: 'Meal Insights',
       sound: 'default',
+      vibration: true,
+      importance: 4, // High importance
     });
 
     // Create timestamp trigger for 10 minutes from now
@@ -73,8 +75,8 @@ export const updatePixelArtNotificationWithImage = async (
             sound: true,
             badge: true,
           },
-          // Disable tap interaction
-          interruptionLevel: 'passive', // Less intrusive
+          // Active interruption level for better prominence and vibration
+          interruptionLevel: 'active',
         },
         android: {
           channelId: 'meal-insights',
@@ -86,6 +88,8 @@ export const updatePixelArtNotificationWithImage = async (
           },
           largeIcon: localPixelArtPath,
           showTimestamp: false,
+          // Enable vibration
+          vibrationPattern: [300, 500, 300], // vibrate-pause-vibrate pattern
           // Disable auto-cancel when tapped
           autoCancel: false,
           // Don't open app on tap

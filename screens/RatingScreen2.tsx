@@ -1047,58 +1047,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Basic meal saved: ${mealId}`);
       }
 
-      // Extract 5 rating criteria based on dish name and 3 rating statements
-      // This happens AFTER user enters restaurant + dish name
-      logWithSession('Extracting 5 rating criteria for quick ratings...');
-      try {
-        // Get the rating statements from Firestore (saved during camera capture)
-        const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
-        const mealData = mealDoc.data();
-        const ratingStatements = mealData?.rating_statements_result?.rating_statements;
-
-        console.log('📊 Rating statements for criteria generation:', ratingStatements);
-
-        // Call API with dish name and rating statements
-        const criteriaData = await extractDishRatingCriteria(mealName || '', ratingStatements);
-
-        if (criteriaData) {
-          console.log('✅ Rating criteria extracted with rating statements context');
-          await firestore().collection('mealEntries').doc(mealId).update({
-            dish_rating_criteria: criteriaData
-          });
-        }
-      } catch (err) {
-        console.error('❌ Rating criteria error:', err);
-        // Don't block the save if this fails
-      }
-
-      // Extract 3 dish insights (history, restaurant fact, cultural insight)
-      // This happens AFTER user enters restaurant + dish name
-      logWithSession('Extracting dish insights (history, restaurant fact, cultural)...');
-      try {
-        const { extractDishInsights } = await import('../services/dishInsightsService');
-
-        const insightsData = await extractDishInsights(
-          mealName || '',
-          restaurant || undefined,
-          cityInfo || undefined
-        );
-
-        if (insightsData) {
-          console.log('✅ Dish insights extracted:', {
-            has_history: !!insightsData.dish_history,
-            has_restaurant_fact: !!insightsData.restaurant_fact,
-            has_cultural_insight: !!insightsData.cultural_insight
-          });
-          await firestore().collection('mealEntries').doc(mealId).update({
-            dish_insights: insightsData
-          });
-        }
-      } catch (err) {
-        console.error('❌ Dish insights error:', err);
-        // Don't block the save if this fails
-      }
-
       // Check if this meal completes any active challenges (in background)
       const checkChallengeCompletion = async () => {
         try {
@@ -1141,13 +1089,114 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       } else {
         logWithSession('No photo to upload, continuing without image');
       }
-      
-      // Start with rating statements first, then enhanced metadata sequentially
-      // Starting staggered API calls to avoid overwhelming backend
-      logWithSession('Starting STAGGERED API calls - rating statements, then drink pairings, then pixel art with small delays');
-      
+
+      // ========================================
+      // NAVIGATE IMMEDIATELY - API calls continue in background
+      // ========================================
+      const photoSource = route.params.photoSource;
+      const resultParams = {
+        photo: freshPhoto, // Pass original unprocessed photo
+        location: location ? {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          source: location.source
+        } : null,
+        // CLEAN: Pass meal ID - ResultScreen will load data from Firestore
+        mealId: mealId,
+        _uniqueKey: sessionId
+      };
+
+      if (isUnratedMeal) {
+        // Path 1: Unrated camera meal → Navigate to CropScreen for photo editing
+        logWithSession('Navigating to CropScreen for unrated camera meal');
+        navigation.navigate('Crop', {
+          photo: freshPhoto || route.params.photo,
+          mealId: mealId,
+          pendingMealData: {
+            dishName: mealName,
+            restaurant: restaurant,
+            location: location,
+          },
+          _uniqueKey: sessionId,
+        });
+      } else if (photoSource === 'gallery') {
+        // Path 2: Gallery upload → Navigate to CropScreen for photo editing
+        logWithSession('Navigating to CropScreen for gallery upload');
+        navigation.navigate('Crop', {
+          photo: freshPhoto,
+          mealId: mealId,
+          pendingMealData: {
+            dishName: mealName,
+            restaurant: restaurant,
+            location: location,
+          },
+          _uniqueKey: sessionId,
+        });
+      } else {
+        // Default flow: Navigate to Result screen
+        logWithSession('Navigating to ResultScreen (default flow)');
+        navigation.navigate('Result', resultParams);
+      }
+
+      // ========================================
+      // BACKGROUND API CALLS - Continue after navigation
+      // ========================================
+      logWithSession('Starting BACKGROUND API calls after navigation - all non-blocking');
+
+      // BACKGROUND: Extract 5 rating criteria based on dish name and 3 rating statements
+      logWithSession('Extracting rating criteria in background...');
+      (async () => {
+        try {
+          // Get the rating statements from Firestore (saved during camera capture)
+          const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
+          const mealData = mealDoc.data();
+          const ratingStatements = mealData?.rating_statements_result?.rating_statements;
+
+          console.log('📊 Rating statements for criteria generation:', ratingStatements);
+
+          // Call API with dish name and rating statements
+          const criteriaData = await extractDishRatingCriteria(mealName || '', ratingStatements);
+
+          if (criteriaData) {
+            console.log('✅ Rating criteria extracted with rating statements context');
+            await firestore().collection('mealEntries').doc(mealId).update({
+              dish_rating_criteria: criteriaData
+            });
+          }
+        } catch (err) {
+          console.error('❌ Rating criteria error:', err);
+        }
+      })();
+
+      // BACKGROUND: Extract 3 dish insights (history, restaurant fact, cultural insight)
+      logWithSession('Extracting dish insights in background...');
+      (async () => {
+        try {
+          const { extractDishInsights } = await import('../services/dishInsightsService');
+
+          const insightsData = await extractDishInsights(
+            mealName || '',
+            restaurant || undefined,
+            cityInfo || undefined
+          );
+
+          if (insightsData) {
+            console.log('✅ Dish insights extracted:', {
+              has_history: !!insightsData.dish_history,
+              has_restaurant_fact: !!insightsData.restaurant_fact,
+              has_cultural_insight: !!insightsData.cultural_insight
+            });
+            await firestore().collection('mealEntries').doc(mealId).update({
+              dish_insights: insightsData
+            });
+          }
+        } catch (err) {
+          console.error('❌ Dish insights error:', err);
+        }
+      })();
+
       // STAGGERED API calls to avoid overwhelming the backend service
-      
+
       // Step 1: Start rating criteria extraction first (0ms)
       console.log('📝 Starting rating criteria extraction first...');
       extractDishRatingCriteria(
@@ -1251,10 +1300,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
 
       // Step 3: Start pixel art with 1.5 second delay (staggered processing)
-      // ONLY generate pixel art for camera captures, not gallery uploads
-      if (photoSource === 'camera') {
+      // SKIP pixel art for unrated meals (already generated in CameraScreen)
+      // ONLY generate for gallery uploads (which don't go through CameraScreen)
+      if (photoSource === 'gallery') {
         setTimeout(() => {
-          console.log('🎨 Starting pixel art generation after 1.5s delay (staggered processing)...');
+          console.log('🎨 Starting pixel art generation for gallery upload after 1.5s delay...');
           console.log('🎨 Photo URI available:', !!photoUriRef.current);
           const pixelArtPromise = generatePixelArtIcon(mealName, photoUriRef.current);
 
@@ -1318,8 +1368,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         });
         }, 1500); // 1.5 second delay for pixel art generation
       } else {
-        console.log('📸 Skipping pixel art generation for gallery upload');
-        logWithSession('Skipping pixel art for gallery upload');
+        console.log('📸 Skipping pixel art generation - already generated in CameraScreen for camera captures');
+        logWithSession('Skipping pixel art - already generated in camera flow');
       }
 
       // Step 4: Generate monument for city if it's a new city (2 second delay)
@@ -1405,55 +1455,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
       */
       
-      // API call completed synchronously above - no need for background call
-      
-      // DIRECT APPROACH: Navigate straight to Result screen, skipping Crop/Edit
-      const resultParams = {
-        photo: freshPhoto, // Pass original unprocessed photo
-        location: location ? {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          source: location.source
-        } : null,
-        // CLEAN: Pass meal ID - ResultScreen will load data from Firestore
-        mealId: mealId,
-        _uniqueKey: sessionId
-      };
-
-      // Determine navigation based on photo source and meal type
-      const photoSource = route.params.photoSource;
-
-      if (isUnratedMeal) {
-        // Path 1: Unrated camera meal → Navigate to CropScreen for photo editing
-        logWithSession('Navigating to CropScreen for unrated camera meal');
-        navigation.navigate('Crop', {
-          photo: freshPhoto || route.params.photo,
-          mealId: mealId,
-          pendingMealData: {
-            dishName: mealName,
-            restaurant: restaurant,
-            location: location,
-          },
-          _uniqueKey: sessionId,
-        });
-      } else if (photoSource === 'gallery') {
-        // Path 2: Gallery upload → Navigate to CropScreen for photo editing
-        logWithSession('Navigating to CropScreen for gallery upload');
-        navigation.navigate('Crop', {
-          photo: freshPhoto,
-          mealId: mealId,
-          pendingMealData: {
-            dishName: mealName,
-            restaurant: restaurant,
-            location: location,
-          },
-          _uniqueKey: sessionId,
-        });
-      } else {
-        // Default flow: Navigate to Result screen
-        logWithSession('Navigating to ResultScreen (default flow)');
-        navigation.navigate('Result', resultParams);
-      }
+      // Navigation has already happened above - all API calls below are background tasks
     } catch (error) {
       logWithSession(`Error preparing image for Result screen: ${error}`);
       Alert.alert('Error', 'Failed to save rating. Please try again.');
@@ -2442,8 +2444,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    width: '80%',
-    maxHeight: '70%',
+    width: '95%',
+    height: '85%',
     backgroundColor: '#FFFFFF', // White background for consistency
     borderRadius: 12,
     padding: 20,
