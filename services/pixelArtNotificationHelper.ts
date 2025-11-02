@@ -69,11 +69,13 @@ export const updatePixelArtNotificationWithImage = async (
             thumbnailHidden: false, // Show image as main content
           }],
           sound: 'default',
-          // Make the image more prominent
+          // CRITICAL: These options allow notification to show when app is in foreground
           foregroundPresentationOptions: {
-            banner: true,
-            sound: true,
-            badge: true,
+            alert: true, // Show alert in foreground
+            banner: true, // Show banner
+            sound: true, // Play sound
+            badge: true, // Update badge
+            list: true, // Show in notification list
           },
           // Active interruption level for better prominence and vibration
           interruptionLevel: 'active',
@@ -92,10 +94,8 @@ export const updatePixelArtNotificationWithImage = async (
           vibrationPattern: [300, 500, 300], // vibrate-pause-vibrate pattern
           // Disable auto-cancel when tapped
           autoCancel: false,
-          // Don't open app on tap
-          pressAction: {
-            id: 'default',
-          },
+          // CRITICAL: Remove pressAction entirely to make notification non-interactive
+          // Having ANY pressAction makes it clickable
         },
         data: {
           type: 'unrated-meal-pixel-art',
@@ -112,8 +112,20 @@ export const updatePixelArtNotificationWithImage = async (
     );
 
     console.log('✅ Pixel art notification scheduled with image using Notifee');
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error scheduling pixel art notification with Notifee:', error);
+
+    // CRITICAL: Log errors to Firestore for production debugging
+    try {
+      await firestore().collection('mealEntries').doc(mealId).update({
+        pixel_art_notification_error: error.message || String(error),
+        pixel_art_notification_error_timestamp: firestore.FieldValue.serverTimestamp(),
+        pixel_art_notification_error_stack: error.stack || 'No stack trace available'
+      });
+    } catch (firestoreError) {
+      console.error('Failed to log pixel art notification error to Firestore:', firestoreError);
+    }
+
     // Don't throw - notification will still show without image
   }
 };

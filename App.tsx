@@ -35,6 +35,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 // Import our wrapper component
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
 import NotificationsScreen from './screens/NotificationsScreen';
+import MealTipsScreen from './screens/MealTipsScreen';
 
 // Define the types for our navigation parameters
 export type RootStackParamList = {
@@ -155,6 +156,10 @@ export type RootStackParamList = {
   Notifications: undefined;
   EnjoyMeal: {
     photoUri: string;
+  };
+  MealTips: {
+    mealId: string;
+    dishName?: string;
   };
 };
 
@@ -555,14 +560,106 @@ const App: React.FC = () => {
         const settings = await notifee.requestPermission();
         console.log('📱 Notifee permission requested at startup:', settings.authorizationStatus);
 
-        // Set up Notifee event handler to prevent app from opening on tap
+        // Set up Notifee foreground event handler
         notifee.onForegroundEvent(({ type, detail }) => {
+          console.log('📱 [App.tsx] Notifee foreground event:', type);
+
           if (type === EventType.PRESS) {
-            // Check if this is a non-interactive notification
             const notificationData = detail.notification?.data;
-            if (notificationData?.ignoreTap === 'true' || notificationData?.type === 'unrated-meal-pixel-art') {
-              console.log('Ignoring tap on non-interactive Notifee notification');
-              // Don't do anything - prevents app from opening
+
+            // CRITICAL: ONLY handle pixel art notifications, NOT statement notifications
+            // Statement notifications are non-interactive educational tips
+            if (notificationData?.type === 'unrated-meal-statement') {
+              console.log('[App.tsx Foreground] Statement notification tapped - ignoring (non-interactive)');
+              return; // Do nothing - these are non-interactive
+            }
+
+            // Handle taps on pixel art notifications - navigate to MealTipsScreen
+            if (notificationData?.type === 'unrated-meal-pixel-art') {
+              console.log('[App.tsx Foreground] User tapped pixel art notification - navigating to MealTipsScreen');
+
+              const mealId = notificationData?.mealId;
+              const dishName = notificationData?.dishName;
+
+              // CRITICAL: Validate mealId and navigation ref
+              if (!mealId || typeof mealId !== 'string' || mealId.trim().length === 0) {
+                console.error('[App.tsx Foreground] Invalid mealId:', mealId);
+                return;
+              }
+
+              if (!navigationRef.current) {
+                console.error('[App.tsx Foreground] Navigation ref not available');
+                return;
+              }
+
+              if (!navigationRef.current.isReady()) {
+                console.error('[App.tsx Foreground] Navigation not ready');
+                return;
+              }
+
+              try {
+                navigationRef.current.navigate('MealTips' as never, {
+                  mealId: mealId,
+                  dishName: dishName || undefined
+                } as never);
+                console.log('[App.tsx Foreground] Successfully navigated to MealTipsScreen');
+              } catch (error: any) {
+                console.error('[App.tsx Foreground] Navigation error:', error);
+                console.error('[App.tsx Foreground] Error details:', error.message, error.stack);
+              }
+              return;
+            }
+          }
+        });
+
+        // Set up Notifee background event handler
+        // NOTE: This is a duplicate of the handler in index.js, but needed for when app is in foreground
+        notifee.onBackgroundEvent(async ({ type, detail }) => {
+          console.log('📱 [App.tsx] Notifee background event:', type);
+
+          if (type === EventType.PRESS) {
+            const notificationData = detail.notification?.data;
+
+            // CRITICAL: ONLY handle pixel art notifications, NOT statement notifications
+            // Statement notifications are non-interactive educational tips
+            if (notificationData?.type === 'unrated-meal-statement') {
+              console.log('[App.tsx Background] Statement notification tapped - ignoring (non-interactive)');
+              return; // Do nothing - these are non-interactive
+            }
+
+            // Handle taps on pixel art notifications - navigate to MealTipsScreen
+            if (notificationData?.type === 'unrated-meal-pixel-art') {
+              console.log('[App.tsx Background] User tapped pixel art notification - navigating to MealTipsScreen');
+
+              const mealId = notificationData?.mealId;
+              const dishName = notificationData?.dishName;
+
+              // CRITICAL: Validate mealId and navigation ref
+              if (!mealId || typeof mealId !== 'string' || mealId.trim().length === 0) {
+                console.error('[App.tsx Background] Invalid mealId:', mealId);
+                return;
+              }
+
+              if (!navigationRef.current) {
+                console.error('[App.tsx Background] Navigation ref not available');
+                return;
+              }
+
+              if (!navigationRef.current.isReady()) {
+                console.error('[App.tsx Background] Navigation not ready');
+                return;
+              }
+
+              try {
+                navigationRef.current.navigate('MealTips' as never, {
+                  mealId: mealId,
+                  dishName: dishName || undefined
+                } as never);
+                console.log('[App.tsx Background] Successfully navigated to MealTipsScreen');
+              } catch (error: any) {
+                console.error('[App.tsx Background] Navigation error:', error);
+                console.error('[App.tsx Background] Error details:', error.message, error.stack);
+              }
               return;
             }
           }
@@ -942,6 +1039,10 @@ const App: React.FC = () => {
             <Stack.Screen
               name="MainTabs"
               component={TabNavigator}
+            />
+            <Stack.Screen
+              name="MealTips"
+              component={MealTipsScreen}
             />
           </Stack.Navigator>
         </NavigationContainer>

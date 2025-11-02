@@ -236,119 +236,182 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       });
       console.log('✅ Document updated with photo URL');
 
-      // Step 4: Start background API calls (non-blocking)
+      // Step 4: Start background API calls with robust error handling and logging
       console.log('🔄 Starting background API calls...');
+      console.log('📝 Meal ID for tracking:', mealId);
 
-      // Call 1: Identify dish from resized photo (saves API costs and processing time)
-      identifyDishFromPhoto(resizedImage.uri).then(async (dishData) => {
-        if (dishData && dishData.dish_name) {
-          console.log('✅ Dish identified:', dishData.dish_name);
+      // CRITICAL: Launch background APIs in a way that survives component navigation
+      // Using setImmediate to ensure the async work continues even after navigation
+      setImmediate(async () => {
+        console.log('🚀 [Background] Starting API cascade for meal:', mealId);
 
-          // Update meal with dish identification result
+        try {
+          // === STEP 1: Dish Identification (Required) ===
+          console.log('🔍 [Background] Step 1/3: Identifying dish...');
           await firestore().collection('mealEntries').doc(mealId).update({
-            dish_identification_result: dishData,
-            meal: dishData.dish_name // Pre-populate meal name
+            api_step_1_started: firestore.FieldValue.serverTimestamp()
           });
 
-          // Call 2: Extract rating statements (for push notifications)
-          // Check if confidence is below 85% to indicate descriptive name
-          const isDescriptive = dishData.confidence_level < 0.85 || dishData.is_descriptive;
-          console.log(`📊 Dish confidence: ${dishData.confidence_level}, is_descriptive: ${isDescriptive}`);
+          const dishData = await identifyDishFromPhoto(resizedImage.uri);
 
-          extractRatingStatements(dishData.dish_name, isDescriptive).then(async (statementsData) => {
-            if (statementsData) {
-              console.log('✅ Rating statements extracted (for notifications)');
+          if (!dishData || !dishData.dish_name) {
+            console.error('❌ [Background] Dish identification failed - no data returned');
+            await firestore().collection('mealEntries').doc(mealId).update({
+              api_step_1_failed: true,
+              api_step_1_error: 'No dish data returned',
+              api_step_1_timestamp: firestore.FieldValue.serverTimestamp()
+            });
+            return; // Exit - can't proceed without dish identification
+          }
+
+          console.log('✅ [Background] Dish identified:', dishData.dish_name);
+          await firestore().collection('mealEntries').doc(mealId).update({
+            dish_identification_result: dishData,
+            meal: dishData.dish_name,
+            api_step_1_success: true,
+            api_step_1_timestamp: firestore.FieldValue.serverTimestamp()
+          });
+
+          const isDescriptive = dishData.confidence_level < 0.85 || dishData.is_descriptive;
+          console.log(`📊 [Background] Dish confidence: ${dishData.confidence_level}, is_descriptive: ${isDescriptive}`);
+
+          // === STEP 2 & 3: Parallel API calls (Rating Statements + Pixel Art) ===
+          console.log('🚀 [Background] Step 2-3: Running parallel APIs (statements + pixel art)...');
+          await firestore().collection('mealEntries').doc(mealId).update({
+            api_step_2_3_started: firestore.FieldValue.serverTimestamp()
+          });
+
+          const [statementsResult, pixelArtResult] = await Promise.allSettled([
+            extractRatingStatements(dishData.dish_name, isDescriptive),
+            generatePixelArtIcon(dishData.dish_name, resizedImage.uri)
+          ]);
+
+          console.log('📊 [Background] Parallel APIs complete - Statements:', statementsResult.status, 'PixelArt:', pixelArtResult.status);
+
+          // === Handle Rating Statements Result ===
+          if (statementsResult.status === 'fulfilled' && statementsResult.value) {
+            console.log('✅ [Background] Rating statements extracted');
+            const statementsData = statementsResult.value;
+
+            try {
               await firestore().collection('mealEntries').doc(mealId).update({
-                rating_statements_result: statementsData
+                rating_statements_result: statementsData,
+                api_step_2_success: true,
+                api_step_2_timestamp: firestore.FieldValue.serverTimestamp()
               });
 
-              // Schedule push notifications with top 3 rating statements
-              console.log('📬 Scheduling notifications with rating statements');
-              scheduleUnratedMealNotifications({
+              // Schedule push notifications
+              console.log('📬 [Background] Scheduling notifications...');
+              await scheduleUnratedMealNotifications({
                 mealId: mealId,
                 dishName: dishData.dish_name,
                 restaurantName: undefined,
                 city: undefined,
                 ratingStatements: statementsData.rating_statements
-              }).catch(err => {
-                console.error('❌ Error scheduling notifications:', err);
-                // Don't fail the whole flow if notifications fail
+              });
+              console.log('✅ [Background] Notifications scheduled');
+            } catch (notifError: any) {
+              console.error('❌ [Background] Error with statements/notifications:', notifError);
+              await firestore().collection('mealEntries').doc(mealId).update({
+                api_step_2_notification_error: notifError.message || String(notifError),
+                api_step_2_notification_error_timestamp: firestore.FieldValue.serverTimestamp()
               });
             }
-          }).catch(err => console.error('❌ Rating statements error:', err));
+          } else {
+            const error = statementsResult.status === 'rejected' ? statementsResult.reason : 'Returned null';
+            console.error('❌ [Background] Rating statements failed:', error);
+            await firestore().collection('mealEntries').doc(mealId).update({
+              api_step_2_failed: true,
+              api_step_2_error: String(error),
+              api_step_2_timestamp: firestore.FieldValue.serverTimestamp()
+            });
+          }
 
-          // Call 3: Generate pixel art icon from resized photo (saves API costs)
-          generatePixelArtIcon(dishData.dish_name, resizedImage.uri).then(async (pixelArtData) => {
-            if (pixelArtData && pixelArtData.image_data) {
-              console.log('✅ Pixel art generated');
+          // === Handle Pixel Art Result ===
+          if (pixelArtResult.status === 'fulfilled' && pixelArtResult.value?.image_data) {
+            console.log('✅ [Background] Pixel art generated');
+            const pixelArtData = pixelArtResult.value;
 
-              // Upload pixel art to Firebase Storage and save URL
+            try {
+              const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
+              const pixelArtStoragePath = `pixel_art/${user.uid}/${pixelArtFileName}`;
+              const dataUri = `data:image/png;base64,${pixelArtData.image_data}`;
+
+              console.log('📤 [Background] Uploading pixel art to Storage...');
+              const storageRef = storage().ref(pixelArtStoragePath);
+              await storageRef.putString(dataUri, 'data_url');
+              const downloadUrl = await storageRef.getDownloadURL();
+              console.log('✅ [Background] Pixel art uploaded');
+
+              // Save locally for notification
+              let localPixelArtPath = null;
               try {
-                const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
-                const pixelArtStoragePath = `pixel_art/${user.uid}/${pixelArtFileName}`;
-
-                // Convert base64 to data URI
-                const dataUri = `data:image/png;base64,${pixelArtData.image_data}`;
-
-                console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
-
-                // Upload to Firebase Storage
-                const storageRef = storage().ref(pixelArtStoragePath);
-                await storageRef.putString(dataUri, 'data_url');
-
-                // Get download URL
-                const downloadUrl = await storageRef.getDownloadURL();
-                console.log('✅ Pixel art uploaded, URL:', downloadUrl);
-
-                // Save pixel art locally for notification display
-                let localPixelArtPath = null;
-                try {
-                  // Use shared app group directory so notifications can access it
-                  // Format: group.{bundle-id} - will need to be configured in Xcode
-                  const sharedDir = RNFS.LibraryDirectoryPath; // Falls back to app directory if no app group
-                  const pixelArtDir = `${sharedDir}/PixelArt`;
-
-                  // Create directory if it doesn't exist
-                  const dirExists = await RNFS.exists(pixelArtDir);
-                  if (!dirExists) {
-                    await RNFS.mkdir(pixelArtDir);
-                  }
-
-                  // Save pixel art as PNG file
-                  const localFileName = `pixel_art_${mealId}.png`;
-                  localPixelArtPath = `${pixelArtDir}/${localFileName}`;
-
-                  // Write base64 data to file
-                  await RNFS.writeFile(localPixelArtPath, pixelArtData.image_data, 'base64');
-                  console.log('✅ Pixel art saved locally:', localPixelArtPath);
-
-                  // Update the pixel art notification to include the image attachment
-                  // Import and call helper to re-schedule notification with image
-                  const { updatePixelArtNotificationWithImage } = await import('../services/pixelArtNotificationHelper');
-                  await updatePixelArtNotificationWithImage(mealId, dishData.dish_name, localPixelArtPath);
-                } catch (localSaveError) {
-                  console.error('⚠️ Error saving pixel art locally (notification may not show image):', localSaveError);
-                  // Don't fail the whole process if local save fails
+                const sharedDir = RNFS.LibraryDirectoryPath;
+                const pixelArtDir = `${sharedDir}/PixelArt`;
+                const dirExists = await RNFS.exists(pixelArtDir);
+                if (!dirExists) {
+                  await RNFS.mkdir(pixelArtDir);
                 }
 
-                // Update meal with pixel art URL and local path
+                const localFileName = `pixel_art_${mealId}.png`;
+                localPixelArtPath = `${pixelArtDir}/${localFileName}`;
+                await RNFS.writeFile(localPixelArtPath, pixelArtData.image_data, 'base64');
+                console.log('✅ [Background] Pixel art saved locally');
+
+                const { updatePixelArtNotificationWithImage } = await import('../services/pixelArtNotificationHelper');
+                await updatePixelArtNotificationWithImage(mealId, dishData.dish_name, localPixelArtPath);
+              } catch (localSaveError: any) {
+                console.error('⚠️ [Background] Error saving pixel art locally:', localSaveError);
                 await firestore().collection('mealEntries').doc(mealId).update({
-                  pixel_art_url: downloadUrl,
-                  pixel_art_local_path: localPixelArtPath, // Store local path for notifications
-                  pixel_art_prompt: pixelArtData.prompt_used,
-                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+                  pixel_art_local_save_error: localSaveError.message || String(localSaveError)
                 });
-
-                console.log('✅ Pixel art saved to Firestore');
-              } catch (uploadError) {
-                console.error('❌ Error uploading pixel art:', uploadError);
               }
-            }
-          }).catch(err => console.error('❌ Pixel art error:', err));
-        }
-      }).catch(err => console.error('❌ Dish identification error:', err));
 
-      console.log('✅ Path 1 flow complete - meal saved as unrated');
+              await firestore().collection('mealEntries').doc(mealId).update({
+                pixel_art_url: downloadUrl,
+                pixel_art_local_path: localPixelArtPath,
+                pixel_art_prompt: pixelArtData.prompt_used,
+                pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
+                api_step_3_success: true,
+                api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
+              });
+              console.log('✅ [Background] Pixel art saved to Firestore');
+            } catch (uploadError: any) {
+              console.error('❌ [Background] Error uploading pixel art:', uploadError);
+              await firestore().collection('mealEntries').doc(mealId).update({
+                api_step_3_failed: true,
+                api_step_3_error: uploadError.message || String(uploadError),
+                api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
+              });
+            }
+          } else {
+            const error = pixelArtResult.status === 'rejected' ? pixelArtResult.reason : 'No image data';
+            console.error('❌ [Background] Pixel art failed:', error);
+            await firestore().collection('mealEntries').doc(mealId).update({
+              api_step_3_failed: true,
+              api_step_3_error: String(error),
+              api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
+            });
+          }
+
+          console.log('✅ [Background] All API processing complete for meal:', mealId);
+          await firestore().collection('mealEntries').doc(mealId).update({
+            all_apis_complete: true,
+            all_apis_complete_timestamp: firestore.FieldValue.serverTimestamp()
+          });
+
+        } catch (fatalError: any) {
+          console.error('❌ [Background] FATAL ERROR in API cascade:', fatalError);
+          console.error('❌ [Background] Error stack:', fatalError.stack);
+          await firestore().collection('mealEntries').doc(mealId).update({
+            fatal_background_error: fatalError.message || String(fatalError),
+            fatal_background_error_stack: fatalError.stack || 'No stack trace',
+            fatal_background_error_timestamp: firestore.FieldValue.serverTimestamp()
+          }).catch(e => console.error('[Background] Could not log fatal error:', e));
+        }
+      });
+
+      console.log('✅ Path 1 flow complete - meal saved, background APIs launched');
 
     } catch (error) {
       console.error('❌ Error saving unrated meal:', error);

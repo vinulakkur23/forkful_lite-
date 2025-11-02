@@ -1867,13 +1867,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     <>
                                         <Text style={styles.emptyText}>Welcome to your Food Passport!</Text>
                                         <Text style={styles.emptySubText}>
-                                            <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}>Track your culinary journey</Text>
-                                            <Text> while enjoying a more </Text>
-                                            <Text style={styles.highlightedWord}>insightful</Text>
-                                            <Text style={[styles.emptySubText, {fontWeight: 'bold'}]}> eating experience</Text>
-                                            <Text>.</Text>
+                                            Upload a photo, or, for a more fun experience, snap a quick photo of what you're about to eat.
                                         </Text>
-                                        <Text style={styles.tryItOutText}>Upload a meal to try it out!</Text>
                                         <Text style={styles.downArrow}>↓</Text>
                                     </>
                                 ) : (
@@ -2625,8 +2620,8 @@ const styles = StyleSheet.create({
         marginRight: spacing.xs,
     },
     emojiItem: {
-        width: 85,
-        height: 85,
+        width: 50,
+        height: 50,
         alignItems: 'center',
         justifyContent: 'center',
     },

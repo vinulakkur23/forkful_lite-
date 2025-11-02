@@ -24,6 +24,66 @@ class NotificationService {
       onNotification: async function (notification) {
         console.log('NOTIFICATION:', notification);
 
+        // Handle taps on tip/statement notifications - navigate to MealTipsScreen
+        if (notification.userInfo?.type === 'unrated-meal-statement') {
+          console.log('[PushNotification] Tip notification received');
+
+          // Navigate to MealTipsScreen on tap
+          if (notification.userInteraction) {
+            console.log('[PushNotification] User tapped tip notification - navigating to MealTipsScreen');
+            const mealId = notification.userInfo?.mealId;
+            const dishName = notification.userInfo?.dishName;
+
+            if (mealId) {
+              try {
+                const { navigate } = await import('./navigationService');
+                navigate('MealTips', {
+                  mealId: mealId,
+                  dishName: dishName || undefined
+                });
+                console.log('[PushNotification] Successfully navigated to MealTipsScreen');
+              } catch (error) {
+                console.error('[PushNotification] Error navigating to MealTipsScreen:', error);
+              }
+            }
+          }
+
+          if (Platform.OS === 'ios') {
+            notification.finish(PushNotificationIOS.FetchResult.NoData);
+          }
+          return;
+        }
+
+        // Handle taps on pixel art notifications - navigate to MealTipsScreen
+        if (notification.userInfo?.type === 'unrated-meal-pixel-art') {
+          console.log('[PushNotification] Pixel art notification received');
+
+          // Navigate to MealTipsScreen on tap
+          if (notification.userInteraction) {
+            console.log('[PushNotification] User tapped pixel art notification - navigating to MealTipsScreen');
+            const mealId = notification.userInfo?.mealId;
+            const dishName = notification.userInfo?.dishName;
+
+            if (mealId) {
+              try {
+                const { navigate } = await import('./navigationService');
+                navigate('MealTips', {
+                  mealId: mealId,
+                  dishName: dishName || undefined
+                });
+                console.log('[PushNotification] Successfully navigated to MealTipsScreen');
+              } catch (error) {
+                console.error('[PushNotification] Error navigating to MealTipsScreen:', error);
+              }
+            }
+          }
+
+          if (Platform.OS === 'ios') {
+            notification.finish(PushNotificationIOS.FetchResult.NoData);
+          }
+          return;
+        }
+
         // Handle unrated meal reminders (check if still unrated)
         if (notification.userInfo?.type === 'unrated-meal-reminder' && notification.userInfo?.checkReviewStatus) {
           const mealId = notification.userInfo.mealId;

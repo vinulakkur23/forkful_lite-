@@ -1,9 +1,43 @@
 /**
  * Pixel Art Service
  * Handles generation of pixel-art icons from dish names using GPT-Image-1
+ * Includes retry logic for production reliability
  */
 
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
+
+/**
+ * Retry a function with exponential backoff
+ * Commercial apps use this pattern for network reliability
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+
+      // Don't retry on certain errors
+      if (error.message?.includes('400') || error.message?.includes('401')) {
+        throw error; // Bad request or auth error - don't retry
+      }
+
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+        console.log(`⏱️ Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 export interface PixelArtData {
   image_data: string; // Base64 encoded pixel art image
@@ -38,7 +72,8 @@ export const generatePixelArtIcon = async (
   dishName: string,
   imageUri?: string
 ): Promise<PixelArtData | null> => {
-  try {
+  // Wrap in retry logic for production reliability
+  return retryWithBackoff(async () => {
     console.log('🚨 PixelArtService: Generating pixel art for dish:', dishName);
     console.log('🚨 PixelArtService: Image provided:', !!imageUri);
 
@@ -57,18 +92,38 @@ export const generatePixelArtIcon = async (
     }
     
     console.log('🚨 PixelArtService: Making API call to generate-pixel-art-icon');
-    
-    const response = await fetch(`${BASE_URL}/generate-pixel-art-icon`, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type manually - let fetch set it with proper boundary
-    });
-    
+
+    // Add timeout for production reliability (60 seconds - pixel art can take time)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error('⏱️ PixelArtService: Request timed out after 60 seconds');
+      controller.abort();
+    }, 60000);
+
+    let response;
+    try {
+      response = await fetch(`${BASE_URL}/generate-pixel-art-icon`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+        // Don't set Content-Type manually - let fetch set it with proper boundary
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Pixel art generation timed out after 60 seconds');
+      }
+      throw fetchError;
+    }
+
     console.log('🚨 PixelArtService: Response status:', response.status);
-    
+
     if (!response.ok) {
+      const errorText = await response.text();
       console.error('❌ PixelArtService: HTTP error:', response.status, response.statusText);
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.error('❌ PixelArtService: Error body:', errorText);
+      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
     }
     
     const result: PixelArtResponse = await response.json();
@@ -102,13 +157,13 @@ export const generatePixelArtIcon = async (
       console.error('❌ PixelArtService: API returned success=false or no image data');
       console.error('❌ PixelArtService: Error field:', result.error || 'No error message provided');
       console.error('❌ PixelArtService: Full response:', JSON.stringify(result, null, 2));
-      return null;
+      throw new Error(`Pixel art API returned success=false: ${result.error || 'Unknown error'}`);
     }
-    
-  } catch (error) {
-    console.error('🚨 PixelArtService: Error generating pixel art:', error);
+  }, 3, 2000) // 3 retries, starting with 2 second delay
+  .catch(error => {
+    console.error('🚨 PixelArtService: Error generating pixel art after retries:', error);
     return null;
-  }
+  });
 };
 
 /**

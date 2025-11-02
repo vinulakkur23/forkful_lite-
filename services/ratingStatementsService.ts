@@ -1,10 +1,38 @@
 /**
  * Rating Statements Service
  * Handles fast extraction of 6 rating statements for immediate display
+ * Includes retry logic for production reliability
  */
 import ImageResizer from 'react-native-image-resizer';
 
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
+
+/**
+ * Retry helper with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      if (error.message?.includes('400') || error.message?.includes('401')) {
+        throw error;
+      }
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`⏱️ RatingStatements retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
 
 export interface RatingStatementsData {
   rating_statements: string[]; // 6 specific rating statements
@@ -60,13 +88,32 @@ export const extractRatingStatements = async (
     
     console.log('🌐 RatingStatementsService: Making API call to extract-rating-statements');
     console.log('🌐 RatingStatementsService: URL:', `${BASE_URL}/extract-rating-statements`);
-    
-    const response = await fetch(`${BASE_URL}/extract-rating-statements`, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type manually - let fetch set it with proper boundary
-    });
-    
+
+    // CRITICAL: Add timeout to prevent indefinite hangs from backend cold starts
+    // 90 seconds to allow for Render free tier cold starts (can take 60+ seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error('⏱️ RatingStatementsService: Request timed out after 90 seconds');
+      controller.abort();
+    }, 90000); // 90 second timeout
+
+    let response;
+    try {
+      response = await fetch(`${BASE_URL}/extract-rating-statements`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+        // Don't set Content-Type manually - let fetch set it with proper boundary
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Rating statements extraction timed out after 90 seconds');
+      }
+      throw fetchError;
+    }
+
     console.log('📡 RatingStatementsService: Response status:', response.status);
     
     if (!response.ok) {

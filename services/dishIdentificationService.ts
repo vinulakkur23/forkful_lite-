@@ -3,6 +3,8 @@
  * Handles identification of dish names from photos using backend AI
  */
 
+import { withRetry } from './apiRetryUtil';
+
 const BASE_URL = 'https://dishitout-imageinhancer.onrender.com';
 
 export interface DishIdentificationData {
@@ -49,55 +51,81 @@ export const identifyDishFromPhoto = async (
       return null;
     }
 
-    // Create FormData with image
-    const formData = new FormData();
+    // Wrap the API call with retry logic
+    return await withRetry(
+      async () => {
+        // Create FormData with image
+        const formData = new FormData();
 
-    formData.append('image', {
-      uri: imageUri,
-      type: 'image/jpeg',
-      name: 'food_photo.jpg',
-    } as any);
+        formData.append('image', {
+          uri: imageUri,
+          type: 'image/jpeg',
+          name: 'food_photo.jpg',
+        } as any);
 
-    console.log('🌐 DishIdentificationService: Making API call to identify-dish-from-photo');
-    console.log('🌐 DishIdentificationService: URL:', `${BASE_URL}/identify-dish-from-photo`);
+        console.log('🌐 DishIdentificationService: Making API call to identify-dish-from-photo');
+        console.log('🌐 DishIdentificationService: URL:', `${BASE_URL}/identify-dish-from-photo`);
 
-    const response = await fetch(`${BASE_URL}/identify-dish-from-photo`, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type manually - let fetch set it with proper boundary
-    });
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
 
-    console.log('📡 DishIdentificationService: Response status:', response.status);
+        try {
+          const response = await fetch(`${BASE_URL}/identify-dish-from-photo`, {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+            // Don't set Content-Type manually - let fetch set it with proper boundary
+          });
 
-    if (!response.ok) {
-      console.error('❌ DishIdentificationService: HTTP error:', response.status, response.statusText);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+          clearTimeout(timeoutId);
 
-    const result: DishIdentificationResponse = await response.json();
+          console.log('📡 DishIdentificationService: Response status:', response.status);
 
-    // Log the raw response to debug
-    console.log('🔍 DishIdentificationService RAW response:', JSON.stringify(result, null, 2));
+          if (!response.ok) {
+            console.error('❌ DishIdentificationService: HTTP error:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
 
-    if (result.success && result.data) {
-      console.log('DishIdentificationService: Successfully identified dish:', {
-        dish_name: result.data.dish_name,
-        confidence: result.data.confidence_level,
-        is_descriptive: result.data.is_descriptive,
-        description: result.data.description,
-        performance: result.performance
-      });
+          const result: DishIdentificationResponse = await response.json();
 
-      // Log performance metrics if available
-      if (result.performance) {
-        console.log(`DishIdentificationService PERFORMANCE: Total: ${result.performance.total_time_seconds}s, API: ${result.performance.api_time_seconds}s`);
-      }
+          // Log the raw response to debug
+          console.log('🔍 DishIdentificationService RAW response:', JSON.stringify(result, null, 2));
 
-      return result.data;
-    } else {
-      console.error('DishIdentificationService: API returned success=false');
-      return null;
-    }
+          if (result.success && result.data) {
+            console.log('DishIdentificationService: Successfully identified dish:', {
+              dish_name: result.data.dish_name,
+              confidence: result.data.confidence_level,
+              is_descriptive: result.data.is_descriptive,
+              description: result.data.description,
+              performance: result.performance
+            });
+
+            // Log performance metrics if available
+            if (result.performance) {
+              console.log(`DishIdentificationService PERFORMANCE: Total: ${result.performance.total_time_seconds}s, API: ${result.performance.api_time_seconds}s`);
+            }
+
+            return result.data;
+          } else {
+            console.error('DishIdentificationService: API returned success=false');
+            throw new Error('API returned success=false');
+          }
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Dish identification request timed out after 90 seconds');
+          }
+          throw fetchError;
+        }
+      },
+      {
+        maxRetries: 2, // Try 3 times total
+        initialDelayMs: 2000, // 2 second initial delay
+        maxDelayMs: 8000, // Max 8 second delay
+      },
+      'DishIdentification'
+    );
 
   } catch (error) {
     console.error('🚨 DishIdentificationService: CRITICAL ERROR identifying dish:', error);

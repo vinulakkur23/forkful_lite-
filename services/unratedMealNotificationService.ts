@@ -6,7 +6,9 @@
  */
 
 import PushNotification from 'react-native-push-notification';
+import notifee, { TimestampTrigger, TriggerType, AuthorizationStatus } from '@notifee/react-native';
 import { Platform } from 'react-native';
+import { firestore } from '../firebaseConfig';
 
 interface RatingStatement {
   title: string;
@@ -31,6 +33,32 @@ export const scheduleUnratedMealNotifications = async (
   console.log('📅 Scheduling notifications for unrated meal:', mealData.mealId);
 
   try {
+    // CRITICAL: Check notification permissions before scheduling
+    const settings = await notifee.getNotificationSettings();
+    console.log('🔔 Notification permission status:', settings.authorizationStatus);
+
+    // IMPORTANT: iOS supports PROVISIONAL permissions which allow notifications
+    // AUTHORIZED = User explicitly granted permissions
+    // PROVISIONAL = iOS delivers quietly, user hasn't explicitly denied
+    const allowedStatuses = [
+      AuthorizationStatus.AUTHORIZED,
+      AuthorizationStatus.PROVISIONAL  // iOS allows this!
+    ];
+
+    if (!allowedStatuses.includes(settings.authorizationStatus)) {
+      console.error('⚠️ Notifications not authorized, skipping schedule');
+      console.error('⚠️ Current status:', settings.authorizationStatus);
+      console.error('⚠️ Allowed statuses:', allowedStatuses);
+
+      await firestore().collection('mealEntries').doc(mealData.mealId).update({
+        notification_error: 'Permissions not granted',
+        notification_error_timestamp: firestore.FieldValue.serverTimestamp(),
+        notification_permission_status: settings.authorizationStatus
+      });
+      return;
+    }
+    console.log('✅ Notification permissions verified (status: ' + settings.authorizationStatus + ')');
+
     // Prefer ratingStatements (new format) over ratingCriteria (old format)
     const statements = mealData.ratingStatements || mealData.ratingCriteria;
 
@@ -48,7 +76,9 @@ export const scheduleUnratedMealNotifications = async (
         7 * 60 * 1000, // 7 minutes
       ];
 
-      top3Statements.forEach((statement, index) => {
+      for (let index = 0; index < top3Statements.length; index++) {
+        const statement = top3Statements[index];
+
         // Handle both new format (object with title+description) and old format (string)
         let notificationTitle: string;
         let notificationMessage: string;
@@ -66,29 +96,59 @@ export const scheduleUnratedMealNotifications = async (
         if (notificationTitle && notificationMessage && notificationMessage.trim()) {
           const notificationTime = new Date(baseTime.getTime() + delays[index]);
 
-          PushNotification.localNotificationSchedule({
-            id: `unrated-meal-statement-${mealData.mealId}-${index}`,
-            channelId: 'meal-insights',
-            title: notificationTitle,
-            message: notificationMessage,
-            date: notificationTime,
-            allowWhileIdle: true,
-            playSound: true,
-            soundName: 'default',
-            invokeApp: false, // Don't open app when notification is tapped
-            ignoreInForeground: false, // Show notification even when app is open
-            userInfo: {
-              type: 'unrated-meal-statement',
-              mealId: mealData.mealId,
-              statementIndex: index
-            }
+          // Use Notifee for better foreground support and non-interactive notifications
+          const trigger: TimestampTrigger = {
+            type: TriggerType.TIMESTAMP,
+            timestamp: notificationTime.getTime(),
+          };
+
+          // Create notification channel for Android (if not already created)
+          await notifee.createChannel({
+            id: 'meal-insights',
+            name: 'Meal Insights',
+            sound: 'default',
+            vibration: true,
+            importance: 4, // High importance
           });
+
+          await notifee.createTriggerNotification(
+            {
+              id: `unrated-meal-statement-${mealData.mealId}-${index}`,
+              title: notificationTitle,
+              body: notificationMessage,
+              ios: {
+                sound: 'default',
+                // CRITICAL: Allow notifications to show when app is in foreground
+                foregroundPresentationOptions: {
+                  alert: true,
+                  banner: true,
+                  sound: true,
+                  badge: true,
+                  list: true,
+                },
+                interruptionLevel: 'active',
+              },
+              android: {
+                channelId: 'meal-insights',
+                sound: 'default',
+                vibrationPattern: [300, 500, 300],
+                // CRITICAL: No pressAction = non-interactive notification
+              },
+              data: {
+                type: 'unrated-meal-statement',
+                mealId: mealData.mealId,
+                statementIndex: String(index),
+                ignoreTap: 'true', // Flag to ignore tap events
+              }
+            },
+            trigger
+          );
 
           console.log(`📬 Statement notification ${index + 1} scheduled for:`, notificationTime.toLocaleTimeString());
           console.log(`   Title: ${notificationTitle}`);
           console.log(`   Message: ${notificationMessage.substring(0, 50)}...`);
         }
-      });
+      }
     }
 
     // Schedule pixel art reveal notification for 10 minutes later
@@ -126,6 +186,17 @@ export const scheduleUnratedMealNotifications = async (
     console.log('📬 Pixel art reveal scheduled for:', pixelArtTime.toLocaleTimeString());
     console.log('   Note: Pixel art image will be attached if local file path is available');
 
+    // Verify notifications were scheduled successfully
+    const scheduledIds = await notifee.getTriggerNotificationIds();
+    console.log('✅ Verified scheduled Notifee notifications:', scheduledIds);
+
+    // Log to Firestore for production tracking
+    await firestore().collection('mealEntries').doc(mealData.mealId).update({
+      scheduled_notification_ids: scheduledIds,
+      notification_schedule_timestamp: firestore.FieldValue.serverTimestamp(),
+      notification_schedule_success: true
+    });
+
     // Schedule rating reminder notification for 2 hours later
     const reminderTime = new Date();
     reminderTime.setHours(reminderTime.getHours() + 2);
@@ -153,8 +224,21 @@ export const scheduleUnratedMealNotifications = async (
     console.log('📬 Rating reminder scheduled for:', reminderTime.toLocaleTimeString());
     console.log('✅ All notifications scheduled successfully');
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error scheduling notifications:', error);
+
+    // CRITICAL: Log errors to Firestore for production debugging
+    try {
+      await firestore().collection('mealEntries').doc(mealData.mealId).update({
+        notification_scheduling_error: error.message || String(error),
+        notification_error_timestamp: firestore.FieldValue.serverTimestamp(),
+        notification_error_stack: error.stack || 'No stack trace available',
+        notification_schedule_success: false
+      });
+    } catch (firestoreError) {
+      console.error('Failed to log notification error to Firestore:', firestoreError);
+    }
+
     // Don't throw - notifications are nice-to-have, not critical
   }
 };
@@ -162,20 +246,23 @@ export const scheduleUnratedMealNotifications = async (
 /**
  * Cancel all notifications for a meal (when user rates it)
  */
-export const cancelUnratedMealNotifications = (mealId: string): void => {
+export const cancelUnratedMealNotifications = async (mealId: string): Promise<void> => {
   console.log('🔕 Canceling notifications for meal:', mealId);
 
-  // Cancel all statement notifications (0, 1, 2)
+  // Cancel all statement notifications (0, 1, 2) - Notifee
   for (let i = 0; i < 3; i++) {
+    await notifee.cancelNotification(`unrated-meal-statement-${mealId}-${i}`);
+    // Also cancel old PushNotification format for backward compatibility
     PushNotification.cancelLocalNotification(`unrated-meal-statement-${mealId}-${i}`);
-    // Also cancel old format for backward compatibility
     PushNotification.cancelLocalNotification(`unrated-meal-criteria-${mealId}-${i}`);
   }
 
-  // Cancel pixel art reveal notification
+  // Cancel pixel art reveal notification - Notifee
+  await notifee.cancelNotification(`unrated-meal-pixel-art-${mealId}`);
+  // Also cancel PushNotification version
   PushNotification.cancelLocalNotification(`unrated-meal-pixel-art-${mealId}`);
 
-  // Cancel reminder notification
+  // Cancel reminder notification - PushNotification (still using this for reminders)
   PushNotification.cancelLocalNotification(`unrated-meal-reminder-${mealId}`);
 
   console.log('✅ Notifications canceled');
