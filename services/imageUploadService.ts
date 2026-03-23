@@ -46,8 +46,16 @@ export const uploadImageToFirebase = async (imageUri: string, userId: string): P
     const base64Data = await RNFS.readFile(imageUri, 'base64');
     const dataUrl = `data:image/jpeg;base64,${base64Data}`;
 
-    // Upload using putString with data URL
-    await storageRef.putString(dataUrl, 'data_url');
+    // Upload using putString with data URL with timeout
+    const uploadPromise = storageRef.putString(dataUrl, 'data_url');
+
+    // Add 60 second timeout to prevent infinite hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Image upload timed out after 60 seconds')), 60000);
+    });
+
+    await Promise.race([uploadPromise, timeoutPromise]);
+    console.log('✅ Image upload completed');
 
     // Get download URL
     const downloadURL = await storageRef.getDownloadURL();

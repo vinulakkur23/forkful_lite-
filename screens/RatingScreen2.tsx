@@ -44,10 +44,11 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 // import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
 import { extractDishRatingCriteria, DishRatingCriteriaData } from '../services/dishRatingCriteriaService';
+import { ensureServerAwake } from '../config/api';
 import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
 import { getDishHistory, DishHistoryResult } from '../services/dishHistoryService';
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
-import { getOrGenerateMonument, MonumentData } from '../services/monumentPixelArtService';
+// Monument service removed — no longer used
 // Enhanced metadata service removed - now handled by Cloud Functions
 // REMOVED: Facts service no longer used
 // import { extractEnhancedMetadataFacts, EnhancedFactsData } from '../services/enhancedMetadataFactsService';
@@ -137,7 +138,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   const [showRestaurantModal, setShowRestaurantModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [showMealSuggestionsModal, setShowMealSuggestionsModal] = useState(false);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [isSearchingRestaurants, setIsSearchingRestaurants] = useState(false);
   const [isLoadingMealSuggestions, setIsLoadingMealSuggestions] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -289,10 +290,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
     } catch (error) {
       logWithSession(`Error getting device location: ${error}`);
-      Alert.alert(
-        "Location Not Available", 
-        "Your device location could not be determined. You may need to manually search for restaurants."
-      );
+      // Silently fail — the user can still manually search for restaurants.
+      // An Alert here blocks the UI and interrupts rating flow.
     } finally {
       setIsLoadingDeviceLocation(false);
     }
@@ -718,57 +717,50 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     };
   }, [route.params._uniqueKey, route.params.photo?.uri]); // Re-run when unique key or photo URI changes
   
-  // Effect to fetch restaurant suggestions when location is available
+  // Effect to fetch restaurant suggestions when location becomes available.
+  // Only depends on location and deviceLocation — NOT suggestedRestaurants.length,
+  // which caused cascading re-runs when restaurants arrived and updated location.
   useEffect(() => {
     // Capture the current session ID to prevent stale updates
     const currentSession = photoSessionRef.current;
     const currentPhotoUri = photoUriRef.current;
-    
+
     if (!location && !deviceLocation) {
       logWithSession("No location available yet for restaurant suggestions");
       return;
     }
-    
+
     // Use the best available location
     const bestLocation = getBestAvailableLocation();
-    
-    if (bestLocation && suggestedRestaurants.length === 0 && !isLoadingSuggestions) {
+
+    if (bestLocation) {
       logWithSession(`Using location for restaurant suggestions: ${bestLocation.source} (priority: ${bestLocation.priority})`);
       logWithSession(`Photo URI: ${route.params.photo?.uri || 'none'}, coordinates: ${bestLocation.latitude}, ${bestLocation.longitude}`);
-      
+
       // Check once more that we're using location data that belongs to this photo
-      // by comparing with the global trackers
       if ((global as any).currentPhotoUri !== currentPhotoUri) {
         logWithSession(`WARNING: Photo URI mismatch detected - current: ${currentPhotoUri}, global: ${(global as any).currentPhotoUri}`);
-        // If there's a mismatch, we should consider refreshing location data
-        // but we'll proceed since we've already validated in initializeLocationFromParams
       }
-      
-      // Only fetch if we don't already have suggestions and aren't loading
+
+      // fetchRestaurantSuggestions has its own guards for duplicate/concurrent fetches
       fetchRestaurantSuggestions(bestLocation);
-      // Note: fetchRestaurantSuggestions now has its own check to prevent duplicate fetches within the same session
-    } else if (suggestedRestaurants.length > 0) {
-      logWithSession(`Already have ${suggestedRestaurants.length} restaurant suggestions, skipping fetch`);
-    } else if (isLoadingSuggestions) {
-      logWithSession(`Already loading suggestions, skipping duplicate fetch`);
     }
-    
+
     // Cleanup function to cancel any pending operations if the session changes
     return () => {
-      // Check if the session has changed since this effect was triggered
       if (currentSession !== photoSessionRef.current) {
         logWithSession(`Session changed from ${currentSession} to ${photoSessionRef.current}, discarding pending operations`);
       }
     };
-  }, [location, deviceLocation, suggestedRestaurants.length]); // Re-run when location changes or device location is obtained
+  }, [location, deviceLocation]); // Only re-run when location data changes
   
   // Handle autocomplete search for restaurants using DIRECT Places API
   const handleRestaurantSearch = async (text: string) => {
     console.log(`🔍 handleRestaurantSearch called with: "${text}" (length: ${text.length})`);
     setRestaurant(text);
-    
-    // Flag that user is actively editing
-    setIsUserEditingRestaurant(true);
+
+    // Flag that user is actively editing (skip if already true to avoid extra re-render)
+    if (!isUserEditingRestaurant) setIsUserEditingRestaurant(true);
     
     // Only show autocomplete when there's enough text
     if (text.length >= 2) {
@@ -1198,6 +1190,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       })();
 
       // STAGGERED API calls to avoid overwhelming the backend service
+      // First, wake up the Render server if it's cold
+      ensureServerAwake();
 
       // Step 1: Start rating criteria extraction first (0ms)
       console.log('📝 Starting rating criteria extraction first...');
@@ -1374,58 +1368,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession('Skipping pixel art - already generated in camera flow');
       }
 
-      // Step 4: Generate monument for city if it's a new city (2 second delay)
-      setTimeout(async () => {
-        if (cityInfo && cityInfo.trim()) {
-          console.log('🏛️ Checking if monument needed for city:', cityInfo);
-          logWithSession(`Checking monument for city: ${cityInfo}`);
-
-          try {
-            // Check if user has any previous meals in this city
-            const currentUser = auth().currentUser;
-            if (!currentUser) {
-              console.log('🏛️ No authenticated user, skipping monument check');
-              return;
-            }
-
-            const previousMeals = await firestore()
-              .collection('mealEntries')
-              .where('userId', '==', currentUser.uid)
-              .where('city', '==', cityInfo)
-              .limit(2) // Limit to 2 - if we get 2 results, this is not a new city
-              .get();
-
-            // If this is the first meal in this city (only 1 result - the one we just created)
-            const isNewCity = previousMeals.size === 1;
-
-            if (isNewCity) {
-              console.log('🏛️ NEW CITY DETECTED:', cityInfo, '- Generating monument!');
-              logWithSession(`New city detected: ${cityInfo} - generating monument`);
-
-              // Generate monument (will cache in Firebase Storage)
-              const monumentResult = await getOrGenerateMonument(cityInfo);
-
-              if (monumentResult) {
-                console.log('✅ Monument generated for', cityInfo, ':', monumentResult.monument_name);
-                console.log('✅ Monument cached at:', monumentResult.monument_url);
-                console.log('✅ Was cached?', monumentResult.cached);
-                logWithSession(`Monument ready for ${cityInfo}: ${monumentResult.monument_name} (cached: ${monumentResult.cached})`);
-              } else {
-                console.warn('⚠️ Monument generation failed for', cityInfo);
-                logWithSession(`Monument generation failed for ${cityInfo}`);
-              }
-            } else {
-              console.log('🏛️ City already visited:', cityInfo, `(${previousMeals.size} previous meals)`);
-              logWithSession(`City already visited: ${cityInfo} - skipping monument generation`);
-            }
-          } catch (error) {
-            console.error('❌ Error checking/generating monument:', error);
-            logWithSession(`Monument error: ${error}`);
-          }
-        } else {
-          console.log('🏛️ No city info available, skipping monument generation');
-        }
-      }, 2000); // 2 second delay for monument generation
+      // Monument generation removed — feature no longer active
 
       // The rating statements are already handled above - this duplicate call has been removed
 
@@ -1486,10 +1429,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     }
     
     // Use setTimeout to ensure this runs completely asynchronously and doesn't block navigation
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        // Wake up Render if cold (shares in-flight ping with other warmup calls)
+        await ensureServerAwake();
+
         logWithSession(`Starting background quick criteria extraction for: ${mealName} at ${restaurant} (session: ${currentSessionId})`);
-        
+
         // Store the request in global scope so other screens can access it
         // This allows Results screen to wait for completion
         const extractionPromise = extractDishRatingCriteria(
@@ -1750,7 +1696,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 onChangeText={handleRestaurantSearch}
                 onFocus={() => {
                   logWithSession("User focused on restaurant input");
-                  setIsUserEditingRestaurant(true);
+                  if (!isUserEditingRestaurant) setIsUserEditingRestaurant(true);
                   
                   // Immediately show autocomplete with nearby restaurants when user focuses
                   setShowAutocomplete(true);
@@ -1880,12 +1826,14 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 style={styles.infoInput}
                 value={mealName}
                 onChangeText={(text) => {
-                  setIsUserEditingMeal(true);
+                  // onFocus already sets isUserEditingMeal — avoid redundant state
+                  // update on every keystroke which causes double re-renders
+                  if (!isUserEditingMeal) setIsUserEditingMeal(true);
                   setMealName(text);
                 }}
                 onFocus={() => {
                   logWithSession("User focused on meal input");
-                  setIsUserEditingMeal(true);
+                  if (!isUserEditingMeal) setIsUserEditingMeal(true);
                 }}
                 onBlur={() => {
                   logWithSession("User blurred meal input");

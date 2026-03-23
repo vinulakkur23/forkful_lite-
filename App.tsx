@@ -567,16 +567,9 @@ const App: React.FC = () => {
           if (type === EventType.PRESS) {
             const notificationData = detail.notification?.data;
 
-            // CRITICAL: ONLY handle pixel art notifications, NOT statement notifications
-            // Statement notifications are non-interactive educational tips
-            if (notificationData?.type === 'unrated-meal-statement') {
-              console.log('[App.tsx Foreground] Statement notification tapped - ignoring (non-interactive)');
-              return; // Do nothing - these are non-interactive
-            }
-
-            // Handle taps on pixel art notifications - navigate to MealTipsScreen
-            if (notificationData?.type === 'unrated-meal-pixel-art') {
-              console.log('[App.tsx Foreground] User tapped pixel art notification - navigating to MealTipsScreen');
+            // Handle taps on statement OR pixel art notifications - navigate to MealTipsScreen
+            if (notificationData?.type === 'unrated-meal-statement' || notificationData?.type === 'unrated-meal-pixel-art') {
+              console.log(`[App.tsx Foreground] User tapped ${notificationData?.type} notification - navigating to MealTipsScreen`);
 
               const mealId = notificationData?.mealId;
               const dishName = notificationData?.dishName;
@@ -1022,6 +1015,20 @@ const App: React.FC = () => {
         <NavigationContainer
           ref={navigationRef}
           onStateChange={onNavigationStateChange}
+          onReady={() => {
+            // Process any pending notification navigation stashed by the
+            // background handler in index.js (which fires before React mounts).
+            const pending = (global as any).__pendingNotificationNav;
+            if (pending) {
+              console.log('[App] Processing pending notification nav:', pending.screen, pending.params);
+              delete (global as any).__pendingNotificationNav;
+              try {
+                navigationRef.current?.navigate(pending.screen as never, pending.params as never);
+              } catch (err) {
+                console.error('[App] Failed to process pending notification nav:', err);
+              }
+            }
+          }}
         >
           <Stack.Navigator initialRouteName={getInitialRoute()} screenOptions={{ headerShown: false }}>
             <Stack.Screen

@@ -3,57 +3,38 @@
  */
 
 import {AppRegistry} from 'react-native';
-import App from './App';
 import {name as appName} from './app.json';
 import notifee, { EventType } from '@notifee/react-native';
 
-// CRITICAL: Register Notifee background event handler BEFORE React starts
-// This ensures it works even when app is completely killed
+// CRITICAL: Register Notifee background event handler BEFORE importing App.
+// App.tsx imports every screen, which imports themes/colors (addAlpha), etc.
+// On a cold launch from a killed-app notification tap, Hermes may not have
+// finished initializing the full module graph. By registering the background
+// handler first with only minimal imports (AppRegistry, notifee), we avoid
+// the "[runtime not ready]: ReferenceError: Property 'addAlpha' doesn't exist"
+// crash. The App module is loaded lazily via a dynamic require() inside
+// registerComponent's factory function, which runs after Hermes is fully ready.
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   console.log('[Background] Notifee event:', type);
 
-  const { notification, pressAction } = detail;
+  const { notification } = detail;
 
-  // CRITICAL: ONLY handle pixel art notifications, NOT statement notifications
-  // Statement notifications are non-interactive educational tips
-  if (type === EventType.PRESS && notification?.data?.type === 'unrated-meal-statement') {
-    console.log('[Background] Statement notification tapped - ignoring (non-interactive)');
-    return; // Do nothing - these are non-interactive
-  }
+  if (type === EventType.PRESS && notification?.data?.mealId) {
+    const notificationType = notification.data?.type;
 
-  // Handle taps on pixel art notifications - navigate to MealTipsScreen
-  if (type === EventType.PRESS && notification?.data?.type === 'unrated-meal-pixel-art') {
-    console.log('[Background] User tapped pixel art notification - navigating to MealTipsScreen');
+    if (notificationType === 'unrated-meal-statement' || notificationType === 'unrated-meal-pixel-art') {
+      console.log(`[Background] Stashing navigation intent for ${notificationType}, mealId: ${notification.data.mealId}`);
 
-    const mealId = notification.data?.mealId;
-    const dishName = notification.data?.dishName;
-
-    // CRITICAL: Validate mealId before attempting navigation
-    if (!mealId || typeof mealId !== 'string' || mealId.trim().length === 0) {
-      console.error('[Background] Invalid or missing mealId in notification data:', mealId);
-      console.error('[Background] Notification data:', JSON.stringify(notification.data));
-      return; // Don't attempt navigation without valid mealId
+      // Stash intent for App.tsx to consume once navigation is ready
+      global.__pendingNotificationNav = {
+        screen: 'MealTips',
+        params: {
+          mealId: notification.data.mealId,
+          dishName: notification.data.dishName || undefined,
+        },
+      };
+      return;
     }
-
-    // Import navigation service dynamically and navigate with error handling
-    try {
-      const { navigate } = await import('./services/navigationService');
-
-      console.log('[Background] Attempting navigation with mealId:', mealId);
-
-      // Navigate to MealTipsScreen with mealId
-      navigate('MealTips', {
-        mealId: mealId,
-        dishName: dishName || undefined
-      });
-
-      console.log('[Background] Successfully initiated navigation to MealTipsScreen');
-    } catch (error) {
-      console.error('[Background] Error navigating to MealTipsScreen:', error);
-      console.error('[Background] Error details:', error.message, error.stack);
-      // Fail silently - user will just see app open to default screen
-    }
-    return;
   }
 
   // Handle interactive notifications (like meal reminders)
@@ -63,4 +44,9 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   }
 });
 
-AppRegistry.registerComponent(appName, () => App);
+// Load App lazily — the factory function runs after Hermes is fully initialized,
+// so all modules (including themes/addAlpha) will resolve correctly.
+AppRegistry.registerComponent(appName, () => {
+  const App = require('./App').default;
+  return App;
+});

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -45,8 +45,7 @@ import { PieChart } from 'react-native-chart-kit';
 import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
 // Import new theme
 import { colors, typography, spacing, shadows, addAlpha } from '../themes';
-// Import monument service for passport stamps
-import { getOrGenerateMonument } from '../services/monumentPixelArtService';
+// Monument service removed — no longer used
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -120,7 +119,6 @@ interface City {
   name: string;
   imageUrl: string;
   mealCount: number;
-  stampUrl?: string;
 }
 
 interface Cuisine {
@@ -240,12 +238,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     }, [meals, activeFilters, activeRatingFilters, sortOption]);
 
     // Load accolades data when component mounts or userId changes
+    // Consolidated into a single function to avoid 4 duplicate Firestore queries
     useEffect(() => {
-        loadPixelArtEmojis();
+        loadAllAccolades();
         loadAllChallenges();
-        loadCities();
-        loadCuisines();
-        loadRestaurants();
     }, [userId]);
     
     // Refresh data when screen comes into focus (handles returning from deletion)
@@ -500,6 +496,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const handleRefresh = () => {
         setRefreshing(true);
         fetchMealEntries();
+        loadAllAccolades();
+        loadAllChallenges();
     };
     
     // Apply filter to meals - now handles multiple filters
@@ -778,45 +776,156 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     
     // No longer need handleFilterChange as it's handled in the wrapper
 
-    // Load accolades data functions
-    const loadPixelArtEmojis = async () => {
+    // Consolidated accolades loader — ONE Firestore query instead of four
+    const loadAllAccolades = async () => {
         try {
             setEmojisLoading(true);
+            setCitiesLoading(true);
+            setCuisinesLoading(true);
+            setRestaurantsLoading(true);
+
             const targetUserId = userId || auth().currentUser?.uid;
             if (!targetUserId) return;
 
-            console.log(`🎨 Loading pixel art emojis for user: ${targetUserId}`);
+            console.log(`📊 Loading all accolades for user: ${targetUserId} (single query)`);
 
-            // Query user's meals that have pixel art (check both URL and data fields)
+            // ONE query for all accolades data
             const mealsQuery = await firestore()
                 .collection('mealEntries')
                 .where('userId', '==', targetUserId)
                 .orderBy('createdAt', 'desc')
-                .limit(100) // Get more meals to check
                 .get();
 
+            // --- Derive pixel art emojis ---
             const emojiUrls: string[] = [];
-            mealsQuery.forEach((doc) => {
+            // --- Derive city meal counts ---
+            const cityMealCounts: { [city: string]: number } = {};
+            // --- Derive cuisine meal counts ---
+            const cuisineMealCounts: { [cuisine: string]: number } = {};
+            // --- Derive restaurant meal counts + emoji URLs ---
+            const restaurantMealCounts: { [restaurant: string]: number } = {};
+            const restaurantEmojiUrls: { [restaurant: string]: string[] } = {};
+
+            mealsQuery.docs.forEach(doc => {
                 const data = doc.data();
 
-                // Only show pixel art for meals that have been rated (rating > 0)
+                // Pixel art emojis (only rated meals)
                 if (data.rating && data.rating > 0) {
-                    // Check for both pixel_art_url and pixel_art_data
                     if (data.pixel_art_url) {
                         emojiUrls.push(data.pixel_art_url);
                     } else if (data.pixel_art_data) {
-                        // If it's base64 data, convert to data URI
                         emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
+                    }
+                }
+
+                // City counts
+                const city = data.location?.city;
+                if (city) {
+                    cityMealCounts[city] = (cityMealCounts[city] || 0) + 1;
+                }
+
+                // Cuisine counts
+                let cuisine = data.metadata_enriched?.cuisine_type;
+                if (!cuisine) {
+                    cuisine = data.quick_criteria_result?.cuisine_type ||
+                             data.enhanced_facts?.food_facts?.cuisine_type ||
+                             data.aiMetadata?.cuisineType;
+                }
+                if (cuisine) {
+                    cuisine = cuisine.toLowerCase().trim();
+                    if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
+                        cuisineMealCounts[cuisine] = (cuisineMealCounts[cuisine] || 0) + 1;
+                    }
+                }
+
+                // Restaurant counts + emoji URLs
+                if (data.restaurant) {
+                    let restaurantName = data.restaurant.trim();
+                    if (restaurantName.includes(',')) {
+                        restaurantName = restaurantName.split(',')[0].trim();
+                    }
+                    if (restaurantName && restaurantName !== '' && restaurantName.toLowerCase() !== 'unknown' && restaurantName.toLowerCase() !== 'n/a') {
+                        restaurantMealCounts[restaurantName] = (restaurantMealCounts[restaurantName] || 0) + 1;
+                        if (data.pixel_art_url) {
+                            if (!restaurantEmojiUrls[restaurantName]) restaurantEmojiUrls[restaurantName] = [];
+                            restaurantEmojiUrls[restaurantName].push(data.pixel_art_url);
+                        } else if (data.pixel_art_data) {
+                            if (!restaurantEmojiUrls[restaurantName]) restaurantEmojiUrls[restaurantName] = [];
+                            restaurantEmojiUrls[restaurantName].push(`data:image/png;base64,${data.pixel_art_data}`);
+                        }
                     }
                 }
             });
 
-            console.log(`🎨 Found ${emojiUrls.length} pixel art emojis`);
+            // --- Build cities data ---
+            const userDoc = await firestore().collection('users').doc(targetUserId).get();
+            const userData = userDoc.data();
+            const uniqueCities = userData?.uniqueCities || [];
+            const uniqueCuisines = userData?.uniqueCuisines || [];
+            const uniqueRestaurants = userData?.uniqueRestaurants || [];
+
+            const citiesWithData: City[] = [];
+            for (const cityName of uniqueCities) {
+                const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
+                const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
+                const capitalizedCityName = cityName.split(' ').map((word: string) =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                ).join(' ');
+                const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
+
+                if (cityDoc.exists) {
+                    const cityData = cityDoc.data();
+                    if (cityData?.imageUrl) {
+                        citiesWithData.push({ name: capitalizedCityName, imageUrl: cityData.imageUrl, mealCount });
+                    } else {
+                        citiesWithData.push({ name: capitalizedCityName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+                    }
+                } else {
+                    citiesWithData.push({ name: capitalizedCityName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+                }
+            }
+            citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+            // --- Build cuisines data ---
+            const cuisinesWithData: Cuisine[] = [];
+            for (const cuisineName of uniqueCuisines) {
+                const normalizedCuisineName = cuisineName.toLowerCase().trim().replace(/\s+/g, '-');
+                const capitalizedCuisineName = cuisineName.split(' ').map((word: string) =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                ).join(' ');
+                const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
+                cuisinesWithData.push({ name: capitalizedCuisineName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+            }
+            cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+            // --- Build restaurants data ---
+            const restaurantsWithData: Restaurant[] = [];
+            for (const restaurantName of uniqueRestaurants) {
+                const normalizedName = restaurantName.trim();
+                const mealCount = restaurantMealCounts[normalizedName] || 0;
+                if (mealCount > 0) {
+                    restaurantsWithData.push({
+                        name: normalizedName,
+                        mealCount,
+                        emojiUrls: restaurantEmojiUrls[normalizedName] || []
+                    });
+                }
+            }
+            restaurantsWithData.sort((a, b) => b.mealCount - a.mealCount);
+
+            // --- Single batched state update ---
+            console.log(`📊 Accolades loaded: ${emojiUrls.length} emojis, ${citiesWithData.length} cities, ${cuisinesWithData.length} cuisines, ${restaurantsWithData.length} restaurants`);
             setPixelArtEmojis(emojiUrls);
+            setCities(citiesWithData);
+            setCuisines(cuisinesWithData);
+            setRestaurants(restaurantsWithData);
         } catch (error) {
-            console.error('Error loading pixel art emojis:', error);
+            console.error('Error loading accolades:', error);
         } finally {
             setEmojisLoading(false);
+            setCitiesLoading(false);
+            setCuisinesLoading(false);
+            setRestaurantsLoading(false);
         }
     };
 
@@ -845,253 +954,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         }
     };
 
-    const loadCities = async () => {
-        try {
-            setCitiesLoading(true);
-
-            const targetUserId = userId || auth().currentUser?.uid;
-            if (!targetUserId) return;
-
-            console.log(`🌎 Loading cities for user: ${targetUserId}`);
-
-            // Get user document to get unique cities
-            const userDoc = await firestore().collection('users').doc(targetUserId).get();
-            const userData = userDoc.data();
-            const uniqueCities = userData?.uniqueCities || [];
-
-            // Load city images and count meals per city
-            const citiesWithData: City[] = [];
-
-            // Get meal counts per city
-            const mealsQuery = await firestore()
-                .collection('mealEntries')
-                .where('userId', '==', targetUserId)
-                .get();
-
-            const cityMealCounts: { [city: string]: number } = {};
-            mealsQuery.docs.forEach(doc => {
-                const data = doc.data();
-                const city = data.location?.city;
-                if (city) {
-                    cityMealCounts[city] = (cityMealCounts[city] || 0) + 1;
-                }
-            });
-
-            for (const cityName of uniqueCities) {
-                const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
-                const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
-
-                // Capitalize each word in the city name
-                const capitalizedCityName = cityName.split(' ').map(word =>
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ');
-
-                const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
-
-                // Get or generate passport stamp for this city
-                let stampUrl: string | undefined;
-                try {
-                    console.log(`🏛️ FoodPassport: Getting stamp for city: ${capitalizedCityName}`);
-                    const stampData = await getOrGenerateMonument(capitalizedCityName);
-                    stampUrl = stampData?.monument_url;
-                    console.log(`🏛️ FoodPassport: Got stamp for ${capitalizedCityName}:`, stampUrl ? 'success' : 'failed');
-                } catch (error) {
-                    console.log(`🏛️ FoodPassport: Error getting stamp for ${capitalizedCityName}:`, error);
-                }
-
-                if (cityDoc.exists) {
-                    const cityData = cityDoc.data();
-                    if (cityData.imageUrl) {
-                        citiesWithData.push({
-                            name: capitalizedCityName,
-                            imageUrl: cityData.imageUrl,
-                            mealCount: mealCount,
-                            stampUrl: stampUrl
-                        });
-                    }
-                } else {
-                    // Use placeholder if no image exists
-                    citiesWithData.push({
-                        name: capitalizedCityName,
-                        imageUrl: 'https://via.placeholder.com/350',
-                        mealCount: mealCount,
-                        stampUrl: stampUrl
-                    });
-                }
-            }
-
-            // Sort cities by meal count (highest first)
-            citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
-
-            console.log(`🌎 Found ${citiesWithData.length} cities for user`);
-            setCities(citiesWithData);
-        } catch (error) {
-            console.error('Error loading cities:', error);
-        } finally {
-            setCitiesLoading(false);
-        }
-    };
-
-    const loadCuisines = async () => {
-        try {
-            setCuisinesLoading(true);
-
-            const targetUserId = userId || auth().currentUser?.uid;
-            if (!targetUserId) return;
-
-            console.log(`🍳 Loading cuisines for user: ${targetUserId}`);
-
-            // Get user document to get unique cuisines
-            const userDoc = await firestore().collection('users').doc(targetUserId).get();
-            const userData = userDoc.data();
-            const uniqueCuisines = userData?.uniqueCuisines || [];
-
-            // Load cuisine data and count meals per cuisine
-            const cuisinesWithData: Cuisine[] = [];
-
-            // Get meal counts per cuisine
-            const mealsQuery = await firestore()
-                .collection('mealEntries')
-                .where('userId', '==', targetUserId)
-                .get();
-
-            const cuisineMealCounts: { [cuisine: string]: number } = {};
-            mealsQuery.docs.forEach(doc => {
-                const data = doc.data();
-                // Primary source: metadata_enriched.cuisine_type
-                let cuisine = data.metadata_enriched?.cuisine_type;
-
-                // Fallback sources
-                if (!cuisine) {
-                    cuisine = data.quick_criteria_result?.cuisine_type ||
-                             data.enhanced_facts?.food_facts?.cuisine_type ||
-                             data.aiMetadata?.cuisineType;
-                }
-
-                if (cuisine) {
-                    cuisine = cuisine.toLowerCase().trim();
-                    if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
-                        cuisineMealCounts[cuisine] = (cuisineMealCounts[cuisine] || 0) + 1;
-                    }
-                }
-            });
-
-            for (const cuisineName of uniqueCuisines) {
-                const normalizedCuisineName = cuisineName.toLowerCase().trim().replace(/\s+/g, '-');
-
-                // Capitalize cuisine name for display
-                const capitalizedCuisineName = cuisineName.split(' ').map(word =>
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ');
-
-                const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
-
-                // For now, use a placeholder image
-                cuisinesWithData.push({
-                    name: capitalizedCuisineName,
-                    imageUrl: 'https://via.placeholder.com/350',
-                    mealCount: mealCount
-                });
-            }
-
-            // Sort cuisines by meal count (highest first)
-            cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
-
-            console.log(`🍳 Found ${cuisinesWithData.length} cuisines for user`);
-            setCuisines(cuisinesWithData);
-        } catch (error) {
-            console.error('Error loading cuisines:', error);
-        } finally {
-            setCuisinesLoading(false);
-        }
-    };
-
-    const loadRestaurants = async () => {
-        try {
-            setRestaurantsLoading(true);
-
-            const targetUserId = userId || auth().currentUser?.uid;
-            if (!targetUserId) return;
-
-            console.log(`🍽️ Loading restaurants for user: ${targetUserId}`);
-
-            // Get user document to get unique restaurants
-            const userDoc = await firestore().collection('users').doc(targetUserId).get();
-            const userData = userDoc.data();
-            const uniqueRestaurants = userData?.uniqueRestaurants || [];
-
-            // Get meal counts and emojis per restaurant
-            const mealsQuery = await firestore()
-                .collection('mealEntries')
-                .where('userId', '==', targetUserId)
-                .get();
-
-            const restaurantMealCounts: { [restaurant: string]: number } = {};
-            const restaurantEmojiUrls: { [restaurant: string]: string[] } = {};
-
-            mealsQuery.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.restaurant) {
-                    let restaurantName = data.restaurant.trim();
-
-                    // If restaurant includes city/state, extract just the name
-                    if (restaurantName.includes(',')) {
-                        const parts = restaurantName.split(',');
-                        restaurantName = parts[0].trim();
-                    }
-
-                    if (restaurantName && restaurantName !== '' && restaurantName.toLowerCase() !== 'unknown' && restaurantName.toLowerCase() !== 'n/a') {
-                        // Normalize restaurant name for consistent matching
-                        const normalizedName = restaurantName;
-
-                        restaurantMealCounts[normalizedName] = (restaurantMealCounts[normalizedName] || 0) + 1;
-
-                        // Collect pixel art emoji URLs (check both URL and data fields)
-                        if (data.pixel_art_url) {
-                            if (!restaurantEmojiUrls[normalizedName]) {
-                                restaurantEmojiUrls[normalizedName] = [];
-                            }
-                            restaurantEmojiUrls[normalizedName].push(data.pixel_art_url);
-                        } else if (data.pixel_art_data) {
-                            // If it's base64 data, convert to data URI
-                            if (!restaurantEmojiUrls[normalizedName]) {
-                                restaurantEmojiUrls[normalizedName] = [];
-                            }
-                            restaurantEmojiUrls[normalizedName].push(`data:image/png;base64,${data.pixel_art_data}`);
-                        }
-                    }
-                }
-            });
-
-            const restaurantsWithData: Restaurant[] = [];
-
-            for (const restaurantName of uniqueRestaurants) {
-                // Normalize the restaurant name from uniqueRestaurants too
-                const normalizedUniqueName = restaurantName.trim();
-                const mealCount = restaurantMealCounts[normalizedUniqueName] || 0;
-
-                if (mealCount > 0) {
-                    const emojis = restaurantEmojiUrls[normalizedUniqueName] || [];
-
-                    restaurantsWithData.push({
-                        name: normalizedUniqueName,
-                        mealCount: mealCount,
-                        emojiUrls: emojis
-                    });
-                }
-            }
-
-            // Sort restaurants by meal count (highest first)
-            restaurantsWithData.sort((a, b) => b.mealCount - a.mealCount);
-
-            console.log(`🍽️ Found ${restaurantsWithData.length} restaurants for user`);
-            setRestaurants(restaurantsWithData);
-        } catch (error) {
-            console.error('Error loading restaurants:', error);
-        } finally {
-            setRestaurantsLoading(false);
-        }
-    };
+    // Individual loadCities, loadCuisines, loadRestaurants removed — consolidated into loadAllAccolades above
 
     // Helper functions for accolades section
     const renderTextWithBold = (text: string) => {
@@ -1552,19 +1415,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             }}
         >
             <View style={styles.cityImageContainer}>
-                {item.stampUrl ? (
-                    <Image
-                        source={{ uri: item.stampUrl }}
-                        style={styles.cityImage}
-                        resizeMode="contain"
-                    />
-                ) : (
-                    <Image
-                        source={{ uri: item.imageUrl }}
-                        style={styles.cityImage}
-                        resizeMode="cover"
-                    />
-                )}
+                <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.cityImage}
+                    resizeMode="cover"
+                />
             </View>
             <Text style={styles.cityName} numberOfLines={1}>
                 {item.name}
@@ -1715,8 +1570,172 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         );
     };
 
-    // Function to render each meal item
-    const renderMealItem = ({ item }: { item: MealEntry }) => {
+    // Memoize ListHeaderComponent to avoid re-creating on every render
+    const listHeaderComponent = useMemo(() => (
+        <>
+            {/* Forkful Logo - only show on own profile */}
+            {(!userId || userId === auth().currentUser?.uid) && (
+                <View style={styles.logoContainer}>
+                    <Image
+                        source={require('../assets/forkful_logos/forkful_logo_cursive2.png')}
+                        style={styles.logoImage}
+                        resizeMode="contain"
+                    />
+                </View>
+            )}
+        </>
+    ), [userId]);
+
+    // Memoize ListFooterComponent — only recompute when accolades data changes
+    const listFooterComponent = useMemo(() => (
+        <View>
+            {/* Accolades Section */}
+            <View style={styles.accoladesContainer}>
+                {/* I've Eaten Section - Pixel Art Emojis */}
+                {!emojisLoading && pixelArtEmojis.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>Meals Eaten:</Text>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.challengeCarousel}
+                            contentContainerStyle={styles.challengeCarouselContent}
+                        >
+                            {pixelArtEmojis.map((item, index) => (
+                                <View key={`emoji_${index}`} style={styles.emojiCarouselWrapper}>
+                                    {renderEmojiItem({ item, index: 0, separators: null as any })}
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </>
+                )}
+
+                {/* All Challenges Section */}
+                {!challengesLoading && allChallenges.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>Food Challenges</Text>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.challengeCarousel}
+                            contentContainerStyle={styles.challengeCarouselContent}
+                        >
+                            {allChallenges.map(item => (
+                                <View key={item.challenge_id} style={styles.carouselItemWrapper}>
+                                    {renderChallengeItem({ item, index: 0, separators: null as any })}
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </>
+                )}
+
+                {/* Cities Section */}
+                {!citiesLoading && cities.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>Cities</Text>
+
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.challengeCarousel}
+                            contentContainerStyle={styles.challengeCarouselContent}
+                        >
+                            {cities.map(item => (
+                                <View key={item.name} style={styles.carouselItemWrapper}>
+                                    {renderCityItem({ item, index: 0, separators: null as any })}
+                                </View>
+                            ))}
+                        </ScrollView>
+
+                        {/* Cities Pie Chart */}
+                        {renderCitiesPieChart()}
+                    </>
+                )}
+
+                {/* Cuisines Section */}
+                {!cuisinesLoading && cuisines.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>Cuisines</Text>
+
+                        {/* Cuisines Pie Chart */}
+                        <View style={styles.pieChartContainer}>
+                            <Text style={styles.pieChartTitle}>Meals by Cuisine (Top 10)</Text>
+                            <PieChart
+                                data={cuisines.slice(0, 10).map((cuisine, index) => ({
+                                    name: cuisine.name,
+                                    population: cuisine.mealCount,
+                                    color: [
+                                        '#5B8A72', '#8B7355', '#7A9B8E', '#9CA986', '#D4C5B9',
+                                        '#6B8E7F', '#B8A89A', '#A89F91', '#C8BCB0', '#E8DDD3',
+                                    ][index % 10],
+                                    legendFontColor: colors.textSecondary,
+                                    legendFontSize: 12,
+                                    legendFontFamily: 'Inter-Regular',
+                                }))}
+                                width={width - 40}
+                                height={200}
+                                chartConfig={{
+                                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                accessor="population"
+                                backgroundColor="transparent"
+                                paddingLeft="0"
+                                absolute
+                            />
+                        </View>
+
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.challengeCarousel}
+                            contentContainerStyle={styles.challengeCarouselContent}
+                        >
+                            {cuisines.map(item => (
+                                <View key={item.name} style={styles.carouselItemWrapper}>
+                                    {renderCuisineItem({ item, index: 0, separators: null as any })}
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </>
+                )}
+
+                {/* Restaurants Section */}
+                {!restaurantsLoading && restaurants.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>Restaurants</Text>
+                        <View style={styles.restaurantsList}>
+                            {restaurants.map(item => (
+                                <View key={item.name}>
+                                    {renderRestaurantItem({ item, index: 0, separators: null as any })}
+                                </View>
+                            ))}
+                        </View>
+                    </>
+                )}
+            </View>
+
+            {/* Share button - only show if user has meals and it's their own profile */}
+            {filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid) && (
+                <View style={styles.shareContainer}>
+                    <TouchableOpacity
+                        style={styles.shareButton}
+                        onPress={handleSharePassport}
+                        activeOpacity={0.8}
+                    >
+                        <Image
+                            source={require('../assets/icons/map/share.png')}
+                            style={styles.shareIcon}
+                        />
+                        <Text style={styles.shareButtonText}>Share</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, filteredMeals.length, userId]);
+
+    // Function to render each meal item — memoized with useCallback
+    const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {
         const isUnrated = item.rating === 0 || item.isUnrated === true;
         const isUnratedCameraCapture = item.isUnrated === true && item.photoSource === 'camera';
 
@@ -1814,8 +1833,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             </TouchableOpacity>
         );
-    };
-    
+    }, [imageErrors, tabIndex, userId, userName, userPhoto]);
+
     // Render the main screen
     return (
         <SafeAreaView style={styles.container}>
@@ -1833,20 +1852,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         numColumns={2}
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
-                        ListHeaderComponent={() => (
-                            <>
-                                {/* Forkful Logo - only show on own profile */}
-                                {(!userId || userId === auth().currentUser?.uid) && (
-                                    <View style={styles.logoContainer}>
-                                        <Image
-                                            source={require('../assets/forkful_logos/forkful_logo_cursive2.png')}
-                                            style={styles.logoImage}
-                                            resizeMode="contain"
-                                        />
-                                    </View>
-                                )}
-                            </>
-                        )}
+                        ListHeaderComponent={listHeaderComponent}
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}
@@ -1878,160 +1884,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 )}
                             </View>
                         }
-                        ListFooterComponent={() => (
-                            <View>
-                                {/* Accolades Section */}
-                                <View style={styles.accoladesContainer}>
-                                    {/* I've Eaten Section - Pixel Art Emojis */}
-                                    {!emojisLoading && pixelArtEmojis.length > 0 && (
-                                        <>
-                                            <Text style={styles.sectionTitle}>Meals Eaten:</Text>
-                                            <ScrollView
-                                                horizontal
-                                                showsHorizontalScrollIndicator={false}
-                                                style={styles.challengeCarousel}
-                                                contentContainerStyle={styles.challengeCarouselContent}
-                                            >
-                                                {pixelArtEmojis.map((item, index) => (
-                                                    <View key={`emoji_${index}`} style={styles.emojiCarouselWrapper}>
-                                                        {renderEmojiItem({ item, index: 0, separators: null as any })}
-                                                    </View>
-                                                ))}
-                                            </ScrollView>
-                                        </>
-                                    )}
-
-                                    {/* All Challenges Section */}
-                                    {!challengesLoading && allChallenges.length > 0 && (
-                                        <>
-                                            <Text style={styles.sectionTitle}>Food Challenges</Text>
-                                            <ScrollView
-                                                horizontal
-                                                showsHorizontalScrollIndicator={false}
-                                                style={styles.challengeCarousel}
-                                                contentContainerStyle={styles.challengeCarouselContent}
-                                            >
-                                                {allChallenges.map(item => (
-                                                    <View key={item.challenge_id} style={styles.carouselItemWrapper}>
-                                                        {renderChallengeItem({ item, index: 0, separators: null as any })}
-                                                    </View>
-                                                ))}
-                                            </ScrollView>
-                                        </>
-                                    )}
-
-                                    {/* Cities Section */}
-                                    {!citiesLoading && cities.length > 0 && (
-                                        <>
-                                            <Text style={styles.sectionTitle}>Cities</Text>
-
-                                            <ScrollView
-                                                horizontal
-                                                showsHorizontalScrollIndicator={false}
-                                                style={styles.challengeCarousel}
-                                                contentContainerStyle={styles.challengeCarouselContent}
-                                            >
-                                                {cities.map(item => (
-                                                    <View key={item.name} style={styles.carouselItemWrapper}>
-                                                        {renderCityItem({ item, index: 0, separators: null as any })}
-                                                    </View>
-                                                ))}
-                                            </ScrollView>
-
-                                            {/* Cities Pie Chart */}
-                                            {renderCitiesPieChart()}
-                                        </>
-                                    )}
-
-                                    {/* Cuisines Section */}
-                                    {!cuisinesLoading && cuisines.length > 0 && (
-                                        <>
-                                            <Text style={styles.sectionTitle}>Cuisines</Text>
-
-                                            {/* Cuisines Pie Chart */}
-                                            <View style={styles.pieChartContainer}>
-                                                <Text style={styles.pieChartTitle}>Meals by Cuisine (Top 10)</Text>
-                                                <PieChart
-                                                    data={cuisines.slice(0, 10).map((cuisine, index) => ({
-                                                        name: cuisine.name,
-                                                        population: cuisine.mealCount,
-                                                        color: [
-                                                            '#5B8A72', // Sage green
-                                                            '#8B7355', // Warm taupe
-                                                            '#7A9B8E', // Mid sage
-                                                            '#9CA986', // Light sage
-                                                            '#D4C5B9', // Light beige
-                                                            '#6B8E7F', // Darker sage
-                                                            '#B8A89A', // Tan
-                                                            '#A89F91', // Warm grey
-                                                            '#C8BCB0', // Light taupe
-                                                            '#E8DDD3', // Cream
-                                                        ][index % 10],
-                                                        legendFontColor: colors.textSecondary,
-                                                        legendFontSize: 12,
-                                                        legendFontFamily: 'Inter-Regular',
-                                                    }))}
-                                                    width={width - 40}
-                                                    height={200}
-                                                    chartConfig={{
-                                                        color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                                    }}
-                                                    accessor="population"
-                                                    backgroundColor="transparent"
-                                                    paddingLeft="0"
-                                                    absolute
-                                                />
-                                            </View>
-
-                                            <ScrollView
-                                                horizontal
-                                                showsHorizontalScrollIndicator={false}
-                                                style={styles.challengeCarousel}
-                                                contentContainerStyle={styles.challengeCarouselContent}
-                                            >
-                                                {cuisines.map(item => (
-                                                    <View key={item.name} style={styles.carouselItemWrapper}>
-                                                        {renderCuisineItem({ item, index: 0, separators: null as any })}
-                                                    </View>
-                                                ))}
-                                            </ScrollView>
-                                        </>
-                                    )}
-
-                                    {/* Restaurants Section */}
-                                    {!restaurantsLoading && restaurants.length > 0 && (
-                                        <>
-                                            <Text style={styles.sectionTitle}>Restaurants</Text>
-                                            <View style={styles.restaurantsList}>
-                                                {restaurants.map(item => (
-                                                    <View key={item.name}>
-                                                        {renderRestaurantItem({ item, index: 0, separators: null as any })}
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        </>
-                                    )}
-                                </View>
-
-                                {/* Share button - only show if user has meals and it's their own profile */}
-                                {filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid) && (
-                                    <View style={styles.shareContainer}>
-                                        <TouchableOpacity
-                                            style={styles.shareButton}
-                                            onPress={handleSharePassport}
-                                            activeOpacity={0.8}
-                                        >
-                                            <Image
-                                                source={require('../assets/icons/map/share.png')}
-                                                style={styles.shareIcon}
-                                            />
-                                            <Text style={styles.shareButtonText}>Share</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                )}
-                            </View>
-                        )}
+                        ListFooterComponent={listFooterComponent}
                     />
             )}
             

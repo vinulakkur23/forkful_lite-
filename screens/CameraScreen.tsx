@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,12 @@ import {
   Platform,
   Dimensions,
   Image,
-  ActivityIndicator
+  ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
-import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, TabParamList } from '../App';
@@ -26,6 +27,7 @@ import { identifyDishFromPhoto } from '../services/dishIdentificationService';
 import { extractDishRatingCriteria } from '../services/dishRatingCriteriaService';
 import { extractRatingStatements } from '../services/ratingStatementsService';
 import { generatePixelArtIcon } from '../services/geminiPixelArtService';
+import { ensureServerAwake } from '../config/api';
 import { firebase, auth, firestore, storage } from '../firebaseConfig';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
@@ -53,33 +55,44 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [saveToCameraRoll, setSaveToCameraRoll] = useState(false);
-  
+
+  // Track screen focus + app foreground state for camera activation
+  const isFocused = useIsFocused();
+  const [appState, setAppState] = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', setAppState);
+    return () => sub.remove();
+  }, []);
+
+  // Camera should only be active when screen is focused AND app is in foreground
+  const isCameraActive = isFocused && appState === 'active';
+
   // Get device dimensions
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
-  
+
   // Size for square guide - match full screen width to show actual capture area
   const guideSize = screenWidth;
-  
+
   // Get all devices and manually find the back camera
   const devices = useCameraDevices();
   // Try to explicitly find a back camera from available devices
   const backCameras = Object.values(devices).filter(
-    device => device?.position === 'back'
+    d => d?.position === 'back'
   );
   const device = backCameras.length > 0 ? backCameras[0] : null;
-  
-  // Add extensive logging for debugging
-  console.log('Camera devices object:', JSON.stringify(devices));
-  console.log('Detected back cameras:', backCameras.length);
-  console.log('Selected camera device:', device ? device.id : 'none');
+
+  // Log device info only when it changes (not on every render)
+  useEffect(() => {
+    console.log('Detected back cameras:', backCameras.length);
+    console.log('Selected camera device:', device ? device.id : 'none');
+  }, [device?.id]);
 
   // Reset component state when screen comes into focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       console.log('Camera screen focused - resetting state');
-      // Reset any necessary state when screen is focused
-      setIsLoading(true);
       setIsTakingPicture(false);
 
       // IMPORTANT: Clear any global prefetched suggestions to prevent caching issues
@@ -92,13 +105,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // Get location again
       getLocation();
 
-      // Reset loading after a short delay to ensure devices are properly initialized
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-      
       return () => {
-        // Cleanup when screen is unfocused (optional)
         console.log('Camera screen blurred');
       };
     }, [])
@@ -108,31 +115,37 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     // Set status bar to translucent for better camera experience
     StatusBar.setTranslucent(true);
     StatusBar.setBackgroundColor('transparent');
-    
+
     // Request camera permission
     (async () => {
       const cameraPermission = await Camera.requestCameraPermission();
       console.log(`Camera permission status: ${cameraPermission}`);
-      
+
       if (cameraPermission === 'granted') {
         setHasPermission(true);
       }
-      
-      // Add a short delay to ensure devices are properly initialized
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 1500);
     })();
 
     // Get location
     getLocation();
-    
+
     // Cleanup function to restore status bar
     return () => {
       StatusBar.setTranslucent(false);
       StatusBar.setBackgroundColor('#ffffff');
     };
   }, []);
+
+  // Derive isLoading from actual readiness — not a blind timer
+  useEffect(() => {
+    if (hasPermission && device) {
+      // Small delay for the Camera component to mount and attach its ref
+      const timer = setTimeout(() => setIsLoading(false), 300);
+      return () => clearTimeout(timer);
+    } else {
+      setIsLoading(true);
+    }
+  }, [hasPermission, device]);
 
   // Separate function to get location for reuse
   const getLocation = () => {
@@ -167,7 +180,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // Navigate to Enjoy Meal screen immediately - don't wait for upload
+      // Navigate to Enjoy Meal screen immediately — don't block on anything
       console.log('📱 Navigating to Enjoy Meal screen immediately');
       navigation.navigate('EnjoyMeal', { photoUri: photoUri });
 
@@ -246,6 +259,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         console.log('🚀 [Background] Starting API cascade for meal:', mealId);
 
         try {
+          // === STEP 0: Wake up Render server if cold ===
+          await ensureServerAwake();
+
           // === STEP 1: Dish Identification (Required) ===
           console.log('🔍 [Background] Step 1/3: Identifying dish...');
           await firestore().collection('mealEntries').doc(mealId).update({
@@ -420,7 +436,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const takePicture = async () => {
-      if (camera.current) {
+      if (camera.current && isCameraActive) {
         try {
           // Prevent multiple taps
           if (isTakingPicture) {
@@ -429,7 +445,16 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
 
           setIsTakingPicture(true);
           console.log("Taking photo...");
-          
+
+          // Clean up old persisted captures (keep only last 5 to save disk space)
+          const captureDir = `${RNFS.DocumentDirectoryPath}/CapturedPhotos`;
+          RNFS.readDir(captureDir).then(files => {
+            const sorted = files.sort((a, b) => (a.mtime?.getTime() || 0) - (b.mtime?.getTime() || 0));
+            // Delete all but the 5 most recent
+            const toDelete = sorted.slice(0, Math.max(0, sorted.length - 5));
+            toDelete.forEach(f => RNFS.unlink(f.path).catch(() => {}));
+          }).catch(() => {}); // dir may not exist yet
+
           // Clear any previously cached data before taking a new photo
           if ((global as any).prefetchedSuggestions) {
             console.log('!!! CLEARING PREVIOUS PREFETCHED SUGGESTIONS BEFORE NEW PHOTO !!!');
@@ -483,7 +508,23 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             return;
           }
 
-          console.log("Photo taken:", photo.path);
+          // Verify the captured photo file actually exists and has content
+          const rawPath = photo.path.replace('file://', '');
+          const fileExists = await RNFS.exists(rawPath);
+          if (!fileExists) {
+            console.error("Photo file does not exist at path:", rawPath);
+            Alert.alert('Error', 'Photo was not saved. Please try again.');
+            setIsTakingPicture(false);
+            return;
+          }
+          const fileInfo = await RNFS.stat(rawPath);
+          console.log("Photo taken:", photo.path, "size:", fileInfo.size, "bytes");
+          if (fileInfo.size < 1000) {
+            console.error("Photo file is too small (likely corrupted):", fileInfo.size);
+            Alert.alert('Error', 'Photo capture failed. Please try again.');
+            setIsTakingPicture(false);
+            return;
+          }
 
           // Normalize the file path based on platform
           let normalizedPath = photo.path;
@@ -494,6 +535,23 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           }
 
           console.log("Normalized photo path:", normalizedPath);
+
+          // CRITICAL: Copy the photo to a persistent location immediately.
+          // Vision Camera stores photos in a temp directory that may be cleaned
+          // up when the camera session deactivates (isActive → false on navigation).
+          // We must persist the file before navigating away from this screen.
+          const persistentDir = `${RNFS.DocumentDirectoryPath}/CapturedPhotos`;
+          await RNFS.mkdir(persistentDir).catch(() => {}); // ensure dir exists
+          const persistentPath = `${persistentDir}/capture_${Date.now()}.jpg`;
+          const sourcePath = normalizedPath.replace('file://', '');
+          try {
+            await RNFS.copyFile(sourcePath, persistentPath);
+            normalizedPath = `file://${persistentPath}`;
+            console.log("✅ Photo persisted to:", normalizedPath);
+          } catch (copyErr) {
+            console.error("⚠️ Failed to persist photo, using original path:", copyErr);
+            // Continue with original path — may still work if session stays alive
+          }
 
           // Save to camera roll if user opted in
           if (saveToCameraRoll) {
@@ -559,8 +617,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           setIsTakingPicture(false);
         }
       } else {
-        console.log("Camera ref is null");
-        Alert.alert('Error', 'Camera is not ready');
+        console.log("Camera not ready - ref:", !!camera.current, "active:", isCameraActive);
+        Alert.alert('Camera Not Ready', 'Please wait a moment and try again.');
       }
     };
   
@@ -792,7 +850,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         ref={camera}
         style={styles.camera}
         device={device}
-        isActive={true}
+        isActive={isCameraActive}
         photo={true}
         enableZoomGesture={false}
         // Ensure we capture at photo quality
@@ -1139,6 +1197,7 @@ const styles = StyleSheet.create({
     height: 32,
     marginBottom: 6,
     tintColor: 'white',
+    resizeMode: 'contain' as const,
   },
   uploadButtonTextLarge: {
     color: colors.white,

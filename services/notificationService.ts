@@ -162,15 +162,19 @@ class NotificationService {
         if (notification.userInteraction) {
           console.log('User tapped on notification');
 
-          // Ignore taps on tip/statement notifications (non-interactive)
-          if (notification.userInfo?.type === 'unrated-meal-statement') {
-            console.log('Ignoring tap on tip notification - these are non-interactive');
-            return;
-          }
-
-          // Ignore taps on pixel art notifications (non-interactive)
-          if (notification.userInfo?.type === 'unrated-meal-pixel-art' || notification.data?.ignoreTap === 'true') {
-            console.log('Ignoring tap on pixel art notification - these are non-interactive');
+          // Navigate to MealTipsScreen for statement and pixel art notifications
+          if (notification.userInfo?.type === 'unrated-meal-statement' || notification.userInfo?.type === 'unrated-meal-pixel-art') {
+            const mealId = notification.userInfo?.mealId;
+            const dishName = notification.userInfo?.dishName;
+            if (mealId) {
+              console.log('Navigating to MealTipsScreen for meal:', mealId);
+              try {
+                const { navigate } = await import('./navigationService');
+                navigate('MealTips', { mealId, dishName: dishName || undefined });
+              } catch (error) {
+                console.error('Navigation error:', error);
+              }
+            }
             return;
           }
 

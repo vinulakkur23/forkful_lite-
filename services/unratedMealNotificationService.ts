@@ -137,8 +137,8 @@ export const scheduleUnratedMealNotifications = async (
               data: {
                 type: 'unrated-meal-statement',
                 mealId: mealData.mealId,
+                dishName: mealData.dishName,
                 statementIndex: String(index),
-                ignoreTap: 'true', // Flag to ignore tap events
               }
             },
             trigger
