@@ -42,6 +42,8 @@ declare module '../App' {
       mealType?: string;
       isEditingExisting?: boolean;
       existingMealId?: string;
+      mealId?: string;
+      fromGalleryPostSave?: boolean;
       _uniqueKey: string;
     };
   }
@@ -255,12 +257,10 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         originalUri: photo.uri // Track the original URI for cleanup
       };
 
-      console.log(`Navigating to RatingScreen2 with fresh image: ${freshPhoto.uri}`);
-
-      // No need to format comments as we're using single text fields
-
       // Ensure data is ready before navigation
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log(`Navigating to RatingScreen2 with fresh image: ${freshPhoto.uri}`);
 
       // Navigate to RatingScreen2 with all collected data
       navigation.navigate('RatingScreen2', {
@@ -268,14 +268,13 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
         location: location,
         rating: rating,
         thoughts: thoughts.trim(),
-        suggestionData: route.params.suggestionData, // Pass along any suggestion data
-        // Pass along editing parameters if we're editing an existing meal
+        suggestionData: route.params.suggestionData,
         meal: route.params.meal,
         restaurant: route.params.restaurant,
         mealType: route.params.mealType,
         isEditingExisting: route.params.isEditingExisting,
         existingMealId: route.params.existingMealId,
-        _uniqueKey: sessionId // This helps React Navigation identify this as a new navigation
+        _uniqueKey: sessionId
       });
       
       // Log if we're passing prefetched meal suggestions
@@ -389,8 +388,8 @@ const RatingScreen1: React.FC<Props> = ({ route, navigation }) => {
       navigation.navigate('RatingScreen2', {
         photo: freshPhoto,
         location: location,
-        rating: 3, // Always 3 (good) emoji rating for quick continue
-        thoughts: '', // Empty thoughts for quick continue
+        rating: 3,
+        thoughts: '',
         suggestionData: route.params.suggestionData,
         _uniqueKey: sessionId
       });

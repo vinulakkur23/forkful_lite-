@@ -12,6 +12,7 @@ export interface DishIdentificationData {
   description: string;                // Brief description of main ingredients
   confidence_level: number;           // 0.0-1.0
   is_descriptive: boolean;            // True if descriptive name vs specific dish
+  alternative_names?: string[];       // Up to 3 alternative dish names
   identification_timestamp: string;
   identification_version: string;
   identification_model: string;

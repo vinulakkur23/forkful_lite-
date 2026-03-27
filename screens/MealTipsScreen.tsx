@@ -78,11 +78,17 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
       let statements: RatingStatement[] = [];
 
       if (ratingStatementsResult?.rating_statements) {
-        // New format: array of strings from API
-        statements = ratingStatementsResult.rating_statements.slice(0, 3).map((stmt: string, idx: number) => ({
-          title: `Tip ${idx + 1}`,
-          description: stmt
-        }));
+        // Handle both formats: array of strings OR array of {title, description} objects
+        statements = ratingStatementsResult.rating_statements.slice(0, 3).map((stmt: any, idx: number) => {
+          if (typeof stmt === 'string') {
+            return { title: `Tip ${idx + 1}`, description: stmt };
+          }
+          // Already an object with title/description
+          return {
+            title: stmt.title || `Tip ${idx + 1}`,
+            description: stmt.description || String(stmt),
+          };
+        });
       }
 
       // Get pixel art (try multiple possible fields)

@@ -44,9 +44,10 @@ import { searchNearbyRestaurants, searchRestaurantsByText, getPlaceDetails, extr
 // import { extractCombinedMetadataAndCriteria, CombinedResponse } from '../services/combinedMetadataCriteriaService'; // COMMENTED OUT - using new quick criteria service
 // import { extractQuickCriteria, QuickCriteriaData } from '../services/quickCriteriaService'; // REPLACED with rating statements service
 import { extractDishRatingCriteria, DishRatingCriteriaData } from '../services/dishRatingCriteriaService';
+import { identifyDishFromPhoto } from '../services/dishIdentificationService';
 import { ensureServerAwake } from '../config/api';
-import { getDrinkPairings, DrinkPairingData } from '../services/restaurantPairingService';
-import { getDishHistory, DishHistoryResult } from '../services/dishHistoryService';
+import Carousel3D, { CarouselItem } from '../components/Carousel3D';
+// getDrinkPairings and getDishHistory removed — redundant with extractDishInsights
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
 // Monument service removed — no longer used
 // Enhanced metadata service removed - now handled by Cloud Functions
@@ -156,6 +157,14 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
   
   // Track if user has made an explicit restaurant selection (prevent auto-override)
   const [hasExplicitRestaurantSelection, setHasExplicitRestaurantSelection] = useState(false);
+
+  // Carousel state
+  // showWriteInRestaurant / showWriteInDish removed — now handled inline by Carousel3D
+  const [dishAlternatives, setDishAlternatives] = useState<string[]>([]);
+  const [isIdentifyingDish, setIsIdentifyingDish] = useState(false);
+  // The original AI-predicted dish name — never changes after identification
+  const [primaryDishName, setPrimaryDishName] = useState<string>('');
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>('');
   
   // Device location state
   const [deviceLocation, setDeviceLocation] = useState<LocationData | null>(null);
@@ -366,6 +375,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         if (!isUserEditingRestaurant && !hasExplicitRestaurantSelection) {
           logWithSession(`Auto-selecting first restaurant: ${restaurants[0].name}`);
           setRestaurant(restaurants[0].name);
+          setSelectedRestaurantId(restaurants[0].id || restaurants[0].name);
           
           // If restaurant has location data, update our location
           if (restaurants[0].geometry && restaurants[0].geometry.location) {
@@ -632,6 +642,13 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
     setIsLoadingSuggestions(false);
     setIsSearchingRestaurants(false);
     setIsLoadingMealSuggestions(false);
+    // Reset carousel-specific state
+    setDishAlternatives([]);
+    setPrimaryDishName('');
+    setSelectedRestaurantId('');
+    setIsIdentifyingDish(false);
+    setImageError(false);
+    dishIdRanRef.current = false;
     
     // Clear any global variables or timers that might be used
     if ((window as any).restaurantInputTimer) {
@@ -716,7 +733,103 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       }
     };
   }, [route.params._uniqueKey, route.params.photo?.uri]); // Re-run when unique key or photo URI changes
-  
+
+  // Reset dish + image state on each new photo session to prevent stale data from previous uploads
+  useEffect(() => {
+    if (!route.params.isEditingExisting) {
+      setMealName('');
+      setPrimaryDishName('');
+      setDishAlternatives([]);
+      setIsIdentifyingDish(true);
+      setImageError(false);
+      dishIdRanRef.current = false;
+    }
+  }, [route.params._uniqueKey]);
+
+  // Effect to identify dish from photo (for gallery uploads and unrated meals).
+  // Populates mealName and dishAlternatives for the dish carousel.
+  const dishIdRanRef = useRef(false);
+  useEffect(() => {
+    const effectivePhoto = getEffectivePhoto();
+    console.log('🔎 DishID effect running:', {
+      hasPhoto: !!effectivePhoto?.uri,
+      photoUri: effectivePhoto?.uri?.substring(effectivePhoto?.uri?.length - 30),
+      isEditingExisting: route.params.isEditingExisting,
+      dishIdRan: dishIdRanRef.current,
+      existingMealId: route.params.existingMealId,
+      hasPrefetch: !!(global as any).prefetchedDishIdentification,
+      uniqueKey: route.params._uniqueKey,
+    });
+
+    // Also skip if editing existing meal (name already set)
+    if (route.params.isEditingExisting) { console.log('🔎 DishID: skipping (isEditingExisting)'); return; }
+    if (dishIdRanRef.current) { console.log('🔎 DishID: skipping (already ran)'); return; }
+
+    // Check if we already have identification data in Firestore (unrated flow).
+    // Always run this even if mealName is pre-filled — we need the alternatives for the carousel.
+    if (route.params.existingMealId) {
+      dishIdRanRef.current = true;
+      firestore()
+        .collection('mealEntries')
+        .doc(route.params.existingMealId)
+        .get()
+        .then((doc) => {
+          const data = doc.data();
+          const idResult = data?.dish_identification_result;
+          if (idResult?.dish_name) {
+            setMealName(idResult.dish_name);
+            setPrimaryDishName(idResult.dish_name);
+            setDishAlternatives(idResult.alternative_names || []);
+          }
+        })
+        .catch((err) => console.error('Error reading dish ID from Firestore:', err))
+        .finally(() => setIsIdentifyingDish(false));
+      return;
+    }
+
+    // Gallery upload flow — check for prefetched data first, then fall back to API call
+    if (!effectivePhoto?.uri) { console.log('🔎 DishID: skipping (no photo URI)'); return; }
+    console.log('🔎 DishID: proceeding with gallery flow');
+    dishIdRanRef.current = true;
+
+    // Check if CameraScreen already prefetched the identification
+    const prefetched = (global as any).prefetchedDishIdentification;
+    const prefetchedUri = (global as any).prefetchedDishPhotoUri;
+
+    // URI match removed — CropScreen changes the photo URI (crop + filter),
+    // so it will never match the original gallery URI that CameraScreen stored.
+    // Stale data isn't a concern because CameraScreen clears globals on each new pick.
+    if (prefetched?.dish_name) {
+      console.log('Using prefetched dish identification:', prefetched.dish_name);
+      setMealName(prefetched.dish_name);
+      setPrimaryDishName(prefetched.dish_name);
+      setDishAlternatives(prefetched.alternative_names || []);
+      setIsIdentifyingDish(false);
+      delete (global as any).prefetchedDishIdentification;
+      delete (global as any).prefetchedDishPhotoUri;
+      return;
+    }
+
+    // No prefetch available — call API directly
+    setIsIdentifyingDish(true);
+
+    (async () => {
+      try {
+        await ensureServerAwake();
+        const result = await identifyDishFromPhoto(effectivePhoto.uri);
+        if (result?.dish_name && result.dish_name !== 'unidentified dish') {
+          setMealName(result.dish_name);
+          setPrimaryDishName(result.dish_name);
+          setDishAlternatives(result.alternative_names || []);
+        }
+      } catch (err) {
+        console.error('Dish identification failed on gallery upload:', err);
+      } finally {
+        setIsIdentifyingDish(false);
+      }
+    })();
+  }, [route.params._uniqueKey]);
+
   // Effect to fetch restaurant suggestions when location becomes available.
   // Only depends on location and deviceLocation — NOT suggestedRestaurants.length,
   // which caused cascading re-runs when restaurants arrived and updated location.
@@ -1114,17 +1227,18 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           _uniqueKey: sessionId,
         });
       } else if (photoSource === 'gallery') {
-        // Path 2: Gallery upload → Navigate to CropScreen for photo editing
-        logWithSession('Navigating to CropScreen for gallery upload');
-        navigation.navigate('Crop', {
-          photo: freshPhoto,
+        // Gallery flow: photo already cropped in CropScreen before RatingScreen2.
+        // Navigate to EditMeal for full rating (emoji + criteria) then Result.
+        logWithSession('Gallery flow: navigating to EditMeal for rating');
+        navigation.navigate('EditMeal', {
           mealId: mealId,
-          pendingMealData: {
-            dishName: mealName,
+          meal: {
+            id: mealId,
+            meal: mealName,
             restaurant: restaurant,
-            location: location,
+            photoUrl: imageUrl,
+            rating: 0,
           },
-          _uniqueKey: sessionId,
         });
       } else {
         // Default flow: Navigate to Result screen
@@ -1227,75 +1341,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Rating criteria error: ${error}`);
       });
       
-      // Step 2: Start drink pairings immediately (parallel processing)
-      if (restaurant && restaurant.trim() && mealName && mealName.trim()) {
-        console.log('🍺🍷 Starting drink pairings IMMEDIATELY (parallel with rating statements)...');
-        const drinkPairingPromise = getDrinkPairings(
-          freshPhoto?.uri || '',  // Pass empty string if no photo
-          mealName,
-          restaurant,
-          location?.city || cityInfo
-        );
-        
-        // Handle drink pairings in background
-        drinkPairingPromise.then(async (drinkData) => {
-          if (drinkData) {
-            try {
-              const pairingUpdate = {
-                drink_pairings: drinkData,
-                drink_pairings_updated_at: firestore.FieldValue.serverTimestamp()
-              };
-              console.log('🍺🍷 Drink pairings ready:', drinkData.beer_pairing.style, '&', drinkData.wine_pairing.style);
-              await firestore().collection('mealEntries').doc(mealId).update(pairingUpdate);
-              console.log('🎉 Drink pairings saved to Firestore!');
-            } catch (pairingError) {
-              console.error('❌ Error saving drink pairings:', pairingError);
-            }
-          }
-        }).catch(error => {
-          console.error('❌ Error with drink pairings:', error);
-        });
-      } else {
-        console.log('⚠️ Skipping drink pairings - missing restaurant or meal name');
-      }
-      
-      // Step 2b: Start dish history immediately (parallel with rating statements and drink pairings)
-      if (mealName && mealName.trim()) {
-        console.log('📚 Starting dish history generation IMMEDIATELY (parallel with other APIs)...');
-        const historyStartTime = Date.now();
-        const dishHistoryPromise = getDishHistory(mealName);
-        
-        // Handle dish history in background
-        dishHistoryPromise.then(async (historyData) => {
-          const historyEndTime = Date.now();
-          const historyDuration = (historyEndTime - historyStartTime) / 1000;
-          
-          if (historyData) {
-            try {
-              const historyUpdate = {
-                dish_history: historyData,
-                dish_history_updated_at: firestore.FieldValue.serverTimestamp()
-              };
-              console.log(`📚 Dish history ready in ${historyDuration.toFixed(2)}s:`, historyData.title);
-              console.log('📚 History length:', historyData.history.length, 'characters');
-              await firestore().collection('mealEntries').doc(mealId).update(historyUpdate);
-              console.log('🎉 Dish history saved to Firestore!');
-            } catch (historyError) {
-              console.error('❌ Error saving dish history:', historyError);
-            }
-          } else {
-            console.log(`📚 Dish history failed after ${historyDuration.toFixed(2)}s`);
-          }
-        }).catch(error => {
-          const historyEndTime = Date.now();
-          const historyDuration = (historyEndTime - historyStartTime) / 1000;
-          console.error(`❌ Error with dish history after ${historyDuration.toFixed(2)}s:`, error);
-        });
-      } else {
-        console.log('⚠️ Skipping dish history - missing meal name');
-      }
+      // getDrinkPairings and getDishHistory removed — dish history is already
+      // covered by extractDishInsights, and drink pairings are not needed.
 
-      // Step 3: Start pixel art with 1.5 second delay (staggered processing)
+      // Step 2: Start pixel art with 1.5 second delay (staggered processing)
       // SKIP pixel art for unrated meals (already generated in CameraScreen)
       // ONLY generate for gallery uploads (which don't go through CameraScreen)
       if (photoSource === 'gallery') {
@@ -1643,11 +1692,6 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         extraHeight={120}
       >
         <View style={styles.contentContainer}>
-          {/* Header */}
-          <View style={styles.headerContainer}>
-            <Text style={styles.headerText}>New Meal</Text>
-          </View>
-          
           {/* Image Container */}
           <View style={styles.imageContainer}>
             {!imageError && getEffectivePhoto()?.uri ? (
@@ -1686,219 +1730,93 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>
-            {/* Restaurant Input */}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Restaurant:</Text>
-              <View style={styles.autocompleteContainer}>
-              <TextInput
-                style={styles.infoInput}
-                value={restaurant}
-                onChangeText={handleRestaurantSearch}
-                onFocus={() => {
-                  logWithSession("User focused on restaurant input");
-                  if (!isUserEditingRestaurant) setIsUserEditingRestaurant(true);
-                  
-                  // Immediately show autocomplete with nearby restaurants when user focuses
-                  setShowAutocomplete(true);
-                  
-                  // If we already have suggestions from prefetch, display them
-                  if (suggestedRestaurants.length > 0) {
-                    logWithSession(`Showing ${suggestedRestaurants.length} prefetched restaurant suggestions as autocomplete`);
-                    setAutocompleteRestaurants(suggestedRestaurants);
-                  } 
-                  // Otherwise try to fetch nearby restaurants at a small radius
-                  else {
-                    const bestLocation = getBestAvailableLocation();
-                    if (bestLocation) {
-                      logWithSession(`Fetching nearby restaurants on field focus with location: ${bestLocation.source}`);
-                      setIsSearchingRestaurants(true);
-                      
-                      // Use a small radius (30 meters) to get very nearby restaurants
-                      searchNearbyRestaurants(bestLocation, 30)
-                        .then(restaurants => {
-                          logWithSession(`Found ${restaurants.length} nearby restaurants on field focus`);
-                          setAutocompleteRestaurants(restaurants);
-                          setSuggestedRestaurants(restaurants); // Also save for later use
-                        })
-                        .catch(error => {
-                          logWithSession(`Error fetching nearby restaurants on focus: ${error}`);
-                        })
-                        .finally(() => {
-                          setIsSearchingRestaurants(false);
-                        });
-                    }
-                  }
-                }}
-                onBlur={() => {
-                  logWithSession("User blurred restaurant input");
-                  setTimeout(() => {
-                    setShowAutocomplete(false);
-                  }, 200);
-                }}
-                placeholder="Enter restaurant name"
-              />
-              
-              {/* Autocomplete dropdown */}
-              {showAutocomplete && autocompleteRestaurants.length > 0 && (
-                <View style={styles.autocompleteDropdown}>
-                  {isSearchingRestaurants && (
-                    <ActivityIndicator size="small" color="#5B8A72" style={styles.autocompleteLoading} />
-                  )}
-                  <FlatList
-                    data={autocompleteRestaurants}
-                    keyExtractor={(item) => item.id || item.name}
-                    keyboardShouldPersistTaps="handled"
-                    style={styles.autocompleteList}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={styles.autocompleteItem}
-                        onPress={() => {
-                          handleRestaurantSelection(item);
-                          setShowAutocomplete(false);
-                        }}
-                      >
-                        <View style={styles.autocompleteTextContainer}>
-                          <Text style={styles.autocompleteItemName}>{item.name}</Text>
-                          <Text style={styles.autocompleteItemAddress}>{item.vicinity || item.formatted_address}</Text>
-                          
-                          {/* Show location badge if available */}
-                          {item.geometry && item.geometry.location && (
-                            <View style={styles.locationBadgeSmall}>
-                              <MaterialIcon name="place" size={10} color="#fff" />
-                              <Text style={styles.locationBadgeTextSmall}>Location available</Text>
-                            </View>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  />
-                </View>
-              )}
-            </View>
-
-            {/* Suggestions button for restaurant */}
-            <TouchableOpacity
-              style={styles.suggestButton}
-              onPress={() => {
-                // If we already have suggestions, show them
-                if (suggestedRestaurants.length > 0) {
-                  setShowRestaurantModal(true);
-                } 
-                // Otherwise try to fetch nearby restaurants
-                else {
-                  const bestLocation = getBestAvailableLocation();
-                  if (bestLocation) {
-                    logWithSession(`Fetching nearby restaurants on button press with location: ${bestLocation.source}`);
-                    setIsLoadingSuggestions(true);
-                    
-                    // Use a 100-meter radius to find more restaurants on button press
-                    searchNearbyRestaurants(bestLocation, 100)
-                      .then(restaurants => {
-                        logWithSession(`Found ${restaurants.length} nearby restaurants on button press`);
-                        setSuggestedRestaurants(restaurants);
-                        if (restaurants.length > 0) {
-                          setShowRestaurantModal(true);
-                        } else {
-                          Alert.alert('No Restaurants Found', 'No restaurants found nearby. Try searching by name instead.');
-                        }
-                      })
-                      .catch(error => {
-                        logWithSession(`Error fetching nearby restaurants on button press: ${error}`);
-                        Alert.alert('Error', 'Failed to fetch nearby restaurants. Try searching by name instead.');
-                      })
-                      .finally(() => {
-                        setIsLoadingSuggestions(false);
-                      });
-                  } else {
-                    Alert.alert('Location Unavailable', 'Cannot find nearby restaurants without location data. Try searching by name instead.');
-                  }
+            {/* ── Restaurant Carousel with inline Write-In ── */}
+            <Text style={styles.infoLabel}>Restaurant:</Text>
+            <Carousel3D
+              key={`restaurant_${route.params._uniqueKey}`}
+              items={suggestedRestaurants.slice(0, 10).map((r) => ({
+                id: r.id || r.name,
+                label: r.name,
+                sublabel: r.vicinity || r.formatted_address,
+              }))}
+              initialSelectedId={selectedRestaurantId}
+              onSelect={(item) => {
+                const matched = suggestedRestaurants.find(
+                  (r) => (r.id || r.name) === item.id
+                );
+                if (matched) {
+                  handleRestaurantSelection(matched);
+                  setSelectedRestaurantId(item.id);
                 }
               }}
-            >
-              <Text style={styles.buttonPlusText}>+</Text>
-            </TouchableOpacity>
-          </View>
-            
-            {/* Meal Input with Button Container */}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Meal:</Text>
-              <TextInput
-                style={styles.infoInput}
-                value={mealName}
-                onChangeText={(text) => {
-                  // onFocus already sets isUserEditingMeal — avoid redundant state
-                  // update on every keystroke which causes double re-renders
-                  if (!isUserEditingMeal) setIsUserEditingMeal(true);
-                  setMealName(text);
-                }}
-                onFocus={() => {
-                  logWithSession("User focused on meal input");
-                  if (!isUserEditingMeal) setIsUserEditingMeal(true);
-                }}
-                onBlur={() => {
-                  logWithSession("User blurred meal input");
-                  setTimeout(() => {
-                    setIsUserEditingMeal(false);
-                  }, 200);
-                }}
-                placeholder="Enter meal name"
-                autoCapitalize="words"
-              />
-              
-              {/* Single button that changes state based on meal suggestions */}
-              <TouchableOpacity
-                style={[
-                  styles.suggestButton, 
-                  suggestedMeals.length > 0 ? styles.suggestButtonActive : styles.suggestButtonDisabled
-                ]}
-                onPress={() => {
-                  if (suggestedMeals.length > 0) {
-                    // If we have meal suggestions, show them
-                    setShowMealSuggestionsModal(true);
-                  } else if (restaurant) {
-                    // If no suggestions but we have a restaurant, try to fetch them
-                    // Menu suggestions removed for performance
-                    // Show a loading toast to indicate we're fetching suggestions
-                    Alert.alert('Fetching Suggestions', 'Getting meal suggestions for ' + restaurant);
-                  } else {
-                    // If no restaurant selected yet
-                    Alert.alert('No Restaurant Selected', 'Please select a restaurant first to get meal suggestions.');
-                  }
-                }}
-                disabled={!restaurant}
-              >
-                {isLoadingMealSuggestions ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <>
-                    <Text style={styles.buttonPlusText}>+</Text>
-                    {suggestedMeals.length > 0 && (
-                      <View style={styles.badgeContainer}>
-                        <Text style={styles.badgeText}>{suggestedMeals.length}</Text>
-                      </View>
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-            
-            {/* Loading indicator */}
-            {isLoadingSuggestions && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#5B8A72" />
-                <Text style={styles.loadingText}>Getting suggestions...</Text>
-              </View>
-            )}
+              onWriteInSubmit={(text) => {
+                setRestaurant(text);
+                setIsUserEditingRestaurant(true);
+                setHasExplicitRestaurantSelection(true);
+              }}
+              onWriteInTextChange={(text) => {
+                handleRestaurantSearch(text);
+              }}
+              autocompleteResults={autocompleteRestaurants.map((r) => ({
+                id: r.id || r.name,
+                label: r.name,
+                sublabel: r.vicinity || r.formatted_address,
+              }))}
+              isSearchingAutocomplete={isSearchingRestaurants}
+              onAutocompleteSelect={(item) => {
+                const matched = autocompleteRestaurants.find(
+                  (r) => (r.id || r.name) === item.id
+                );
+                if (matched) {
+                  handleRestaurantSelection(matched);
+                  setSelectedRestaurantId(item.id);
+                }
+              }}
+              isLoading={isLoadingSuggestions}
+              loadingText="Finding nearby restaurants..."
+              writeInPlaceholder="Type restaurant name..."
+              writeInTitle="Enter restaurant name"
+              emptyStateText="No nearby restaurants found"
+            />
+
+            {/* ── Dish Name Carousel with inline Write-In ── */}
+            <Text style={[styles.infoLabel, { marginTop: 16 }]}>Meal:</Text>
+            <Carousel3D
+              key={`dish_${route.params._uniqueKey}`}
+              items={[
+                ...(primaryDishName ? [{ id: 'primary', label: primaryDishName }] : []),
+                ...dishAlternatives
+                  .filter((name) => name !== primaryDishName) // don't duplicate primary
+                  .map((name, i) => ({
+                    id: `alt_${i}`,
+                    label: name,
+                  })),
+              ]}
+              initialSelectedId="primary"
+              onSelect={(item) => {
+                setMealName(item.label);
+                setIsUserEditingMeal(false);
+              }}
+              onWriteInSubmit={(text) => {
+                setMealName(text);
+                setIsUserEditingMeal(true);
+              }}
+              isLoading={isIdentifyingDish}
+              loadingText="Identifying dish..."
+              writeInPlaceholder="Enter meal name..."
+              writeInTitle="Enter meal name"
+              emptyStateText="Tap to enter your meal"
+            />
           </View>
           
           {/* Save Button */}
           <TouchableOpacity
             style={[
               styles.saveButton,
-              { backgroundColor: mealName.trim() ? '#5B8A72' : '#cccccc' }
+              { backgroundColor: mealName.trim() && restaurant.trim() ? '#5B8A72' : '#cccccc' }
             ]}
             onPress={saveRating}
-            disabled={!mealName.trim() || isProcessing}
+            disabled={!mealName.trim() || !restaurant.trim() || isProcessing}
           >
             {isProcessing ? (
               <ActivityIndicator size="small" color="white" />
@@ -1909,85 +1827,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         </View>
       </KeyboardAwareScrollView>
       
-      {/* Restaurant Selection Modal */}
-      <Modal
-        visible={showRestaurantModal}
-        transparent={true}
-        animationType="none"
-        onRequestClose={() => setShowRestaurantModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nearby Restaurants</Text>
-            {suggestedRestaurants.length > 0 ? (
-              <FlatList
-                data={suggestedRestaurants}
-                keyExtractor={(item) => item.id || item.name || Math.random().toString()}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.restaurantItem}
-                    onPress={() => {
-                      handleRestaurantSelection(item);
-                      setShowRestaurantModal(false);
-                    }}
-                  >
-                    <Text style={styles.restaurantName}>{item.name || 'Unnamed Restaurant'}</Text>
-                    <Text style={styles.restaurantAddress}>{item.vicinity || 'No address available'}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            ) : (
-              <Text style={styles.noResultsText}>No restaurants found nearby. Try entering a restaurant name manually.</Text>
-            )}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowRestaurantModal(false)}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      
-      {/* Menu Items Modal */}
-      <Modal
-        visible={showMenuModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowMenuModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Menu Items</Text>
-            {menuItems.length > 0 ? (
-              <FlatList
-                data={menuItems}
-                keyExtractor={(item, index) => `menu-${index}`}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => {
-                      setMealName(item);
-                      setIsUserEditingMeal(false);
-                      setShowMenuModal(false);
-                    }}
-                  >
-                    <Text style={styles.menuItemText}>{item}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            ) : (
-              <Text style={styles.noResultsText}>No menu items available</Text>
-            )}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowMenuModal(false)}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Old restaurant/menu modals removed — replaced by Carousel3D */}
       
       {/* Photo Source Modal - COMMENTED OUT FOR TESTING */}
       {/*
@@ -2106,6 +1946,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.lightTan,
+  },
+  backToCarouselLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  backToCarouselText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: '#5B8A72',
+    marginLeft: 4,
   },
   scrollContainer: {
     flexGrow: 1,

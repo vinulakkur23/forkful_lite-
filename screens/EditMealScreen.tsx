@@ -109,6 +109,11 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Ref for scroll view
   const scrollViewRef = useRef<any>(null);
   const textInputRef = useRef<any>(null);
+
+  // Track whether the user has made any local edits (rating, thoughts, quick ratings).
+  // Once true, the Firestore listener will only update non-user-editable fields
+  // (like dish_insights, pixel_art, etc.) and never overwrite the user's changes.
+  const hasLocalEdits = useRef(false);
   
   // Function to fetch fresh meal data from Firestore (used for initial load)
   const fetchFreshMealData = async () => {
@@ -260,17 +265,30 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             if (documentSnapshot.exists) {
               const freshMealData = { id: documentSnapshot.id, ...documentSnapshot.data() };
               
-              // Skip processing if quick ratings expansion is active OR if we're in below-rating mode
-              if (showQuickRatingsExpansion || (rating > 0 && getRatingStatements())) {
-                console.log('EditMealScreen - Skipping listener update while rating interface is active');
+              // If user has made local edits, only update background-generated fields
+              // (insights, pixel art, criteria, etc.) — never overwrite rating/thoughts.
+              if (hasLocalEdits.current) {
+                console.log('EditMealScreen - User has local edits, updating only background fields');
+                // Update the meal object for background fields only
+                setMeal((prev: any) => ({
+                  ...prev,
+                  dish_insights: freshMealData.dish_insights || prev.dish_insights,
+                  dish_rating_criteria: freshMealData.dish_rating_criteria || prev.dish_rating_criteria,
+                  pixel_art_url: freshMealData.pixel_art_url || prev.pixel_art_url,
+                  enhanced_facts: freshMealData.enhanced_facts || prev.enhanced_facts,
+                  rating_statements_result: freshMealData.rating_statements_result || prev.rating_statements_result,
+                }));
+                if (freshMealData.pixel_art_url && !pixelArtUrl) {
+                  setPixelArtUrl(freshMealData.pixel_art_url);
+                }
                 return;
               }
-              
+
               // Log when enhanced_facts becomes available
               if (freshMealData.enhanced_facts && !meal.enhanced_facts) {
                 console.log('EditMealScreen - Enhanced facts now available! Updating UI...');
               }
-              
+
               // Process the fresh data (this will update the UI with new facts)
               processFreshMealData(freshMealData, true);
             }
@@ -435,8 +453,9 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [rating, thoughts, meal]);
 
   const handleRating = (selectedRating: number): void => {
+    hasLocalEdits.current = true;
     Keyboard.dismiss();
-    
+
     const currentTime = Date.now();
     const timeDiff = currentTime - lastClickTime;
     
@@ -487,6 +506,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleQuickRating = async (rating: number): Promise<void> => {
+    hasLocalEdits.current = true;
     // Get statements from any available data structure
     const statements = getRatingStatements();
     if (!statements) return;
@@ -1354,7 +1374,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               multiline={true}
               blurOnSubmit={false}
               value={thoughts}
-              onChangeText={setThoughts}
+              onChangeText={(text: string) => { hasLocalEdits.current = true; setThoughts(text); }}
               maxLength={600}
             />
             <Text style={styles.helperText}>

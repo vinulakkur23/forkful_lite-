@@ -878,10 +878,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     if (cityData?.imageUrl) {
                         citiesWithData.push({ name: capitalizedCityName, imageUrl: cityData.imageUrl, mealCount });
                     } else {
-                        citiesWithData.push({ name: capitalizedCityName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+                        citiesWithData.push({ name: capitalizedCityName, imageUrl: '', mealCount });
                     }
                 } else {
-                    citiesWithData.push({ name: capitalizedCityName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+                    citiesWithData.push({ name: capitalizedCityName, imageUrl: '', mealCount });
                 }
             }
             citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
@@ -894,7 +894,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
                 ).join(' ');
                 const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
-                cuisinesWithData.push({ name: capitalizedCuisineName, imageUrl: 'https://via.placeholder.com/350', mealCount });
+                cuisinesWithData.push({ name: capitalizedCuisineName, imageUrl: '', mealCount });
             }
             cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
 

@@ -101,6 +101,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         (global as any).prefetchedSuggestions = null;
         delete (global as any).prefetchedSuggestions;
       }
+      delete (global as any).prefetchedDishIdentification;
+      delete (global as any).prefetchedDishPhotoUri;
 
       // Get location again
       getLocation();
@@ -480,7 +482,11 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             (global as any).quickCriteriaMealData = null;
             delete (global as any).quickCriteriaMealData;
           }
-          if ((global as any).quickCriteriaStartTime) {
+          delete (global as any).prefetchedDishIdentification;
+          delete (global as any).prefetchedDishPhotoUri;
+          delete (global as any).prefetchedDishIdentification;
+      delete (global as any).prefetchedDishPhotoUri;
+      if ((global as any).quickCriteriaStartTime) {
             (global as any).quickCriteriaStartTime = null;
             delete (global as any).quickCriteriaStartTime;
           }
@@ -682,8 +688,8 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
       // This prevents "view not in window hierarchy" errors
       console.log("Waiting for picker dismissal before navigation...");
       setTimeout(() => {
-        // Navigate directly to RatingScreen2 with the selected photo and location data
-        navigation.navigate('RatingScreen2', {
+        // Navigate to CropScreen first for photo editing, then on to RatingScreen2
+        navigation.navigate('Crop', {
           photo: {
             uri: photoAsset.uri,
             width: photoAsset.width,
@@ -692,13 +698,10 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             fromGallery: true,
             assetId: photoAsset.assetId,
           },
-          location: photoAsset.location || location, // Use photo location or fallback to device location
+          location: photoAsset.location || location,
           exifData: photoAsset.exifData,
-          photoSource: 'gallery',
-          _uniqueKey: navigationKey,
-          rating: 0,
-          likedComment: '',
-          dislikedComment: ''
+          _navigationKey: navigationKey,
+          fromGalleryFlow: true,
         });
       }, 600); // 600ms delay to ensure picker animation completes
       
@@ -773,6 +776,33 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             });
         }, 0);
       }
+
+      // Prefetch dish identification in parallel with restaurant suggestions
+      // Resize first to avoid sending a 4000+ px image to the API
+      if (photoAsset.uri) {
+        setTimeout(async () => {
+          try {
+            console.log("CAMERA: Resizing gallery photo before dish identification prefetch");
+            const resized = await ImageResizer.createResizedImage(
+              photoAsset.uri,
+              1400, 1400, 'JPEG', 85, 0, undefined, false,
+              { mode: 'contain', onlyScaleDown: true }
+            );
+            console.log("CAMERA: Photo resized for identification:", resized.width, 'x', resized.height);
+
+            await ensureServerAwake();
+            const result = await identifyDishFromPhoto(resized.uri);
+            if (result?.dish_name) {
+              console.log("CAMERA: Dish identification prefetched:", result.dish_name);
+              (global as any).prefetchedDishIdentification = result;
+              // Store original URI so RatingScreen2 can match it
+              (global as any).prefetchedDishPhotoUri = photoAsset.uri;
+            }
+          } catch (err) {
+            console.log("CAMERA: Dish identification prefetch failed:", err);
+          }
+        }, 100);
+      }
     } catch (error) {
       console.error("Error selecting photo from gallery:", error);
       Alert.alert(
@@ -782,11 +812,24 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  // Upload button component — reused across all render states since gallery
+  // access doesn't depend on the camera being ready
+  const uploadButton = (
+    <TouchableOpacity style={styles.uploadButtonLarge} onPress={selectFromGallery}>
+      <Image
+        source={require('../assets/icons/upload-inactive.png')}
+        style={styles.uploadIconLarge}
+      />
+      <Text style={styles.uploadButtonTextLarge}>Upload</Text>
+    </TouchableOpacity>
+  );
+
   // In your render function
   if (isLoading) {
     return (
       <View style={styles.container}>
         <Text style={{ color: 'white', textAlign: 'center', padding: 20 }}>Initializing camera...</Text>
+        {uploadButton}
       </View>
     );
   }
@@ -795,6 +838,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     return (
       <View style={styles.permissionContainer}>
         {/* Clean blank screen - permission handled by iOS system alert */}
+        {uploadButton}
       </View>
     );
   }
@@ -806,39 +850,14 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity style={styles.closeButton} onPress={goBack}>
           <Icon name="close" size={24} color="white" />
         </TouchableOpacity>
-        
+
         <Text style={{ color: 'white', textAlign: 'center', padding: 20 }}>
           Camera device not available.
         </Text>
         <Text style={{ color: 'white', textAlign: 'center', padding: 10, fontSize: 12 }}>
           Devices detected: {Object.keys(devices).length}
         </Text>
-        <TouchableOpacity
-          style={styles.fallbackButton}
-          onPress={() => {
-            // Navigate with a mock image - but provide an explicit and valid URI
-            const mockImageUri = Platform.OS === 'ios'
-              ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000'
-              : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000';
-            
-            // Navigate through the proper flow: RatingScreen2 -> Crop -> Results
-            navigation.navigate('RatingScreen2', {
-              photo: {
-                uri: mockImageUri,
-                width: 800,
-                height: 600
-              },
-              location: location,
-              photoSource: 'sample',
-              _uniqueKey: `sample_${Date.now()}`,
-              rating: 0,
-              likedComment: '',
-              dislikedComment: ''
-            });
-          }}
-        >
-          <Text style={styles.fallbackButtonText}>Use Sample Image</Text>
-        </TouchableOpacity>
+        {uploadButton}
       </View>
     );
   }

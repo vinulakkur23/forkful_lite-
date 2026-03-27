@@ -355,7 +355,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
           // Use placeholder if no image exists
           citiesWithData.push({
             name: capitalizedCityName,
-            imageUrl: 'https://via.placeholder.com/350',
+            imageUrl: '',
             mealCount: mealCount
           });
         }
@@ -430,7 +430,7 @@ const StampsScreen: React.FC<Props> = ({ userId, navigation, onFilterChange, onT
         // For now, use a placeholder image. Later we can add cuisine images collection
         cuisinesWithData.push({
           name: capitalizedCuisineName,
-          imageUrl: 'https://via.placeholder.com/350',
+          imageUrl: '',
           mealCount: mealCount
         });
       }

@@ -59,6 +59,7 @@ declare module '../App' {
       isAddingToExistingMeal?: boolean;
       existingMealId?: string;
       returnToEditMeal?: boolean;
+      fromGalleryFlow?: boolean;
     };
   }
 }
@@ -92,6 +93,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   // Use refs to track component mounted state
   const isMounted = useRef(true);
   const cropperOpened = useRef(false);
+  const hasCompletedCrop = useRef(false); // Prevents re-opening cropper after it's been used
   const suggestionsFetched = useRef(false);
   
   // Ref for capturing the filtered image
@@ -251,14 +253,30 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         height: croppedImage.height,
       };
 
-      // CLEAN APPROACH: Navigate to Results with cropped image and meal ID
-      console.log('Navigating to Results with cropped image and meal ID:', mealId);
-
       const safeLocation = locationToUse ? {
         latitude: Number(locationToUse.latitude),
         longitude: Number(locationToUse.longitude),
         source: String(locationToUse.source || 'unknown')
       } : null;
+
+      // Gallery flow: navigate to RatingScreen2 for meal details entry
+      if (route.params.fromGalleryFlow) {
+        console.log('Gallery flow: navigating to RatingScreen2 with edited photo');
+        navigation.navigate('RatingScreen2', {
+          photo: photoData,
+          location: safeLocation,
+          exifData: route.params.exifData,
+          photoSource: 'gallery',
+          _uniqueKey: `gallery_${timestamp}`,
+          rating: 0,
+          likedComment: '',
+          dislikedComment: '',
+        });
+        return;
+      }
+
+      // CLEAN APPROACH: Navigate to Results with cropped image and meal ID
+      console.log('Navigating to Results with cropped image and meal ID:', mealId);
 
       try {
         const resultParams = {
@@ -330,21 +348,24 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       
       // Reset state when screen comes into focus
       isMounted.current = true;
-      cropperOpened.current = false;
-      setProcessing(false);
-      
-      // Start prefetching suggestions again for new photos
+
+      // Only reset cropper state for NEW photos — not on every focus.
+      // This prevents the cropper from re-opening when navigating back
+      // from RatingScreen2 (which refocuses this tab route).
       if (isNewPhoto) {
+        cropperOpened.current = false;
+        hasCompletedCrop.current = false;
+        setProcessing(false);
         console.log('Starting suggestion prefetch for new photo');
         prefetchSuggestions();
       }
-      
+
       // Delay opening the cropper to ensure:
       // 1. Component is fully rendered
       // 2. Previous picker is fully dismissed
       // 3. Memory is cleaned up
       setTimeout(() => {
-        if (isMounted.current && !cropperOpened.current) {
+        if (isMounted.current && !cropperOpened.current && !hasCompletedCrop.current) {
           // Clean up memory before opening cropper
           ImageCropPicker.clean()
             .then(() => {
@@ -760,22 +781,62 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       }
       
       // Clean up URI by removing query parameters if any
-      const cleanUri = photo.uri.split('?')[0];
-      console.log('Opening cropper with URI:', cleanUri);
-      
-      // Add a small delay to ensure UI is ready (helps with memory pressure)
+      let cleanUri = photo.uri.split('?')[0];
+      console.log('Opening cropper with original URI:', cleanUri);
+
+      // Gallery photos from the native PHPicker are saved to NSTemporaryDirectory
+      // which can get cleaned up. Copy to a persistent location and ensure file:// prefix.
+      if (photo.fromGallery) {
+        try {
+          // Strip file:// if present to get the raw path for RNFS
+          const rawPath = cleanUri.replace('file://', '');
+          const exists = await RNFS.exists(rawPath);
+          console.log('Gallery photo exists at path:', exists, rawPath);
+
+          if (exists) {
+            const persistDir = `${RNFS.DocumentDirectoryPath}/CropInput`;
+            await RNFS.mkdir(persistDir).catch(() => {});
+            const localPath = `${persistDir}/crop_input_${Date.now()}.jpg`;
+            await RNFS.copyFile(rawPath, localPath);
+            cleanUri = `file://${localPath}`;
+            console.log('Gallery photo copied for cropper:', cleanUri);
+          } else {
+            // File doesn't exist — the temp file was cleaned up
+            console.error('Gallery photo temp file was cleaned up:', rawPath);
+            Alert.alert('Photo Error', 'The selected photo is no longer available. Please try again.');
+            navigation.goBack();
+            return;
+          }
+        } catch (copyErr) {
+          console.warn('Could not copy gallery photo:', copyErr);
+          // Ensure file:// prefix at minimum
+          if (!cleanUri.startsWith('file://')) {
+            cleanUri = `file://${cleanUri}`;
+          }
+        }
+      } else {
+        // Camera photos — ensure file:// prefix
+        if (!cleanUri.startsWith('file://')) {
+          cleanUri = `file://${cleanUri}`;
+        }
+      }
+
+      console.log('Final URI for cropper:', cleanUri);
+
+      // Add a small delay to ensure UI is ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Set square crop dimensions - use the minimum dimension to ensure a proper square
-      const cropSize = Math.min(photo.width || 1000, photo.height || 1000);
-      
-      console.log(`Opening cropper with size: ${cropSize}x${cropSize}`);
+      // The native cropper handles large source images fine (uses native decoders,
+      // not the JS thread). We just cap the OUTPUT size to 1400px.
+      // compressImage() after crop brings it to 1400px too, so this is consistent.
+      const cropSize = 1400;
+      console.log(`Opening cropper with output size: ${cropSize}x${cropSize}`);
 
       // Open image cropper with square aspect ratio
       const result = await ImageCropPicker.openCropper({
         path: cleanUri,
-        width: cropSize || 1000, // Use image's size if available
-        height: cropSize || 1000,
+        width: cropSize,
+        height: cropSize,
         cropperCircleOverlay: false,
         cropping: true,
         cropperToolbarTitle: 'Crop Photo',
@@ -796,7 +857,10 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         const compressedImageUri = await compressImage(result.path);
         
         console.log('Crop successful, showing editing interface:', compressedImageUri);
-        
+
+        // Mark crop as completed so useFocusEffect won't re-open it
+        hasCompletedCrop.current = true;
+
         // Store the cropped image for editing
         setCroppedImage({
           uri: compressedImageUri,
