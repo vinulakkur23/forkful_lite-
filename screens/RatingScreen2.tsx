@@ -1154,31 +1154,25 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession(`Basic meal saved: ${mealId}`);
       }
 
-      // Check if this meal completes any active challenges (in background)
-      const checkChallengeCompletion = async () => {
-        try {
-          console.log('🎯 RatingScreen2: Checking if meal completes any challenges...');
-          const { checkIfMealCompletesAnyChallenge } = await import('../services/userChallengesService');
-          
-          // Only use the meal name for matching (no cuisine since metadata isn't ready yet)
-          const completedChallenge = await checkIfMealCompletesAnyChallenge(
-            mealId,
-            mealName,
-            undefined // Don't pass cuisine since it's not available yet
-          );
-          
-          if (completedChallenge) {
-            console.log('🎉 RatingScreen2: Challenge completed!', completedChallenge.recommended_dish_name);
-            // The notification will show automatically from the service
-          }
-        } catch (error) {
-          console.error('RatingScreen2: Error checking challenge completion:', error);
-        }
-      };
-      
-      // Start challenge completion check in background (don't await)
-      checkChallengeCompletion();
-      
+      // Challenge completion check disabled for now
+      // const checkChallengeCompletion = async () => {
+      //   try {
+      //     console.log('🎯 RatingScreen2: Checking if meal completes any challenges...');
+      //     const { checkIfMealCompletesAnyChallenge } = await import('../services/userChallengesService');
+      //     const completedChallenge = await checkIfMealCompletesAnyChallenge(
+      //       mealId,
+      //       mealName,
+      //       undefined
+      //     );
+      //     if (completedChallenge) {
+      //       console.log('🎉 RatingScreen2: Challenge completed!', completedChallenge.recommended_dish_name);
+      //     }
+      //   } catch (error) {
+      //     console.error('RatingScreen2: Error checking challenge completion:', error);
+      //   }
+      // };
+      // checkChallengeCompletion();
+
       // Upload image to Firebase Storage (skip for unrated meals - already uploaded)
       let imageUrl = null;
       if (!isUnratedMeal && freshPhoto?.uri) {
