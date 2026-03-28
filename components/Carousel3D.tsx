@@ -7,6 +7,7 @@ import {
   Animated,
   FlatList,
   TouchableOpacity,
+  Pressable,
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -16,7 +17,21 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+
+// Light haptic tap on selection — one step above picker-wheel feel.
+// Uses UIImpactFeedbackGenerator (light) on iOS.
+const triggerSelectionHaptic = () => {
+  try {
+    ReactNativeHapticFeedback.trigger('impactLight', {
+      enableVibrateFallback: false,
+      ignoreAndroidSystemSettings: false,
+    });
+  } catch {
+    // Silently fail — haptics are nice-to-have
+  }
+};
 import { colors, typography, spacing } from '../themes';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -268,6 +283,28 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     }, 100);
   };
 
+  // Track which item is centered during scroll — used for live haptic feedback
+  const lastCenteredIndex = useRef(-1);
+
+  // Live scroll handler: detects when the centered item changes mid-scroll
+  // and triggers haptic + visual selection immediately (not after momentum ends).
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = e.nativeEvent.contentOffset.x;
+      const index = Math.round(offsetX / TOTAL_ITEM_WIDTH);
+      const clamped = Math.max(0, Math.min(index, allItems.length - 1));
+
+      if (clamped !== lastCenteredIndex.current) {
+        lastCenteredIndex.current = clamped;
+        const centeredItem = allItems[clamped];
+        setCenteredId(centeredItem.id);
+        triggerSelectionHaptic();
+      }
+    },
+    [allItems]
+  );
+
+  // Final selection when scrolling stops — notify parent of the selected item
   const handleMomentumEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const offsetX = e.nativeEvent.contentOffset.x;
@@ -303,9 +340,8 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     const hasValue = writeInValue.length > 0;
     return (
       <View style={styles.emptyContainer}>
-        <TouchableOpacity
+        <Pressable
           style={[styles.card, styles.emptyWriteInCard, hasValue && styles.cardSelected]}
-          activeOpacity={1}
           onPress={() => setShowWriteInModal(true)}
         >
           <View style={styles.cardContent}>
@@ -316,7 +352,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
               {writeInValue || 'Write In'}
             </Text>
           </View>
-        </TouchableOpacity>
+        </Pressable>
         {emptyStateText && !hasValue && (
           <Text style={styles.emptyStateText}>{emptyStateText}</Text>
         )}
@@ -364,8 +400,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     if (isWriteIn) {
       const hasValue = writeInValue.length > 0;
       return (
-        <TouchableOpacity
-          activeOpacity={1}
+        <Pressable
           onPress={() => setShowWriteInModal(true)}
         >
           <Animated.View
@@ -385,20 +420,20 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
               </Text>
             </View>
           </Animated.View>
-        </TouchableOpacity>
+        </Pressable>
       );
     }
 
     // ── Regular card ──
     return (
-      <TouchableOpacity
-        activeOpacity={1}
+      <Pressable
         onPress={() => {
           flatListRef.current?.scrollToOffset({
             offset: index * TOTAL_ITEM_WIDTH,
             animated: true,
           });
           setCenteredId(item.id);
+          triggerSelectionHaptic();
           onSelect(item);
         }}
       >
@@ -424,7 +459,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
             )}
           </View>
         </Animated.View>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -443,7 +478,10 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
         contentContainerStyle={{ paddingHorizontal: SIDE_PADDING }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: true }
+          {
+            useNativeDriver: true,
+            listener: handleScroll, // Live selection + haptic as items pass center
+          }
         )}
         onMomentumScrollEnd={handleMomentumEnd}
         renderItem={renderItem}
@@ -494,10 +532,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   cardSelected: {
-    borderColor: '#5B8A72',
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
+    borderColor: 'transparent',
   },
   cardContent: {
     alignItems: 'center',
