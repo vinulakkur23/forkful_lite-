@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking, KeyboardAvoidingView, Platform, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Share, SafeAreaView, Linking, KeyboardAvoidingView, Platform, Modal, TextInput, Animated } from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -70,6 +71,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [cheersLoading, setCheersLoading] = useState(false);
   const [showPixelArtPicker, setShowPixelArtPicker] = useState(false);
   const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState(0);
+  const [pressingIndex, setPressingIndex] = useState<number | null>(null);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hapticIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jiggleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const jiggleAnim = useRef(new Animated.Value(0)).current;
   const hasAutoShownPicker = useRef(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
@@ -1383,60 +1391,137 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       <Modal
         visible={showPixelArtPicker}
         transparent={true}
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setShowPixelArtPicker(false)}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 350, alignItems: 'center' }}>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}
+          activeOpacity={1}
+          onPress={() => setShowPixelArtPicker(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 350, alignItems: 'center' }}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 }}>
               {meal?.meal || 'Your Meal'}
             </Text>
-            <Text style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
-              Pick your pixel art
+            <Text style={{ fontSize: 13, color: '#999', marginBottom: 14, textAlign: 'center' }}>
+              Hold to select
             </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
-              {(meal?.pixel_art_options || []).map((url: string, index: number) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => setSelectedPixelArtIndex(index)}
-                  style={{
-                    borderWidth: 3,
-                    borderColor: selectedPixelArtIndex === index ? '#5B8A72' : 'transparent',
-                    borderRadius: 12,
-                    padding: 4,
-                  }}
-                >
-                  <Image
-                    source={{ uri: url }}
-                    style={{ width: 80, height: 80 }}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              ))}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
+              {(meal?.pixel_art_options || []).map((url: string, index: number) => {
+                const isSelected = selectedPixelArtIndex === index;
+                const isPressing = pressingIndex === index;
+                const isFaded = !isPressing && pressingIndex !== null && pressingIndex !== index;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    activeOpacity={1}
+                    onPressIn={() => {
+                      setPressingIndex(index);
+
+                      Animated.timing(scaleAnim, {
+                        toValue: 1.3,
+                        duration: 2000,
+                        useNativeDriver: true,
+                      }).start();
+
+                      const jiggle = Animated.loop(
+                        Animated.sequence([
+                          Animated.timing(jiggleAnim, { toValue: 3, duration: 60, useNativeDriver: true }),
+                          Animated.timing(jiggleAnim, { toValue: -3, duration: 60, useNativeDriver: true }),
+                          Animated.timing(jiggleAnim, { toValue: 2, duration: 50, useNativeDriver: true }),
+                          Animated.timing(jiggleAnim, { toValue: -2, duration: 50, useNativeDriver: true }),
+                        ])
+                      );
+                      jiggleAnimRef.current = jiggle;
+                      jiggle.start();
+
+                      hapticIntervalRef.current = setInterval(() => {
+                        ReactNativeHapticFeedback.trigger('selection', {
+                          enableVibrateFallback: false,
+                          ignoreAndroidSystemSettings: false,
+                        });
+                      }, 100);
+
+                      pressTimerRef.current = setTimeout(async () => {
+                        if (jiggleAnimRef.current) jiggleAnimRef.current.stop();
+                        if (hapticIntervalRef.current) clearInterval(hapticIntervalRef.current);
+                        jiggleAnim.setValue(0);
+
+                        ReactNativeHapticFeedback.trigger('impactHeavy', {
+                          enableVibrateFallback: false,
+                          ignoreAndroidSystemSettings: false,
+                        });
+
+                        setSelectedPixelArtIndex(index);
+                        setPressingIndex(null);
+
+                        // Pop animation — scale up to 1.5x then settle to 1.15x
+                        Animated.sequence([
+                          Animated.timing(scaleAnim, { toValue: 1.5, duration: 120, useNativeDriver: true }),
+                          Animated.timing(scaleAnim, { toValue: 1.15, duration: 200, useNativeDriver: true }),
+                        ]).start();
+
+                        const selectedUrl = meal?.pixel_art_options?.[index];
+                        if (selectedUrl && mealId) {
+                          try {
+                            await firestore().collection('mealEntries').doc(mealId).update({
+                              pixel_art_url: selectedUrl,
+                              pixel_art_user_selected: true,
+                            });
+                            setMeal((prev: any) => ({ ...prev, pixel_art_url: selectedUrl, pixel_art_user_selected: true }));
+                            console.log('✅ Pixel art selection updated:', index + 1);
+                          } catch (e) {
+                            console.error('❌ Error updating pixel art:', e);
+                          }
+                        }
+
+                        scaleAnim.setValue(1);
+                        setShowPixelArtPicker(false);
+                      }, 2000);
+                    }}
+                    onPressOut={() => {
+                      if (pressTimerRef.current) {
+                        clearTimeout(pressTimerRef.current);
+                        pressTimerRef.current = null;
+                      }
+                      if (hapticIntervalRef.current) {
+                        clearInterval(hapticIntervalRef.current);
+                        hapticIntervalRef.current = null;
+                      }
+                      if (jiggleAnimRef.current) {
+                        jiggleAnimRef.current.stop();
+                        jiggleAnimRef.current = null;
+                      }
+                      jiggleAnim.setValue(0);
+                      scaleAnim.setValue(1);
+                      setPressingIndex(null);
+                    }}
+                    style={{
+                      borderRadius: 12,
+                      padding: 3,
+                    }}
+                  >
+                    <Animated.View style={{
+                      transform: [
+                        { scale: isPressing ? scaleAnim : (isSelected && pressingIndex === null ? 1.15 : 1) },
+                        { translateX: isPressing ? jiggleAnim : 0 },
+                      ],
+                    }}>
+                      <Image
+                        source={{ uri: url }}
+                        style={[
+                          { width: 55, height: 55 },
+                          isFaded && { opacity: 0.35 },
+                        ]}
+                        resizeMode="contain"
+                      />
+                    </Animated.View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <TouchableOpacity
-              style={{ backgroundColor: '#5B8A72', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 40, marginTop: 16 }}
-              onPress={async () => {
-                const selectedUrl = meal?.pixel_art_options?.[selectedPixelArtIndex];
-                if (selectedUrl && mealId) {
-                  try {
-                    await firestore().collection('mealEntries').doc(mealId).update({
-                      pixel_art_url: selectedUrl,
-                      pixel_art_user_selected: true,
-                    });
-                    setMeal((prev: any) => ({ ...prev, pixel_art_url: selectedUrl, pixel_art_user_selected: true }));
-                    console.log('✅ Pixel art selection updated:', selectedPixelArtIndex + 1);
-                  } catch (e) {
-                    console.error('❌ Error updating pixel art:', e);
-                  }
-                }
-                setShowPixelArtPicker(false);
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Choose</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );

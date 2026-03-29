@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard, Modal
+  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard, Modal, Animated
 } from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -98,6 +99,13 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [pixelArtData, setPixelArtData] = useState<string | null>(null);
   const [pixelArtOptions, setPixelArtOptions] = useState<string[]>([]);
   const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState<number>(0);
+  const [pressingIndex, setPressingIndex] = useState<number | null>(null);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hapticIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jiggleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const jiggleAnim = useRef(new Animated.Value(0)).current;
   
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -1160,6 +1168,98 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
+  // Long-press pixel art selection handlers
+  const handlePixelArtPressIn = (index: number) => {
+    setPressingIndex(index);
+
+    // Scale up to 1.3x
+    Animated.timing(scaleAnim, {
+      toValue: 1.3,
+      duration: 2000,
+      useNativeDriver: true,
+    }).start();
+
+    // Continuous jiggle while holding
+    const jiggle = Animated.loop(
+      Animated.sequence([
+        Animated.timing(jiggleAnim, { toValue: 3, duration: 60, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: -3, duration: 60, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: 2, duration: 50, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: -2, duration: 50, useNativeDriver: true }),
+      ])
+    );
+    jiggleAnimRef.current = jiggle;
+    jiggle.start();
+
+    // Continuous light haptic ticks while holding
+    hapticIntervalRef.current = setInterval(() => {
+      ReactNativeHapticFeedback.trigger('selection', {
+        enableVibrateFallback: false,
+        ignoreAndroidSystemSettings: false,
+      });
+    }, 100);
+
+    // After 2 seconds — selection complete
+    pressTimerRef.current = setTimeout(async () => {
+      // Stop jiggle and haptic
+      if (jiggleAnimRef.current) jiggleAnimRef.current.stop();
+      if (hapticIntervalRef.current) clearInterval(hapticIntervalRef.current);
+      jiggleAnim.setValue(0);
+
+      // Final confirmation haptic
+      ReactNativeHapticFeedback.trigger('impactHeavy', {
+        enableVibrateFallback: false,
+        ignoreAndroidSystemSettings: false,
+      });
+
+      setSelectedPixelArtIndex(index);
+      setPressingIndex(null);
+
+      // Pop animation — scale up to 1.5x then settle back to 1.15x
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.5, duration: 120, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.15, duration: 200, useNativeDriver: true }),
+      ]).start();
+
+      // Save selection
+      const selectedUrl = pixelArtOptions[index];
+      if (selectedUrl) {
+        try {
+          await firestore().collection('mealEntries').doc(route.params.mealId).update({
+            pixel_art_url: selectedUrl,
+            pixel_art_user_selected: true,
+          });
+          console.log('✅ Selected pixel art saved:', index + 1);
+        } catch (e) {
+          console.error('❌ Error saving pixel art selection:', e);
+        }
+      }
+
+      // Dismiss shortly after pop completes
+      scaleAnim.setValue(1);
+      setShowEmojiAwardModal(false);
+      navigation.navigate('FoodPassport', { tabIndex: 0 });
+    }, 2000);
+  };
+
+  const handlePixelArtPressOut = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    if (hapticIntervalRef.current) {
+      clearInterval(hapticIntervalRef.current);
+      hapticIntervalRef.current = null;
+    }
+    if (jiggleAnimRef.current) {
+      jiggleAnimRef.current.stop();
+      jiggleAnimRef.current = null;
+    }
+    jiggleAnim.setValue(0);
+    scaleAnim.setValue(1);
+    setPressingIndex(null);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header with title */}
@@ -1392,15 +1492,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
             style={[
               styles.saveButton,
               (rating === 0 || photos.length === 0) && styles.disabledButton,
-              (pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData) && styles.disabledButton,
             ]}
-            disabled={rating === 0 || photos.length === 0 || (pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData)}
+            disabled={rating === 0 || photos.length === 0}
             onPress={saveMeal}
           >
             {(pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData && rating > 0 && photos.length > 0) ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.buttonText}>Generating artwork...</Text>
+                <Text style={styles.buttonText}>Save (generating artwork...)</Text>
               </View>
             ) : (
               <Text style={styles.buttonText}>Save Changes</Text>
@@ -1515,7 +1614,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       <Modal
         visible={showEmojiAwardModal}
         transparent={true}
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => {
           // Auto-select first option on dismiss
           const fallbackUrl = pixelArtOptions[0] || pixelArtUrl;
@@ -1528,47 +1627,69 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           navigation.navigate('FoodPassport', { tabIndex: 0 });
         }}
       >
-        <View style={styles.emojiModalContainer}>
-          <View style={styles.emojiModalContent}>
+        <TouchableOpacity
+          style={styles.emojiModalContainer}
+          activeOpacity={1}
+          onPress={() => {
+            setShowEmojiAwardModal(false);
+            navigation.navigate('FoodPassport', { tabIndex: 0 });
+          }}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.emojiModalContent} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.emojiModalTitle}>{meal.meal} Rated!</Text>
 
-            {/* 3 pixel art options to choose from */}
+            {/* 3 pixel art options — hold to select */}
             {pixelArtOptions.length > 0 ? (
               <>
-                <Text style={{ fontSize: 14, color: '#666', marginBottom: 12, textAlign: 'center' }}>
-                  Pick your pixel art
+                <Text style={{ fontSize: 13, color: '#999', marginBottom: 14, textAlign: 'center' }}>
+                  Hold to select
                 </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
-                  {pixelArtOptions.map((url, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setSelectedPixelArtIndex(index)}
-                      style={{
-                        borderWidth: 3,
-                        borderColor: selectedPixelArtIndex === index ? '#5B8A72' : 'transparent',
-                        borderRadius: 12,
-                        padding: 4,
-                      }}
-                    >
-                      <Image
-                        source={{ uri: url }}
-                        style={{ width: 80, height: 80 }}
-                        resizeMode="contain"
-                      />
-                    </TouchableOpacity>
-                  ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
+                  {pixelArtOptions.map((url, index) => {
+                    const isSelected = selectedPixelArtIndex === index;
+                    const isPressing = pressingIndex === index;
+                    const isFaded = !isPressing && !isSelected && pressingIndex !== null;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        activeOpacity={1}
+                        onPressIn={() => handlePixelArtPressIn(index)}
+                        onPressOut={handlePixelArtPressOut}
+                        style={{
+                          borderRadius: 12,
+                          padding: 3,
+                        }}
+                      >
+                        <Animated.View style={{
+                          transform: [
+                            { scale: isPressing ? scaleAnim : (isSelected && pressingIndex === null ? 1.15 : 1) },
+                            { translateX: isPressing ? jiggleAnim : 0 },
+                          ],
+                        }}>
+                          <Image
+                            source={{ uri: url }}
+                            style={[
+                              { width: 55, height: 55 },
+                              isFaded && { opacity: 0.35 },
+                            ]}
+                            resizeMode="contain"
+                          />
+                        </Animated.View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </>
             ) : (pixelArtUrl || pixelArtData) ? (
               <View style={styles.emojiDisplay}>
                 <Image
                   source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }}
-                  style={{ width: 100, height: 100 }}
+                  style={{ width: 60, height: 60 }}
                   resizeMode="contain"
                 />
               </View>
             ) : (
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 100, height: 100, alignSelf: 'center' }}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 80, height: 80, alignSelf: 'center' }}>
                 <ActivityIndicator size="large" color="#5B8A72" />
                 <Text style={{ fontSize: 12, color: '#666', marginTop: 8, textAlign: 'center' }}>
                   Generating artwork...
@@ -1576,32 +1697,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.emojiModalButton, { marginTop: 16 }]}
-              onPress={async () => {
-                // Save selected pixel art as the chosen one
-                const selectedUrl = pixelArtOptions[selectedPixelArtIndex] || pixelArtUrl;
-                if (selectedUrl) {
-                  try {
-                    await firestore().collection('mealEntries').doc(route.params.mealId).update({
-                      pixel_art_url: selectedUrl,
-                      pixel_art_user_selected: true,
-                    });
-                    console.log('✅ Selected pixel art saved:', selectedPixelArtIndex + 1);
-                  } catch (e) {
-                    console.error('❌ Error saving pixel art selection:', e);
-                  }
-                }
-                setShowEmojiAwardModal(false);
-                navigation.navigate('FoodPassport', { tabIndex: 0 });
-              }}
-            >
-              <Text style={styles.emojiModalButtonText}>
-                {pixelArtOptions.length > 0 ? 'Choose' : 'Continue'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Thank You Modal (Path 2: Gallery) */}
