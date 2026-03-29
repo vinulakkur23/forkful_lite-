@@ -345,23 +345,29 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             });
           }
 
-          // === Handle Pixel Art Result ===
+          // === Handle Pixel Art Result (3 options) ===
           if (pixelArtResult.status === 'fulfilled' && pixelArtResult.value?.image_data) {
             console.log('✅ [Background] Pixel art generated');
             const pixelArtData = pixelArtResult.value;
+            const options = pixelArtData.image_options || [pixelArtData.image_data];
 
             try {
-              const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
-              const pixelArtStoragePath = `pixel_art/${user.uid}/${pixelArtFileName}`;
-              const dataUri = `data:image/png;base64,${pixelArtData.image_data}`;
+              // Upload all options to Firebase Storage
+              const optionUrls: string[] = [];
+              for (let i = 0; i < options.length; i++) {
+                const fileName = `pixel_art_${mealId}_option${i + 1}_${Date.now()}.png`;
+                const storagePath = `pixel_art/${user.uid}/${fileName}`;
+                const dataUri = `data:image/png;base64,${options[i]}`;
 
-              console.log('📤 [Background] Uploading pixel art to Storage...');
-              const storageRef = storage().ref(pixelArtStoragePath);
-              await storageRef.putString(dataUri, 'data_url');
-              const downloadUrl = await storageRef.getDownloadURL();
-              console.log('✅ [Background] Pixel art uploaded');
+                console.log(`📤 [Background] Uploading pixel art option ${i + 1}...`);
+                const storageRef = storage().ref(storagePath);
+                await storageRef.putString(dataUri, 'data_url');
+                const downloadUrl = await storageRef.getDownloadURL();
+                optionUrls.push(downloadUrl);
+              }
+              console.log(`✅ [Background] Uploaded ${optionUrls.length} pixel art options`);
 
-              // Save locally for notification
+              // Save first option locally for notification
               let localPixelArtPath = null;
               try {
                 const sharedDir = RNFS.LibraryDirectoryPath;
@@ -373,7 +379,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
 
                 const localFileName = `pixel_art_${mealId}.png`;
                 localPixelArtPath = `${pixelArtDir}/${localFileName}`;
-                await RNFS.writeFile(localPixelArtPath, pixelArtData.image_data, 'base64');
+                await RNFS.writeFile(localPixelArtPath, options[0], 'base64');
                 console.log('✅ [Background] Pixel art saved locally');
 
                 const { updatePixelArtNotificationWithImage } = await import('../services/pixelArtNotificationHelper');
@@ -386,14 +392,15 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
               }
 
               await firestore().collection('mealEntries').doc(mealId).update({
-                pixel_art_url: downloadUrl,
+                pixel_art_options: optionUrls,
+                pixel_art_url: optionUrls[0], // Default to first option until user picks
                 pixel_art_local_path: localPixelArtPath,
                 pixel_art_prompt: pixelArtData.prompt_used,
                 pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
                 api_step_3_success: true,
                 api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
               });
-              console.log('✅ [Background] Pixel art saved to Firestore');
+              console.log('✅ [Background] Pixel art options saved to Firestore');
             } catch (uploadError: any) {
               console.error('❌ [Background] Error uploading pixel art:', uploadError);
               await firestore().collection('mealEntries').doc(mealId).update({

@@ -96,6 +96,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // State for pixel art data from Firestore
   const [pixelArtUrl, setPixelArtUrl] = useState<string | null>(null);
   const [pixelArtData, setPixelArtData] = useState<string | null>(null);
+  const [pixelArtOptions, setPixelArtOptions] = useState<string[]>([]);
+  const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState<number>(0);
   
   // Photo management state - will be populated when fresh data is loaded
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -280,6 +282,17 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 }));
                 if (freshMealData.pixel_art_url && !pixelArtUrl) {
                   setPixelArtUrl(freshMealData.pixel_art_url);
+                }
+                if (freshMealData.pixel_art_options?.length > 0 && pixelArtOptions.length === 0) {
+                  setPixelArtOptions(freshMealData.pixel_art_options);
+                  // Auto-select first option if no pixel_art_url is set yet
+                  if (!freshMealData.pixel_art_url) {
+                    firestore().collection('mealEntries').doc(mealId).update({
+                      pixel_art_url: freshMealData.pixel_art_options[0],
+                    });
+                    setPixelArtUrl(freshMealData.pixel_art_options[0]);
+                    console.log('✅ Auto-selected first pixel art option as default');
+                  }
                 }
                 return;
               }
@@ -1100,66 +1113,35 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Start handling the challenge asynchronously (don't await)
       handlePendingChallenge();
 
-      // Determine which modal to show based on photo source
-      const photoSource = meal.photoSource;
+      // Always show pixel art selection modal after save
+      console.log('Showing pixel art selection modal');
 
-      if (photoSource === 'camera') {
-        // Path 1: Camera capture → Show emoji award modal
-        console.log('Path 1: Showing emoji award modal');
+      setPixelArtUrl(null);
+      setPixelArtData(null);
+      setPixelArtOptions([]);
+      setSelectedPixelArtIndex(0);
 
-        // Reload pixel art from Firestore for THIS meal only (clear cached data first)
-        setPixelArtUrl(null);
-        setPixelArtData(null);
+      try {
+        const freshMealDoc = await firestore().collection('mealEntries').doc(route.params.mealId).get();
+        const freshMealData = freshMealDoc.data();
 
-        try {
-          const freshMealDoc = await firestore().collection('mealEntries').doc(route.params.mealId).get();
-          const freshMealData = freshMealDoc.data();
-
-          if (freshMealData?.pixel_art_url) {
-            console.log('✅ Pixel art URL found for this meal');
-            setPixelArtUrl(freshMealData.pixel_art_url);
-          } else if (freshMealData?.pixel_art_data) {
-            console.log('✅ Pixel art data found for this meal');
-            setPixelArtData(freshMealData.pixel_art_data);
-          } else {
-            console.log('⏳ Pixel art not ready yet for this meal');
-          }
-        } catch (error) {
-          console.error('❌ Error loading pixel art:', error);
-        }
-
-        setShowEmojiAwardModal(true);
-      } else if (photoSource === 'gallery') {
-        // Path 2: Gallery upload → Show thank you modal (no emoji)
-        console.log('Path 2: Showing thank you modal');
-        setShowThankYouModal(true);
-      } else {
-        // Default: Show restaurant history overlay or go to FoodPassport
-        if (meal.dish_insights?.dish_history || meal.enhanced_facts?.food_facts?.restaurant_history) {
-          setShowRestaurantHistory(true);
+        if (freshMealData?.pixel_art_options?.length > 0) {
+          console.log(`✅ ${freshMealData.pixel_art_options.length} pixel art options found`);
+          setPixelArtOptions(freshMealData.pixel_art_options);
+        } else if (freshMealData?.pixel_art_url) {
+          console.log('✅ Single pixel art URL found');
+          setPixelArtUrl(freshMealData.pixel_art_url);
+        } else if (freshMealData?.pixel_art_data) {
+          console.log('✅ Pixel art data found');
+          setPixelArtData(freshMealData.pixel_art_data);
         } else {
-          // No restaurant history, go straight to FoodPassport
-          const passportUserId = route.params?.passportUserId;
-          const passportUserName = route.params?.passportUserName;
-          const passportUserPhoto = route.params?.passportUserPhoto;
-          const previousTabIndex = route.params?.previousTabIndex;
-
-          if (passportUserId) {
-            // Navigate back to the specific user's passport
-            navigation.navigate('FoodPassport', {
-              userId: passportUserId,
-              userName: passportUserName,
-              userPhoto: passportUserPhoto,
-              tabIndex: previousTabIndex || 0
-            });
-          } else {
-            // Navigate back to own passport
-            navigation.navigate('FoodPassport', {
-              tabIndex: previousTabIndex || 0
-            });
-          }
+          console.log('⏳ Pixel art not ready yet for this meal');
         }
+      } catch (error) {
+        console.error('❌ Error loading pixel art:', error);
       }
+
+      setShowEmojiAwardModal(true);
     } catch (error) {
       console.error('Error updating meal:', error);
       Alert.alert("Error", "Failed to update meal. Please try again.");
@@ -1407,11 +1389,22 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.saveButton, (rating === 0 || photos.length === 0) && styles.disabledButton]}
-            disabled={rating === 0 || photos.length === 0}
+            style={[
+              styles.saveButton,
+              (rating === 0 || photos.length === 0) && styles.disabledButton,
+              (pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData) && styles.disabledButton,
+            ]}
+            disabled={rating === 0 || photos.length === 0 || (pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData)}
             onPress={saveMeal}
           >
-            <Text style={styles.buttonText}>Save Changes</Text>
+            {(pixelArtOptions.length === 0 && !pixelArtUrl && !pixelArtData && rating > 0 && photos.length > 0) ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.buttonText}>Generating artwork...</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Save Changes</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
@@ -1518,12 +1511,19 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       </Modal>
       */}
 
-      {/* Emoji Award Modal (Path 1: Camera) */}
+      {/* Pixel Art Selection Modal */}
       <Modal
         visible={showEmojiAwardModal}
         transparent={true}
         animationType="fade"
         onRequestClose={() => {
+          // Auto-select first option on dismiss
+          const fallbackUrl = pixelArtOptions[0] || pixelArtUrl;
+          if (fallbackUrl) {
+            firestore().collection('mealEntries').doc(route.params.mealId).update({
+              pixel_art_url: fallbackUrl,
+            });
+          }
           setShowEmojiAwardModal(false);
           navigation.navigate('FoodPassport', { tabIndex: 0 });
         }}
@@ -1531,34 +1531,74 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.emojiModalContainer}>
           <View style={styles.emojiModalContent}>
             <Text style={styles.emojiModalTitle}>{meal.meal} Rated!</Text>
-            <View style={styles.emojiDisplay}>
-              {/* Show pixel art icon if available for THIS meal, otherwise show generating message */}
-              {(pixelArtUrl || pixelArtData) ? (
+
+            {/* 3 pixel art options to choose from */}
+            {pixelArtOptions.length > 0 ? (
+              <>
+                <Text style={{ fontSize: 14, color: '#666', marginBottom: 12, textAlign: 'center' }}>
+                  Pick your pixel art
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
+                  {pixelArtOptions.map((url, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => setSelectedPixelArtIndex(index)}
+                      style={{
+                        borderWidth: 3,
+                        borderColor: selectedPixelArtIndex === index ? '#5B8A72' : 'transparent',
+                        borderRadius: 12,
+                        padding: 4,
+                      }}
+                    >
+                      <Image
+                        source={{ uri: url }}
+                        style={{ width: 80, height: 80 }}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (pixelArtUrl || pixelArtData) ? (
+              <View style={styles.emojiDisplay}>
                 <Image
                   source={{ uri: pixelArtUrl || `data:image/png;base64,${pixelArtData}` }}
                   style={{ width: 100, height: 100 }}
                   resizeMode="contain"
-                  onError={(error) => {
-                    console.error('❌ Pixel art failed to load in modal');
-                  }}
                 />
-              ) : (
-                <View style={{ alignItems: 'center', justifyContent: 'center', width: 100, height: 100 }}>
-                  <ActivityIndicator size="large" color="#5B8A72" />
-                  <Text style={{ fontSize: 12, color: '#666', marginTop: 8, textAlign: 'center' }}>
-                    Art Generating...
-                  </Text>
-                </View>
-              )}
-            </View>
+              </View>
+            ) : (
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 100, height: 100, alignSelf: 'center' }}>
+                <ActivityIndicator size="large" color="#5B8A72" />
+                <Text style={{ fontSize: 12, color: '#666', marginTop: 8, textAlign: 'center' }}>
+                  Generating artwork...
+                </Text>
+              </View>
+            )}
+
             <TouchableOpacity
-              style={styles.emojiModalButton}
-              onPress={() => {
+              style={[styles.emojiModalButton, { marginTop: 16 }]}
+              onPress={async () => {
+                // Save selected pixel art as the chosen one
+                const selectedUrl = pixelArtOptions[selectedPixelArtIndex] || pixelArtUrl;
+                if (selectedUrl) {
+                  try {
+                    await firestore().collection('mealEntries').doc(route.params.mealId).update({
+                      pixel_art_url: selectedUrl,
+                      pixel_art_user_selected: true,
+                    });
+                    console.log('✅ Selected pixel art saved:', selectedPixelArtIndex + 1);
+                  } catch (e) {
+                    console.error('❌ Error saving pixel art selection:', e);
+                  }
+                }
                 setShowEmojiAwardModal(false);
                 navigation.navigate('FoodPassport', { tabIndex: 0 });
               }}
             >
-              <Text style={styles.emojiModalButtonText}>Continue</Text>
+              <Text style={styles.emojiModalButtonText}>
+                {pixelArtOptions.length > 0 ? 'Choose' : 'Continue'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

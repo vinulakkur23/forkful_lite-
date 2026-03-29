@@ -40,7 +40,8 @@ async function retryWithBackoff<T>(
 }
 
 export interface PixelArtData {
-  image_data: string; // Base64 encoded pixel art image
+  image_data: string; // Base64 encoded pixel art image (first option)
+  image_options?: string[]; // All pixel art options (base64 encoded)
   mime_type: string;
   dish_name: string;
   prompt_used?: string;
@@ -52,6 +53,7 @@ export interface PixelArtData {
 export interface PixelArtResponse {
   success: boolean;
   image_data?: string;
+  image_options?: string[]; // Multiple pixel art options
   mime_type?: string;
   dish_name?: string;
   error?: string;
@@ -146,6 +148,7 @@ export const generatePixelArtIcon = async (
       
       return {
         image_data: result.image_data,
+        image_options: result.image_options,
         mime_type: result.mime_type || 'image/png',
         dish_name: result.dish_name || dishName || 'Unknown dish',
         prompt_used: result.prompt_used,

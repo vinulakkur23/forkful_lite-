@@ -1347,52 +1347,47 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           console.log('🎨 Photo URI available:', !!photoUriRef.current);
           const pixelArtPromise = generatePixelArtIcon(mealName, photoUriRef.current);
 
-        // Handle pixel art result
+        // Handle pixel art result (3 options)
         pixelArtPromise.then(async (pixelArtResult) => {
           if (pixelArtResult && pixelArtResult.image_data) {
             console.log('✅ Pixel art generation completed');
             logWithSession('Pixel art completed successfully');
+            const options = pixelArtResult.image_options || [pixelArtResult.image_data];
 
-            // Upload pixel art to Firebase Storage and save URL to Firestore
             try {
-              // Get current user ID
               const currentUser = auth().currentUser;
               if (!currentUser) {
                 console.error('❌ No authenticated user for pixel art upload');
                 return;
               }
 
-              // Create a unique filename for the pixel art
-              const pixelArtFileName = `pixel_art_${mealId}_${Date.now()}.png`;
-              const pixelArtStoragePath = `pixel_art/${currentUser.uid}/${pixelArtFileName}`;
+              // Upload all options to Firebase Storage
+              const optionUrls: string[] = [];
+              for (let i = 0; i < options.length; i++) {
+                const fileName = `pixel_art_${mealId}_option${i + 1}_${Date.now()}.png`;
+                const storagePath = `pixel_art/${currentUser.uid}/${fileName}`;
+                const dataUri = `data:image/png;base64,${options[i]}`;
 
-              // Convert base64 to data URI
-              const base64Data = pixelArtResult.image_data;
-              const dataUri = `data:image/png;base64,${base64Data}`;
+                console.log(`📤 Uploading pixel art option ${i + 1}...`);
+                const storageRef = storage().ref(storagePath);
+                await storageRef.putString(dataUri, 'data_url');
+                const downloadUrl = await storageRef.getDownloadURL();
+                optionUrls.push(downloadUrl);
+              }
+              console.log(`✅ Uploaded ${optionUrls.length} pixel art options`);
 
-              console.log('📤 Uploading pixel art to Storage:', pixelArtStoragePath);
-              logWithSession(`Uploading pixel art to: ${pixelArtStoragePath}`);
-
-              // Upload to Firebase Storage
-              const storageRef = storage().ref(pixelArtStoragePath);
-              await storageRef.putString(dataUri, 'data_url');
-
-              // Get download URL
-              const downloadUrl = await storageRef.getDownloadURL();
-              console.log('✅ Pixel art uploaded, URL:', downloadUrl);
-
-              // Update meal with pixel art URL instead of base64 data
               await firestore()
                 .collection('mealEntries')
                 .doc(mealId)
                 .update({
-                  pixel_art_url: downloadUrl,
+                  pixel_art_options: optionUrls,
+                  pixel_art_url: optionUrls[0], // Default to first option until user picks
                   pixel_art_prompt: pixelArtResult.prompt_used,
                   pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
                 });
 
-              console.log('✅ Pixel art saved to Firestore');
-              logWithSession('Pixel art saved successfully');
+              console.log('✅ Pixel art options saved to Firestore');
+              logWithSession('Pixel art options saved successfully');
             } catch (firestoreError) {
               console.error('❌ Error saving pixel art:', firestoreError);
               logWithSession(`Pixel art save error: ${firestoreError}`);

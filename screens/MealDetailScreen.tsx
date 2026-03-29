@@ -68,6 +68,9 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [hasUserCheered, setHasUserCheered] = useState(false);
   const [totalCheers, setTotalCheers] = useState(0);
   const [cheersLoading, setCheersLoading] = useState(false);
+  const [showPixelArtPicker, setShowPixelArtPicker] = useState(false);
+  const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState(0);
+  const hasAutoShownPicker = useRef(false);
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number } | null>(null);
@@ -235,6 +238,19 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     fetchMealDetails();
   }, []);
   
+  // Auto-show pixel art picker for meal owner if options exist and they haven't explicitly picked
+  useEffect(() => {
+    if (!meal || hasAutoShownPicker.current) return;
+    const isOwner = meal.userId === auth().currentUser?.uid;
+    const hasOptions = meal.pixel_art_options?.length > 1;
+    const alreadySelected = meal.pixel_art_user_selected === true;
+    if (isOwner && hasOptions && !alreadySelected) {
+      hasAutoShownPicker.current = true;
+      // Small delay so the screen renders first
+      setTimeout(() => setShowPixelArtPicker(true), 500);
+    }
+  }, [meal?.pixel_art_options, meal?.pixel_art_user_selected]);
+
   // Subscribe to cheers data
   useEffect(() => {
     if (!meal || !mealId) return;
@@ -791,15 +807,27 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.titleContent}>
             <View style={styles.mealInfoColumn}>
               <View style={styles.mealNameRow}>
-                {/* Pixel art emoji */}
+                {/* Pixel art emoji — tappable for owner if options exist */}
                 {(meal.pixel_art_url || meal.pixel_art_data) && (
-                  <Image
-                    source={{
-                      uri: meal.pixel_art_url || `data:image/png;base64,${meal.pixel_art_data}`
-                    }}
-                    style={styles.pixelArtEmoji}
-                    resizeMode="contain"
-                  />
+                  meal.pixel_art_options?.length > 1 && meal.userId === auth().currentUser?.uid ? (
+                    <TouchableOpacity onPress={() => setShowPixelArtPicker(true)}>
+                      <Image
+                        source={{
+                          uri: meal.pixel_art_url || `data:image/png;base64,${meal.pixel_art_data}`
+                        }}
+                        style={styles.pixelArtEmoji}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <Image
+                      source={{
+                        uri: meal.pixel_art_url || `data:image/png;base64,${meal.pixel_art_data}`
+                      }}
+                      style={styles.pixelArtEmoji}
+                      resizeMode="contain"
+                    />
+                  )
                 )}
                 <Text style={styles.mealName}>{meal.meal || 'Untitled Meal'}</Text>
                 {justEdited && (
@@ -1349,6 +1377,66 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </TouchableOpacity>
           </KeyboardAvoidingView>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Pixel Art Picker Modal (owner only) */}
+      <Modal
+        visible={showPixelArtPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPixelArtPicker(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 350, alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#2D2D2D', marginBottom: 4 }}>
+              {meal?.meal || 'Your Meal'}
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+              Pick your pixel art
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
+              {(meal?.pixel_art_options || []).map((url: string, index: number) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => setSelectedPixelArtIndex(index)}
+                  style={{
+                    borderWidth: 3,
+                    borderColor: selectedPixelArtIndex === index ? '#5B8A72' : 'transparent',
+                    borderRadius: 12,
+                    padding: 4,
+                  }}
+                >
+                  <Image
+                    source={{ uri: url }}
+                    style={{ width: 80, height: 80 }}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: '#5B8A72', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 40, marginTop: 16 }}
+              onPress={async () => {
+                const selectedUrl = meal?.pixel_art_options?.[selectedPixelArtIndex];
+                if (selectedUrl && mealId) {
+                  try {
+                    await firestore().collection('mealEntries').doc(mealId).update({
+                      pixel_art_url: selectedUrl,
+                      pixel_art_user_selected: true,
+                    });
+                    setMeal((prev: any) => ({ ...prev, pixel_art_url: selectedUrl, pixel_art_user_selected: true }));
+                    console.log('✅ Pixel art selection updated:', selectedPixelArtIndex + 1);
+                  } catch (e) {
+                    console.error('❌ Error updating pixel art:', e);
+                  }
+                }
+                setShowPixelArtPicker(false);
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Choose</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
