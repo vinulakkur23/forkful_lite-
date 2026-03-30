@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -29,6 +30,7 @@ const EnjoyMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const { photoUri } = route.params;
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
   // Generate a small thumbnail for fast display.
   // The original camera photo can be 12MP+ which takes seconds to decode.
@@ -64,6 +66,15 @@ const EnjoyMealScreen: React.FC<Props> = ({ route, navigation }) => {
     return () => { mounted = false; };
   }, [photoUri]);
 
+  // Slow progress bar animation (~45 seconds to fill)
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: 45000,
+      useNativeDriver: false,
+    }).start();
+  }, []);
+
   const goToFoodPassport = () => {
     navigation.navigate('FoodPassport', { tabIndex: 0 });
   };
@@ -74,6 +85,27 @@ const EnjoyMealScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Header Text */}
         <View style={styles.headerContainer}>
           <Text style={styles.headerText}>Enjoy your meal!</Text>
+
+          {/* Generating Art Progress */}
+          <View style={styles.generatingContainer}>
+            <Text style={styles.generatingText}>Generating Custom Art</Text>
+            <View style={styles.progressBarBackground}>
+              <Animated.View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.checkBackText}>
+              Check back soon to see your meal art, add more photos, and rate your meal
+            </Text>
+          </View>
         </View>
 
         {/* Photo Display */}
@@ -136,6 +168,39 @@ const styles = StyleSheet.create({
     fontWeight: 'normal',
     color: colors.textPrimary,
     textAlign: 'center',
+  },
+  generatingContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+    width: '100%',
+  },
+  generatingText: {
+    fontFamily: 'Inter',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5B8A72',
+    marginBottom: 8,
+  },
+  progressBarBackground: {
+    width: '70%',
+    height: 6,
+    backgroundColor: colors.mediumGray,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#5B8A72',
+    borderRadius: 3,
+  },
+  checkBackText: {
+    fontFamily: 'Inter',
+    fontSize: 12,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 20,
+    lineHeight: 17,
   },
   photoContainer: {
     width: '100%',

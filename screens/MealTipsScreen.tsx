@@ -5,7 +5,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { firestore } from '../firebaseConfig';
 import { colors, typography, spacing, shadows } from '../themes';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+// Icon import removed — using custom back-icon.png instead
 
 type MealTipsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MealTips'>;
 type MealTipsScreenRouteProp = RouteProp<RootStackParamList, 'MealTips'>;
@@ -147,8 +147,8 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  const { dishName: loadedDishName, ratingStatements, pixelArtUrl, pixelArtLocalPath } = tipsData;
-  const pixelArtSource = pixelArtLocalPath || pixelArtUrl;
+  const { dishName: loadedDishName, ratingStatements, pixelArtUrl } = tipsData;
+  const pixelArtSource = pixelArtUrl;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -158,9 +158,12 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.headerBackButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color={colors.textPrimary} />
+          <Image
+            source={require('../assets/icons/back-icon.png')}
+            style={{ width: 24, height: 24 }}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Meal Tips</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -169,7 +172,7 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Pixel Art + Dish Name */}
+        {/* Pixel Art + Subtitle */}
         <View style={styles.dishHeader}>
           {pixelArtSource && (
             <Image
@@ -178,8 +181,7 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
               resizeMode="contain"
             />
           )}
-          <Text style={styles.dishName}>{loadedDishName}</Text>
-          <Text style={styles.subtitle}>What to look for</Text>
+          <Text style={styles.subtitle}>What to Look For</Text>
         </View>
 
         {/* Tips */}
@@ -206,12 +208,20 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
 
         {/* Rate Button */}
-        <TouchableOpacity
-          style={styles.rateButton}
-          onPress={handleRateMeal}
-        >
-          <Text style={styles.rateButtonText}>Rate This Meal</Text>
-        </TouchableOpacity>
+        {(() => {
+          const isRated = mealData?.rating && mealData.rating > 0;
+          return (
+            <TouchableOpacity
+              style={[styles.rateButton, isRated && { opacity: 0.4 }]}
+              onPress={handleRateMeal}
+              disabled={isRated}
+            >
+              <Text style={styles.rateButtonText}>
+                {isRated ? 'Already Rated' : 'Rate This Meal'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -297,9 +307,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   pixelArt: {
-    width: 80,
-    height: 80,
-    marginBottom: 12,
+    width: 48,
+    height: 48,
+    marginBottom: 10,
   },
   dishName: {
     fontFamily: 'Inter',
@@ -310,8 +320,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: 'Inter',
-    fontSize: 14,
-    color: colors.textTertiary,
+    fontSize: 22,
+    fontWeight: '400',
+    color: colors.textPrimary,
     marginTop: 4,
   },
   tipsContainer: {
