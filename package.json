@@ -27,6 +27,7 @@
     "firebase": "^11.9.0",
     "react": "19.0.0",
     "react-native": "0.78.0",
+    "react-native-audio-recorder-player": "^3.6.12",
     "react-native-chart-kit": "^6.12.0",
     "react-native-color-matrix-image-filters": "^7.0.2",
     "react-native-exif": "^0.5.0",

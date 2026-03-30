@@ -68,13 +68,34 @@ export const extractDishInsights = async (
     }
     
     console.log('🌐 DishInsightsService: Making API call to extract-dish-insights');
-    console.log('🌐 DishInsightsService: URL:', `${BASE_URL}/extract-dish-insights`);
-    
-    const response = await fetch(`${BASE_URL}/extract-dish-insights`, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type manually - let fetch set it with proper boundary
-    });
+
+    // Retry up to 2 times with timeout
+    let response: Response | null = null;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+        response = await fetch(`${BASE_URL}/extract-dish-insights`, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        break; // Success, exit retry loop
+      } catch (fetchError: any) {
+        lastError = fetchError;
+        console.warn(`⚠️ DishInsightsService: Attempt ${attempt + 1} failed:`, fetchError.message);
+        if (attempt < 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('All fetch attempts failed');
+    }
     
     console.log('📡 DishInsightsService: Response status:', response.status);
     

@@ -4,6 +4,17 @@ import {
   ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard, Modal, Animated
 } from 'react-native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import {
+  startRecording,
+  stopRecording,
+  startPlayback,
+  stopPlayback,
+  transcribeVoiceNote,
+  onRecordProgress,
+  onPlaybackProgress,
+  deleteRecording,
+} from '../services/voiceNoteService';
+import { ensureServerAwake } from '../config/api';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -55,16 +66,16 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   // State for editable fields
-  const [rating, setRating] = useState<number>(meal.rating || 0);
+  const [rating, setRating] = useState<number>(meal?.rating || 0);
   const [thoughts, setThoughts] = useState<string>(() => {
     // Handle both new thoughts format and legacy liked/disliked format
-    if (meal.comments?.thoughts) {
+    if (meal?.comments?.thoughts) {
       // New format - use thoughts directly
       return meal.comments.thoughts;
     } else {
       // Legacy format - combine liked and disliked comments
-      const liked = meal.comments?.liked || '';
-      const disliked = meal.comments?.disliked || '';
+      const liked = meal?.comments?.liked || '';
+      const disliked = meal?.comments?.disliked || '';
       
       if (liked && disliked) {
         return `${liked}\n\n${disliked}`;
@@ -93,6 +104,18 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   
   // State to track if facts are being loaded
   const [factsLoading, setFactsLoading] = useState<boolean>(false);
+
+  // Voice recording state
+  const [voiceState, setVoiceState] = useState<'idle' | 'recording' | 'transcribing' | 'recorded'>('idle');
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingFilePath, setRecordingFilePath] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [rawTranscript, setRawTranscript] = useState<string | null>(null);
+  const [bulletPoints, setBulletPoints] = useState<string | null>(null);
+  const [showBullets, setShowBullets] = useState(true); // true = bullets, false = raw transcript
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   
   // State for pixel art data from Firestore
   const [pixelArtUrl, setPixelArtUrl] = useState<string | null>(null);
@@ -424,7 +447,17 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     setShowQuickRatingsExpansion(false);
     setQuickRatings({});
     setPressedEmojiId(null);
-    
+
+    // Reset voice recording state
+    setVoiceState('idle');
+    setRecordingSeconds(0);
+    setRecordingFilePath(null);
+    setIsPlaying(false);
+    setIsTranscribing(false);
+    setRawTranscript(null);
+    setBulletPoints(null);
+    setShowBullets(true);
+
     // Fetch fresh data for this meal
     fetchFreshMealData();
   }, [mealId]); // Depend on mealId from route params, not meal.id
@@ -1169,6 +1202,121 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   // Long-press pixel art selection handlers
+  // Voice recording handlers
+  const handleStartRecording = async () => {
+    try {
+      ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+      setRecordingSeconds(0);
+      const filePath = await startRecording();
+      setRecordingFilePath(filePath);
+      setVoiceState('recording');
+
+      // Start pulse animation
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      );
+      pulseAnimRef.current = pulse;
+      pulse.start();
+
+      // Track elapsed time
+      onRecordProgress((seconds) => setRecordingSeconds(seconds));
+    } catch (error) {
+      console.error('❌ Failed to start recording:', error);
+      Alert.alert('Error', 'Could not start recording. Please check microphone permissions.');
+      setVoiceState('idle');
+    }
+  };
+
+  const handleStopRecording = async () => {
+    try {
+      ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+
+      // Stop pulse animation
+      if (pulseAnimRef.current) {
+        pulseAnimRef.current.stop();
+        pulseAnimRef.current = null;
+      }
+      pulseAnim.setValue(1);
+
+      const filePath = await stopRecording();
+      setRecordingFilePath(filePath);
+
+      // Show playback/re-record immediately while transcribing in background
+      setVoiceState('recorded');
+      setIsTranscribing(true);
+      setRawTranscript(null);
+      setBulletPoints(null);
+
+      // Transcribe in background
+      ensureServerAwake();
+      transcribeVoiceNote(filePath).then((result) => {
+        setIsTranscribing(false);
+        if (result) {
+          setRawTranscript(result.transcript);
+          setBulletPoints(result.bulletPoints || null);
+          // Default to bullets if available, otherwise raw
+          const text = (result.bulletPoints && showBullets) ? result.bulletPoints : result.transcript;
+          const truncated = text.substring(0, 600);
+          setThoughts(truncated);
+          hasLocalEdits.current = true;
+          ReactNativeHapticFeedback.trigger('notificationSuccess', { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+        } else {
+          Alert.alert('Transcription Failed', 'Could not transcribe your recording. Please try again or type your thoughts.');
+        }
+      }).catch(() => {
+        setIsTranscribing(false);
+        Alert.alert('Transcription Failed', 'Could not transcribe your recording. Please try again or type your thoughts.');
+      });
+    } catch (error) {
+      console.error('❌ Failed to stop recording:', error);
+      setVoiceState('idle');
+    }
+  };
+
+  const handlePlayback = async () => {
+    if (!recordingFilePath) return;
+    try {
+      if (isPlaying) {
+        await stopPlayback();
+        setIsPlaying(false);
+      } else {
+        setIsPlaying(true);
+        await startPlayback(recordingFilePath);
+        onPlaybackProgress((current, duration) => {
+          if (current >= duration && duration > 0) {
+            setIsPlaying(false);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('❌ Playback error:', error);
+      setIsPlaying(false);
+    }
+  };
+
+  const handleReRecord = async () => {
+    if (recordingFilePath) {
+      await deleteRecording(recordingFilePath);
+    }
+    setRecordingFilePath(null);
+    setVoiceState('idle');
+    setIsPlaying(false);
+    setIsTranscribing(false);
+    setRawTranscript(null);
+    setBulletPoints(null);
+    setThoughts('');
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Long-press pixel art selection handlers
   const handlePixelArtPressIn = (index: number) => {
     setPressingIndex(index);
 
@@ -1447,18 +1595,152 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Comments Section */}
           <View style={styles.commentsSection}>
-            <TextInput
-              ref={textInputRef}
-              key={`thoughts-${mealId}`}
-              style={styles.commentInput}
-              placeholder="What did you enjoy about this meal? What could be better?"
-              placeholderTextColor="#999"
-              multiline={true}
-              blurOnSubmit={false}
-              value={thoughts}
-              onChangeText={(text: string) => { hasLocalEdits.current = true; setThoughts(text); }}
-              maxLength={600}
-            />
+            {/* Voice Recording — above TextInput */}
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              {voiceState === 'idle' && (
+                <TouchableOpacity
+                  onPress={handleStartRecording}
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderColor: '#5B8A72',
+                    paddingVertical: 12,
+                    paddingHorizontal: 25,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 15, color: '#5B8A72', fontWeight: '600', fontFamily: 'Inter' }}>
+                    Record
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {voiceState === 'recording' && (
+                <TouchableOpacity
+                  onPress={handleStopRecording}
+                  style={{ alignItems: 'center' }}
+                >
+                  <Animated.View style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: '#C84B4B',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    transform: [{ scale: pulseAnim }],
+                  }}>
+                    <Icon name="stop" size={30} color="#FFFFFF" />
+                  </Animated.View>
+                  <Text style={{ marginTop: 8, fontSize: 14, color: '#C84B4B', fontWeight: '600', fontFamily: 'Inter' }}>
+                    Recording {formatTime(recordingSeconds)}
+                  </Text>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: '#999', fontFamily: 'Inter' }}>
+                    Tap to stop
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {voiceState === 'recorded' && recordingFilePath && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={handlePlayback}
+                    style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'transparent',
+                      borderWidth: 2,
+                      borderColor: '#5B8A72',
+                      paddingVertical: 10,
+                      paddingHorizontal: 20,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, color: '#5B8A72', fontWeight: '600', fontFamily: 'Inter' }}>
+                      {isPlaying ? 'Pause' : 'Play'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleReRecord}
+                    style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'transparent',
+                      borderWidth: 2,
+                      borderColor: '#999',
+                      paddingVertical: 10,
+                      paddingHorizontal: 20,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, color: '#999', fontWeight: '600', fontFamily: 'Inter' }}>
+                      Re-record
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* TextInput with transcribing overlay */}
+            <View>
+              <TextInput
+                ref={textInputRef}
+                key={`thoughts-${mealId}`}
+                style={styles.commentInput}
+                placeholder="What did you enjoy about this meal? What could be better?"
+                placeholderTextColor="#999"
+                multiline={true}
+                blurOnSubmit={false}
+                value={thoughts}
+                onChangeText={(text: string) => { hasLocalEdits.current = true; setThoughts(text); }}
+                maxLength={600}
+              />
+              {isTranscribing && (
+                <View style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: 'rgba(255,255,255,0.85)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderRadius: 8,
+                }}>
+                  <ActivityIndicator size="small" color="#5B8A72" />
+                  <Text style={{ marginTop: 6, fontSize: 13, color: '#666', fontFamily: 'Inter' }}>
+                    Transcribing...
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Bullets / Full text toggle — below TextInput */}
+            {rawTranscript && bulletPoints && (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const newShowBullets = !showBullets;
+                    setShowBullets(newShowBullets);
+                    const text = newShowBullets ? bulletPoints : rawTranscript;
+                    setThoughts(text.substring(0, 600));
+                    hasLocalEdits.current = true;
+                  }}
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderColor: '#D0D0D0',
+                    paddingVertical: 6,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: '#5B8A72', fontWeight: '500', fontFamily: 'Inter' }}>
+                    {showBullets ? 'Show full text' : 'Show bullet points'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Text style={styles.helperText}>
               Sharing will help others find your review helpful and allow us to give you better recommendations.
             </Text>

@@ -95,12 +95,12 @@ export const generatePixelArtIcon = async (
     
     console.log('🚨 PixelArtService: Making API call to generate-pixel-art-icon');
 
-    // Add timeout for production reliability (60 seconds - pixel art can take time)
+    // Add timeout for production reliability (120 seconds - 3 parallel image generations can take time)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.error('⏱️ PixelArtService: Request timed out after 60 seconds');
+      console.error('⏱️ PixelArtService: Request timed out after 120 seconds');
       controller.abort();
-    }, 60000);
+    }, 120000);
 
     let response;
     try {

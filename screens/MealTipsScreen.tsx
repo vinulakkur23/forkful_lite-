@@ -34,6 +34,7 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tipsData, setTipsData] = useState<MealTipsData | null>(null);
+  const [mealData, setMealData] = useState<any>(null);
 
   useEffect(() => {
     loadMealTips();
@@ -44,20 +45,16 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
       setLoading(true);
       setError(null);
 
-      console.log('📖 Loading meal tips for:', mealId);
+      console.log('Loading meal tips for:', mealId);
 
-      // CRITICAL: Validate mealId before querying Firestore
       if (!mealId || typeof mealId !== 'string' || mealId.trim().length === 0) {
-        console.error('❌ Invalid mealId:', mealId);
+        console.error('Invalid mealId:', mealId);
         setError('Invalid meal ID');
         setLoading(false);
         return;
       }
 
-      // CRITICAL: Wait for Firebase to be fully initialized (production fix)
-      // When navigating from background notification, Firebase may not be ready
-      console.log('🔥 Ensuring Firebase is initialized...');
-      await new Promise(resolve => setTimeout(resolve, 100)); // Give Firebase 100ms to initialize
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       const mealDoc = await firestore().collection('mealEntries').doc(mealId).get();
 
@@ -67,23 +64,18 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
         return;
       }
 
-      const mealData = mealDoc.data();
-      console.log('📖 Meal data loaded:', {
-        hasMealData: !!mealData,
-        hasRatingStatements: !!mealData?.rating_statements_result
-      });
+      const loadedMealData = { id: mealDoc.id, ...mealDoc.data() };
+      setMealData(loadedMealData);
+      const mealData = loadedMealData;
 
-      // Extract rating statements from Firestore
       const ratingStatementsResult = mealData?.rating_statements_result;
       let statements: RatingStatement[] = [];
 
       if (ratingStatementsResult?.rating_statements) {
-        // Handle both formats: array of strings OR array of {title, description} objects
         statements = ratingStatementsResult.rating_statements.slice(0, 3).map((stmt: any, idx: number) => {
           if (typeof stmt === 'string') {
             return { title: `Tip ${idx + 1}`, description: stmt };
           }
-          // Already an object with title/description
           return {
             title: stmt.title || `Tip ${idx + 1}`,
             description: stmt.description || String(stmt),
@@ -91,7 +83,6 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
         });
       }
 
-      // Get pixel art (try multiple possible fields)
       const pixelArtUrl = mealData?.pixel_art_url || null;
       const pixelArtLocalPath = mealData?.localPixelArtPath || mealData?.pixel_art_local_path || null;
 
@@ -104,36 +95,37 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
 
       setLoading(false);
     } catch (err: any) {
-      console.error('❌ Error loading meal tips:', err);
+      console.error('Error loading meal tips:', err);
       setError(err.message || 'Failed to load tips');
       setLoading(false);
-
-      // Log error to Firestore for debugging
-      try {
-        await firestore().collection('mealEntries').doc(mealId).update({
-          tips_screen_error: err.message || String(err),
-          tips_screen_error_timestamp: firestore.FieldValue.serverTimestamp()
-        });
-      } catch (logError) {
-        console.error('Failed to log tips screen error:', logError);
-      }
     }
   };
 
   const handleRateMeal = () => {
-    // Navigate to EditMealScreen to rate the meal
-    navigation.navigate('EditMeal', {
-      mealId,
-      previousScreen: 'MealTips'
-    } as any);
+    // Navigate to RatingScreen2 like FoodPassport does for unrated camera captures
+    navigation.navigate('MainTabs' as never, {
+      screen: 'RatingScreen2',
+      params: {
+        isUnratedMeal: true,
+        existingMealId: mealId,
+        photo: mealData?.photoUrl ? { uri: mealData.photoUrl } : null,
+        location: mealData?.location || null,
+        photoSource: 'camera',
+        _uniqueKey: `unrated_${mealId}_${Date.now()}`,
+        rating: 0,
+        thoughts: '',
+        meal: mealData?.meal || '',
+        restaurant: mealData?.restaurant || '',
+        isEditingExisting: false,
+      },
+    } as never);
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.warmTaupe} />
-          <Text style={styles.loadingText}>Loading tips...</Text>
+          <ActivityIndicator size="large" color={colors.textTertiary} />
         </View>
       </SafeAreaView>
     );
@@ -143,8 +135,6 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Icon name="error-outline" size={64} color={colors.error} />
-          <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error || 'Failed to load tips'}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadMealTips}>
             <Text style={styles.retryButtonText}>Try Again</Text>
@@ -162,65 +152,65 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.headerBackButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Meal Tips</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Icon name="close" size={28} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Pixel Art Emoji */}
-        {pixelArtSource && (
-          <View style={styles.pixelArtContainer}>
+        {/* Pixel Art + Dish Name */}
+        <View style={styles.dishHeader}>
+          {pixelArtSource && (
             <Image
               source={{ uri: pixelArtSource }}
               style={styles.pixelArt}
               resizeMode="contain"
             />
-          </View>
-        )}
+          )}
+          <Text style={styles.dishName}>{loadedDishName}</Text>
+          <Text style={styles.subtitle}>What to look for</Text>
+        </View>
 
-        {/* Dish Name */}
-        <Text style={styles.dishName}>{loadedDishName}</Text>
-        <Text style={styles.subtitle}>What to Look For When Rating</Text>
-
-        {/* Tips Cards */}
+        {/* Tips */}
         <View style={styles.tipsContainer}>
           {ratingStatements.length > 0 ? (
             ratingStatements.map((statement, index) => (
               <View key={index} style={styles.tipCard}>
-                <View style={styles.tipHeader}>
-                  <View style={styles.tipNumberBadge}>
-                    <Text style={styles.tipNumberText}>{index + 1}</Text>
+                <View style={styles.tipRow}>
+                  <View style={styles.tipBadge}>
+                    <Text style={styles.tipBadgeText}>{index + 1}</Text>
                   </View>
-                  <Text style={styles.tipTitle}>{statement.title}</Text>
+                  <View style={styles.tipContent}>
+                    <Text style={styles.tipTitle}>{statement.title}</Text>
+                    <Text style={styles.tipDescription}>{statement.description}</Text>
+                  </View>
                 </View>
-                <Text style={styles.tipDescription}>{statement.description}</Text>
               </View>
             ))
           ) : (
             <View style={styles.noTipsContainer}>
-              <Icon name="info-outline" size={48} color={colors.textSecondary} />
               <Text style={styles.noTipsText}>No tips available for this meal yet.</Text>
             </View>
           )}
         </View>
 
-        {/* CTA Button */}
+        {/* Rate Button */}
         <TouchableOpacity
           style={styles.rateButton}
           onPress={handleRateMeal}
         >
-          <Icon name="star" size={24} color="#fff" style={styles.rateButtonIcon} />
-          <Text style={styles.rateButtonText}>Rate This Meal Now</Text>
+          <Text style={styles.rateButtonText}>Rate This Meal</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -230,164 +220,173 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.lightTan,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screenPadding || 16,
+    paddingVertical: spacing.sm || 8,
+    backgroundColor: colors.lightTan,
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontFamily: 'Inter',
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.xl,
+    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginTop: spacing.md,
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  errorTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    marginTop: spacing.md,
+    paddingHorizontal: 32,
   },
   errorText: {
-    ...typography.body,
+    fontFamily: 'Inter',
+    fontSize: 15,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: spacing.sm,
   },
   retryButton: {
-    backgroundColor: colors.warmTaupe,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    marginTop: spacing.xl,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#5B8A72',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+    marginTop: 20,
   },
   retryButtonText: {
-    ...typography.button,
-    color: '#fff',
+    fontFamily: 'Inter',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#5B8A72',
   },
   backButton: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm,
+    marginTop: 12,
+    paddingVertical: 8,
   },
   backButtonText: {
-    ...typography.body,
-    color: colors.warmTaupe,
+    fontFamily: 'Inter',
+    fontSize: 14,
+    color: colors.textTertiary,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  closeButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
+  dishHeader: {
     alignItems: 'center',
-    borderRadius: 22,
-    backgroundColor: colors.lightGray,
-  },
-  pixelArtContainer: {
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
+    paddingTop: 16,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
   },
   pixelArt: {
-    width: 120,
-    height: 120,
+    width: 80,
+    height: 80,
+    marginBottom: 12,
   },
   dishName: {
-    ...typography.h1,
+    fontFamily: 'Inter',
+    fontSize: 22,
+    fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing.sm,
   },
   subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
+    fontFamily: 'Inter',
+    fontSize: 14,
+    color: colors.textTertiary,
+    marginTop: 4,
   },
   tipsContainer: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 16,
   },
   tipCard: {
     backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    ...shadows.medium,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.mediumGray,
   },
-  tipHeader: {
+  tipRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
+    alignItems: 'flex-start',
   },
-  tipNumberBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.warmTaupe,
+  tipBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#5B8A72',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: spacing.sm,
+    marginRight: 12,
+    marginTop: 2,
   },
-  tipNumberText: {
-    ...typography.button,
+  tipBadgeText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#fff',
-    fontSize: 16,
   },
-  tipTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
+  tipContent: {
     flex: 1,
   },
+  tipTitle: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
   tipDescription: {
-    ...typography.body,
+    fontFamily: 'Inter',
+    fontSize: 14,
     color: colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   noTipsContainer: {
     alignItems: 'center',
-    paddingVertical: spacing.xl * 2,
+    paddingVertical: 40,
   },
   noTipsText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginTop: spacing.md,
+    fontFamily: 'Inter',
+    fontSize: 14,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   rateButton: {
-    backgroundColor: colors.warmTaupe,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-    paddingVertical: spacing.lg,
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#5B8A72',
+    marginHorizontal: 16,
+    marginTop: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: 'center',
-    ...shadows.medium,
-  },
-  rateButtonIcon: {
-    marginRight: spacing.sm,
+    justifyContent: 'center',
   },
   rateButtonText: {
-    ...typography.button,
-    color: '#fff',
-    fontSize: 18,
+    fontFamily: 'Inter',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#5B8A72',
   },
 });
 
