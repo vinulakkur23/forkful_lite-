@@ -493,7 +493,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         ref={scrollViewRef}
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={tabIndex !== 2} // Disable scroll for map tab (index 2)
+        scrollEnabled={tabIndex !== 2}
       >
         {/* Profile Card */}
         <ProfileCard

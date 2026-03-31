@@ -7,14 +7,14 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl,
   Dimensions,
   Alert,
   Platform,
   SafeAreaView,
   ScrollView,
   Share,
-  Modal
+  Modal,
+  RefreshControl
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -45,6 +45,18 @@ import { PieChart } from 'react-native-chart-kit';
 import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserChallenge, deleteChallenge } from '../services/userChallengesService';
 // Import new theme
 import { colors, typography, spacing, shadows, addAlpha } from '../themes';
+// Restaurant sections
+import DraggableRestaurantList from '../components/DraggableRestaurantList';
+// NestableScrollContainer moved to FoodPassportWrapper — this screen uses a plain View
+import AddSectionModal from '../components/AddSectionModal';
+import {
+  RestaurantSection,
+  loadRestaurantSections,
+  saveRestaurantSections,
+  createSection,
+  deleteSection as deleteSectionService,
+  reconcileRestaurants,
+} from '../services/restaurantSectionsService';
 // Monument service removed — no longer used
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
@@ -196,6 +208,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const [cuisinesLoading, setCuisinesLoading] = useState(true);
     const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
     const [restaurantsLoading, setRestaurantsLoading] = useState(true);
+    const [restaurantSections, setRestaurantSections] = useState<RestaurantSection[]>([]);
+    const [unsectionedOrder, setUnsectionedOrder] = useState<string[]>([]);
+    const [showAddSectionModal, setShowAddSectionModal] = useState(false);
 
     useEffect(() => {
         // Initialize GoogleSignin
@@ -499,7 +514,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         loadAllAccolades();
         loadAllChallenges();
     };
-    
+
     // Apply filter to meals - now handles multiple filters
     const applyFilter = () => {
         if (!meals.length) {
@@ -919,6 +934,20 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             setCities(citiesWithData);
             setCuisines(cuisinesWithData);
             setRestaurants(restaurantsWithData);
+
+            // Load custom restaurant sections/order
+            const allRestaurantNames = restaurantsWithData.map(r => r.name);
+            const sectionsData = await loadRestaurantSections(targetUserId);
+            if (sectionsData) {
+                // Reconcile with current restaurants (add new ones, remove deleted ones)
+                const reconciled = reconcileRestaurants(allRestaurantNames, sectionsData.sections, sectionsData.unsectionedOrder);
+                setRestaurantSections(reconciled.sections);
+                setUnsectionedOrder(reconciled.unsectionedOrder);
+            } else {
+                // No custom ordering — use default meal-count sorted order
+                setRestaurantSections([]);
+                setUnsectionedOrder(allRestaurantNames);
+            }
         } catch (error) {
             console.error('Error loading accolades:', error);
         } finally {
@@ -930,6 +959,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     };
 
     const loadAllChallenges = async () => {
+        // Challenges temporarily disabled — skip loading to save Firestore reads
+        setChallengesLoading(false);
+        return;
         try {
             setChallengesLoading(true);
             const targetUserId = userId || auth().currentUser?.uid;
@@ -1611,6 +1643,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 )}
 
                 {/* All Challenges Section */}
+                {/* Food Challenges — temporarily disabled (code preserved for future use)
                 {!challengesLoading && allChallenges.length > 0 && (
                     <>
                         <Text style={styles.sectionTitle}>Food Challenges</Text>
@@ -1628,6 +1661,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         </ScrollView>
                     </>
                 )}
+                */}
 
                 {/* Cities Section */}
                 {!citiesLoading && cities.length > 0 && (
@@ -1700,19 +1734,51 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     </>
                 )}
 
-                {/* Restaurants Section */}
+                {/* Restaurants Section — Draggable */}
                 {!restaurantsLoading && restaurants.length > 0 && (
-                    <>
-                        <Text style={styles.sectionTitle}>Restaurants</Text>
-                        <View style={styles.restaurantsList}>
-                            {restaurants.map(item => (
-                                <View key={item.name}>
-                                    {renderRestaurantItem({ item, index: 0, separators: null as any })}
-                                </View>
-                            ))}
-                        </View>
-                    </>
+                    <DraggableRestaurantList
+                        restaurants={restaurants}
+                        sections={restaurantSections}
+                        unsectionedOrder={unsectionedOrder}
+                        isOwnProfile={isOwnProfile}
+                        onReorder={async (newSections, newUnsectioned) => {
+                            setRestaurantSections(newSections);
+                            setUnsectionedOrder(newUnsectioned);
+                            const currentUserId = auth().currentUser?.uid;
+                            if (currentUserId) {
+                                await saveRestaurantSections(currentUserId, newSections, newUnsectioned);
+                            }
+                        }}
+                        onRestaurantPress={handleRestaurantPress}
+                        onAddSection={() => setShowAddSectionModal(true)}
+                        onDeleteSection={async (sectionId) => {
+                            const currentUserId = auth().currentUser?.uid;
+                            if (currentUserId) {
+                                await deleteSectionService(currentUserId, sectionId);
+                                // Reload sections
+                                const sectionsData = await loadRestaurantSections(currentUserId);
+                                if (sectionsData) {
+                                    setRestaurantSections(sectionsData.sections);
+                                    setUnsectionedOrder(sectionsData.unsectionedOrder);
+                                }
+                            }
+                        }}
+                    />
                 )}
+
+                {/* Add Section Modal */}
+                <AddSectionModal
+                    visible={showAddSectionModal}
+                    existingSectionNames={restaurantSections.map(s => s.name)}
+                    onClose={() => setShowAddSectionModal(false)}
+                    onCreate={async (name) => {
+                        const currentUserId = auth().currentUser?.uid;
+                        if (currentUserId) {
+                            const newSection = await createSection(currentUserId, name);
+                            setRestaurantSections(prev => [...prev, newSection]);
+                        }
+                    }}
+                />
             </View>
 
             {/* Share button - only show if user has meals and it's their own profile */}
@@ -1732,7 +1798,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             )}
         </View>
-    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, filteredMeals.length, userId]);
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, showAddSectionModal, isOwnProfile, filteredMeals.length, userId]);
 
     // Function to render each meal item — memoized with useCallback
     const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {

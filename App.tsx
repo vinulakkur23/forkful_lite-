@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Icon import was duplicated, removed one. MaterialIcons is conventional.
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Image, ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Linking, Alert, Modal } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // Import Firebase from our config file to ensure consistent initialization
 import { firebase, auth, firestore, storage } from './firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -1010,7 +1011,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
         <NavigationContainer
           ref={navigationRef}
@@ -1059,8 +1060,8 @@ const App: React.FC = () => {
       
       {/* GlobalChallengeListener for food challenge notifications */}
       <GlobalChallengeListener />
-      
-    </>
+
+    </GestureHandlerRootView>
   );
 };
 
