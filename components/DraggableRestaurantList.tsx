@@ -16,6 +16,7 @@ import {
   Modal,
   SafeAreaView,
   Keyboard,
+  Dimensions,
 } from 'react-native';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
@@ -154,7 +155,7 @@ const DraggableRestaurantList: React.FC<Props> = ({
       sectionName: trimmed,
       key: `header_new_${Date.now()}`,
     };
-    setModalListItems(prev => [...prev, newSection]);
+    setModalListItems(prev => [newSection, ...prev]);
   };
 
   // Save and close modal
@@ -187,7 +188,24 @@ const DraggableRestaurantList: React.FC<Props> = ({
                     `Remove "${item.sectionName}"? Restaurants will move to the general list.`,
                     [
                       { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: () => onDeleteSection(item.sectionId) },
+                      { text: 'Delete', style: 'destructive', onPress: () => {
+                        // Remove section header from modal list, move its restaurants to unsectioned (top)
+                        setModalListItems(prev => {
+                          const sectionIdx = prev.findIndex(i => i.type === 'section-header' && i.sectionId === item.sectionId);
+                          if (sectionIdx === -1) return prev;
+                          // Collect restaurants that belonged to this section
+                          const restaurantsToMove: ListItem[] = [];
+                          let idx = sectionIdx + 1;
+                          while (idx < prev.length && prev[idx].type === 'restaurant' && prev[idx].sectionId === item.sectionId) {
+                            restaurantsToMove.push({ ...prev[idx], sectionId: null, key: `rest_unsectioned_${prev[idx].name}` });
+                            idx++;
+                          }
+                          // Remove section + its restaurants, prepend restaurants to top
+                          const without = [...prev.slice(0, sectionIdx), ...prev.slice(idx)];
+                          return [...restaurantsToMove, ...without];
+                        });
+                        onDeleteSection(item.sectionId);
+                      }},
                     ]
                   );
                 }}
@@ -317,6 +335,7 @@ const DraggableRestaurantList: React.FC<Props> = ({
                 value={newSectionName}
                 onChangeText={setNewSectionName}
                 autoFocus
+                autoCapitalize="words"
                 onSubmitEditing={handleAddSection}
                 maxLength={40}
               />
@@ -342,7 +361,7 @@ const DraggableRestaurantList: React.FC<Props> = ({
             renderItem={renderDragItem}
             keyExtractor={(item) => item.key}
             onDragEnd={({ data }) => setModalListItems(data)}
-            containerStyle={styles.modalListContainer}
+            containerStyle={[styles.modalListContainer, { maxHeight: Dimensions.get('window').height - 180 }]}
           />
         </SafeAreaView>
       </Modal>

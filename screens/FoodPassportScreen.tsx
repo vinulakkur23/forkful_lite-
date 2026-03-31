@@ -1663,74 +1663,141 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 )}
                 */}
 
-                {/* Cities Section */}
+                {/* Cities Section — Top 3 + tags */}
                 {!citiesLoading && cities.length > 0 && (
                     <>
                         <Text style={styles.sectionTitle}>Cities</Text>
-
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.challengeCarousel}
-                            contentContainerStyle={styles.challengeCarouselContent}
-                        >
-                            {cities.map(item => (
-                                <View key={item.name} style={styles.carouselItemWrapper}>
-                                    {renderCityItem({ item, index: 0, separators: null as any })}
-                                </View>
+                        {/* Top 3 cities with meal counts */}
+                        <View style={{ paddingHorizontal: spacing.md }}>
+                            {cities.slice(0, 3).map((city, index) => (
+                                <TouchableOpacity
+                                    key={city.name}
+                                    style={{
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        paddingVertical: 10,
+                                        borderBottomWidth: index < 2 ? 1 : 0,
+                                        borderBottomColor: colors.mediumGray,
+                                    }}
+                                    onPress={() => {
+                                        if (onFilterChange && onTabChange) {
+                                            onFilterChange([{ type: 'city', value: city.name.toLowerCase(), label: city.name }]);
+                                            onTabChange(0);
+                                        }
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: '700', color: colors.textTertiary, marginRight: 10, width: 22 }}>
+                                            {index + 1}
+                                        </Text>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
+                                            {city.name}
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontFamily: 'Inter', fontSize: 14, color: colors.textTertiary }}>
+                                        {city.mealCount} {city.mealCount === 1 ? 'meal' : 'meals'}
+                                    </Text>
+                                </TouchableOpacity>
                             ))}
-                        </ScrollView>
-
-                        {/* Cities Pie Chart */}
-                        {renderCitiesPieChart()}
+                        </View>
+                        {/* All cities as small tags */}
+                        {cities.length > 3 && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
+                                {cities.slice(3).map(city => (
+                                    <TouchableOpacity
+                                        key={city.name}
+                                        onPress={() => {
+                                            if (onFilterChange && onTabChange) {
+                                                onFilterChange([{ type: 'city', value: city.name.toLowerCase(), label: city.name }]);
+                                                onTabChange(0);
+                                            }
+                                        }}
+                                        style={{
+                                            backgroundColor: colors.white,
+                                            borderWidth: 1,
+                                            borderColor: colors.mediumGray,
+                                            borderRadius: 16,
+                                            paddingVertical: 5,
+                                            paddingHorizontal: 12,
+                                        }}
+                                    >
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: colors.textSecondary }}>
+                                            {city.name} ({city.mealCount})
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
                     </>
                 )}
 
-                {/* Cuisines Section */}
+                {/* Cuisines Section — Top 3 + tags */}
                 {!cuisinesLoading && cuisines.length > 0 && (
                     <>
                         <Text style={styles.sectionTitle}>Cuisines</Text>
-
-                        {/* Cuisines Pie Chart */}
-                        <View style={styles.pieChartContainer}>
-                            <Text style={styles.pieChartTitle}>Meals by Cuisine (Top 10)</Text>
-                            <PieChart
-                                data={cuisines.slice(0, 10).map((cuisine, index) => ({
-                                    name: cuisine.name,
-                                    population: cuisine.mealCount,
-                                    color: [
-                                        '#5B8A72', '#8B7355', '#7A9B8E', '#9CA986', '#D4C5B9',
-                                        '#6B8E7F', '#B8A89A', '#A89F91', '#C8BCB0', '#E8DDD3',
-                                    ][index % 10],
-                                    legendFontColor: colors.textSecondary,
-                                    legendFontSize: 12,
-                                    legendFontFamily: 'Inter-Regular',
-                                }))}
-                                width={width - 40}
-                                height={200}
-                                chartConfig={{
-                                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                }}
-                                accessor="population"
-                                backgroundColor="transparent"
-                                paddingLeft="0"
-                                absolute
-                            />
-                        </View>
-
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.challengeCarousel}
-                            contentContainerStyle={styles.challengeCarouselContent}
-                        >
-                            {cuisines.map(item => (
-                                <View key={item.name} style={styles.carouselItemWrapper}>
-                                    {renderCuisineItem({ item, index: 0, separators: null as any })}
-                                </View>
+                        {/* Top 3 cuisines with meal counts */}
+                        <View style={{ paddingHorizontal: spacing.md }}>
+                            {cuisines.slice(0, 3).map((cuisine, index) => (
+                                <TouchableOpacity
+                                    key={cuisine.name}
+                                    style={{
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        paddingVertical: 10,
+                                        borderBottomWidth: index < 2 ? 1 : 0,
+                                        borderBottomColor: colors.mediumGray,
+                                    }}
+                                    onPress={() => {
+                                        if (onFilterChange && onTabChange) {
+                                            onFilterChange([{ type: 'cuisineType', value: cuisine.name, label: cuisine.name }]);
+                                            onTabChange(0);
+                                        }
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: '700', color: colors.textTertiary, marginRight: 10, width: 22 }}>
+                                            {index + 1}
+                                        </Text>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
+                                            {cuisine.name}
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontFamily: 'Inter', fontSize: 14, color: colors.textTertiary }}>
+                                        {cuisine.mealCount} {cuisine.mealCount === 1 ? 'meal' : 'meals'}
+                                    </Text>
+                                </TouchableOpacity>
                             ))}
-                        </ScrollView>
+                        </View>
+                        {/* All cuisines as small tags */}
+                        {cuisines.length > 3 && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
+                                {cuisines.slice(3).map(cuisine => (
+                                    <TouchableOpacity
+                                        key={cuisine.name}
+                                        onPress={() => {
+                                            if (onFilterChange && onTabChange) {
+                                                onFilterChange([{ type: 'cuisineType', value: cuisine.name, label: cuisine.name }]);
+                                                onTabChange(0);
+                                            }
+                                        }}
+                                        style={{
+                                            backgroundColor: colors.white,
+                                            borderWidth: 1,
+                                            borderColor: colors.mediumGray,
+                                            borderRadius: 16,
+                                            paddingVertical: 5,
+                                            paddingHorizontal: 12,
+                                        }}
+                                    >
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: colors.textSecondary }}>
+                                            {cuisine.name} ({cuisine.mealCount})
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
                     </>
                 )}
 
@@ -1918,6 +1985,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         numColumns={2}
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
+                        scrollEnabled={false}
+                        nestedScrollEnabled={true}
                         ListHeaderComponent={listHeaderComponent}
                         refreshControl={
                             <RefreshControl
