@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView } from 'react-native';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView, Modal } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
@@ -97,6 +97,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const [isLoading, setIsLoading] = useState(true);
   const [tabIndex, setTabIndex] = useState(initialTabIndex);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [bgColor, setBgColor] = useState('#FAF9F6'); // default cream
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [profileStats, setProfileStats] = useState({
     totalMeals: 0,
     averageRating: 0,
@@ -381,7 +383,10 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         }
         
         setUserProfile(profile);
-        
+        if (profile.background_color) {
+          setBgColor(profile.background_color);
+        }
+
         // Check follow status for other user's profile
         if (userId) {
           const followStatus = await isFollowing(userId);
@@ -432,6 +437,8 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               onStatsUpdate={(stats) => setProfileStats(stats)}
               onFilterChange={handleFilterChange}
               onTabChange={setTabIndex}
+              onThemePress={isOwnProfile ? () => setShowColorPicker(true) : undefined}
+              bgColor={bgColor}
             />
           </ErrorBoundary>
         );
@@ -488,7 +495,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollContainer}
@@ -507,7 +514,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           unreadCount={isOwnProfile ? unreadCount : undefined}
           onNotificationPress={isOwnProfile ? handleNotificationPress : undefined}
         />
-        
+
         {/* Tab navigation */}
         <View
           style={styles.tabBarContainer}
@@ -583,7 +590,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             }}
           />
         </View>
-        
+
         {/* Content area */}
         <View style={[
           styles.contentContainer,
@@ -636,6 +643,60 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         onSkip={handleTooltipSkip}
       />
       */}
+
+      {/* Background Color Picker Modal */}
+      <Modal
+        visible={showColorPicker}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowColorPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.colorModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowColorPicker(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation()} style={styles.colorModalCard}>
+            <Text style={styles.colorModalTitle}>Background Theme</Text>
+            <View style={styles.colorModalOptions}>
+              {[
+                { color: '#FAF9F6', label: 'Cream' },
+                { color: '#F0F4F8', label: 'Ice Blue' },
+                { color: '#F5F0F6', label: 'Lavender' },
+                { color: '#F0F5F1', label: 'Mint' },
+                { color: '#FFF5F5', label: 'Rose' },
+                { color: '#FDF6EE', label: 'Peach' },
+                { color: '#F5F5F0', label: 'Sage' },
+              ].map(({ color, label }) => (
+                <TouchableOpacity
+                  key={color}
+                  onPress={async () => {
+                    setBgColor(color);
+                    const currentUser = auth().currentUser;
+                    if (currentUser) {
+                      try {
+                        await firestore().collection('users').doc(currentUser.uid).update({
+                          background_color: color,
+                        });
+                      } catch (e) {
+                        console.error('Failed to save background color:', e);
+                      }
+                    }
+                    setShowColorPicker(false);
+                  }}
+                  style={[
+                    styles.colorModalOption,
+                    bgColor === color && styles.colorModalOptionSelected,
+                  ]}
+                >
+                  <View style={[styles.colorModalSwatch, { backgroundColor: color }]} />
+                  <Text style={[styles.colorModalLabel, bgColor === color && styles.colorModalLabelSelected]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -679,15 +740,15 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FAF9F6',
+    backgroundColor: 'transparent',
     paddingTop: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   filterArea: {
     paddingHorizontal: 15,
-    paddingTop: 8, // Increased to match bottom padding for evenness
-    paddingBottom: 8, // Reduced from 10 to 8
+    paddingTop: 8,
+    paddingBottom: 8,
     backgroundColor: '#FAF9F6',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
@@ -778,6 +839,60 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     tintColor: '#1a2b49',
+  },
+  colorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 320,
+    alignItems: 'center',
+  },
+  colorModalTitle: {
+    fontFamily: 'Inter',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 18,
+  },
+  colorModalOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  colorModalOption: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    width: 70,
+  },
+  colorModalOptionSelected: {
+    backgroundColor: 'rgba(91, 138, 114, 0.12)',
+  },
+  colorModalSwatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    marginBottom: 4,
+  },
+  colorModalLabel: {
+    fontFamily: 'Inter',
+    fontSize: 11,
+    color: '#999',
+  },
+  colorModalLabelSelected: {
+    color: '#5B8A72',
+    fontWeight: '600',
   },
 });
 

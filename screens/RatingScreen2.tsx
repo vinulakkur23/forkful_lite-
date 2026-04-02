@@ -1141,6 +1141,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
             city: cityInfo
           } : null,
           createdAt: firestore.FieldValue.serverTimestamp(),
+          photoTakenAt: photo?.timestamp ? new Date(photo.timestamp * 1000) : null,
           sessionId: sessionId,
           platform: Platform.OS,
           appVersion: '1.0.0',

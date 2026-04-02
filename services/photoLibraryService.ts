@@ -12,6 +12,7 @@ interface PhotoAsset {
   fromGallery: boolean;
   assetId?: string;
   exifData?: any;
+  timestamp?: number; // Photo creation date (seconds since epoch)
   location?: {
     latitude: number;
     longitude: number;
@@ -51,6 +52,7 @@ export const getPhotoWithMetadata = async (): Promise<PhotoAsset | null> => {
         uri: photoAsset.uri,
         hasLocation: photoAsset.hasLocation,
         location: photoAsset.location,
+        creationTimestamp: photoAsset.creationTimestamp,
       });
       
       // Extra debug for photo location
@@ -74,7 +76,14 @@ export const getPhotoWithMetadata = async (): Promise<PhotoAsset | null> => {
         fromGallery: true,
         assetId: photoAsset.assetId,
         location: photoAsset.location,
+        timestamp: photoAsset.creationTimestamp && photoAsset.creationTimestamp > 0
+          ? photoAsset.creationTimestamp
+          : undefined,
       };
+
+      if (result.timestamp) {
+        console.log('📅 Photo creation date from native module:', new Date(result.timestamp * 1000).toISOString());
+      }
       
       // PRIORITIZE PHASSET DATA - Only fall back if photo has no location
       console.log('=== PHASSET LOCATION EXTRACTION STATUS ===');
@@ -214,6 +223,7 @@ const getPhotoWithCameraRoll = async (): Promise<PhotoAsset | null> => {
             fromGallery: true,
             assetId: selectedAsset.id,
             exifData: photo.exif,
+            timestamp: photo.timestamp ? photo.timestamp : undefined, // Photo creation date (seconds since epoch)
             location: locationInfo,
           };
         }

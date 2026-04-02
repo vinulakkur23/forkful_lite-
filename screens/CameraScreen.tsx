@@ -23,6 +23,7 @@ import ImageCropPicker from 'react-native-image-crop-picker';
 import Exif from 'react-native-exif';
 import { getMealSuggestions } from '../services/mealService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
+import PhotoGPS from '../services/photoGPSModule';
 import { identifyDishFromPhoto } from '../services/dishIdentificationService';
 import { extractDishRatingCriteria } from '../services/dishRatingCriteriaService';
 import { extractRatingStatements } from '../services/ratingStatementsService';
@@ -209,6 +210,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           source: photoLocation.source || 'unknown'
         } : null,
         createdAt: firestore.FieldValue.serverTimestamp(),
+        photoTakenAt: new Date(), // Camera capture = photo taken now
         platform: Platform.OS,
         appVersion: '1.0.0',
       };
@@ -681,10 +683,25 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
       
+      // Extract photo creation date directly from PHAsset via native module
+      let photoTimestamp: number | undefined = photoAsset.timestamp;
+      if (!photoTimestamp && photoAsset.assetId) {
+        try {
+          const nativeTimestamp = await PhotoGPS.getPhotoCreationDate(photoAsset.assetId);
+          if (nativeTimestamp) {
+            photoTimestamp = nativeTimestamp;
+            console.log("📅 Photo creation date from PHAsset:", new Date(nativeTimestamp * 1000).toISOString());
+          }
+        } catch (dateErr) {
+          console.warn("📅 Could not extract date from PHAsset:", dateErr);
+        }
+      }
+
       console.log("Photo selected from gallery:", {
         uri: photoAsset.uri,
         hasLocation: !!photoAsset.location,
         location: photoAsset.location,
+        photoTimestamp,
       });
       
       // Add a timestamp to create a unique navigation key
@@ -704,6 +721,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             originalUri: photoAsset.originalUri,
             fromGallery: true,
             assetId: photoAsset.assetId,
+            timestamp: photoTimestamp,
           },
           location: photoAsset.location || location,
           exifData: photoAsset.exifData,

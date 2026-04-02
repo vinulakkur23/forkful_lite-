@@ -47,13 +47,13 @@ import { getActiveChallenges, getCompletedChallenges, getUserChallenges, UserCha
 import { colors, typography, spacing, shadows, addAlpha } from '../themes';
 // Restaurant sections
 import DraggableRestaurantList from '../components/DraggableRestaurantList';
+import MealCalendar from '../components/MealCalendar';
 // NestableScrollContainer moved to FoodPassportWrapper — this screen uses a plain View
-import AddSectionModal from '../components/AddSectionModal';
+// AddSectionModal removed — section creation now handled inline in DraggableRestaurantList modal
 import {
   RestaurantSection,
   loadRestaurantSections,
   saveRestaurantSections,
-  createSection,
   deleteSection as deleteSectionService,
   reconcileRestaurants,
 } from '../services/restaurantSectionsService';
@@ -72,6 +72,8 @@ type Props = {
   onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number; followersCount: number }) => void;
   onFilterChange?: (filters: FilterItem[] | null) => void;
   onTabChange?: (tabIndex: number) => void;
+  onThemePress?: () => void;
+  bgColor?: string;
 };
 
 interface MealEntry {
@@ -119,6 +121,9 @@ interface MealEntry {
   quick_criteria_result?: any;
   isUnrated?: boolean;
   photoSource?: string;
+  pixel_art_url?: string;
+  pixel_art_data?: string;
+  photoTakenAt?: any;
 }
 
 const { width } = Dimensions.get('window');
@@ -151,7 +156,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange, onThemePress, bgColor }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -210,7 +215,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const [restaurantsLoading, setRestaurantsLoading] = useState(true);
     const [restaurantSections, setRestaurantSections] = useState<RestaurantSection[]>([]);
     const [unsectionedOrder, setUnsectionedOrder] = useState<string[]>([]);
-    const [showAddSectionModal, setShowAddSectionModal] = useState(false);
 
     useEffect(() => {
         // Initialize GoogleSignin
@@ -349,7 +353,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     mealType: data.mealType || 'Restaurant',
                     comments: data.comments || { liked: '', disliked: '' },
                     isUnrated: data.isUnrated,
-                    photoSource: data.photoSource
+                    photoSource: data.photoSource,
+                    pixel_art_url: data.pixel_art_url || undefined,
+                    pixel_art_data: data.pixel_art_data || undefined,
+                    photoTakenAt: data.photoTakenAt || undefined,
                 });
             });
 
@@ -1613,10 +1620,25 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         style={styles.logoImage}
                         resizeMode="contain"
                     />
+                    {onThemePress && (
+                        <TouchableOpacity
+                            onPress={onThemePress}
+                            style={{ position: 'absolute', right: 4, top: 4, padding: 6 }}
+                        >
+                            <View style={{
+                                width: 16,
+                                height: 16,
+                                borderRadius: 8,
+                                backgroundColor: bgColor || '#FAF9F6',
+                                borderWidth: 1.5,
+                                borderColor: '#BBB',
+                            }} />
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
         </>
-    ), [userId]);
+    ), [userId, onThemePress, bgColor]);
 
     // Memoize ListFooterComponent — only recompute when accolades data changes
     const listFooterComponent = useMemo(() => (
@@ -1641,6 +1663,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         </ScrollView>
                     </>
                 )}
+
+                {/* Meal Calendar */}
+                <MealCalendar
+                    meals={meals}
+                    onMealPress={(meal) => {
+                        navigation.navigate('MealDetail', {
+                            mealId: meal.id,
+                        } as any);
+                    }}
+                />
 
                 {/* All Challenges Section */}
                 {/* Food Challenges — temporarily disabled (code preserved for future use)
@@ -1688,9 +1720,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     }}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: '700', color: colors.textTertiary, marginRight: 10, width: 22 }}>
-                                            {index + 1}
-                                        </Text>
+                                        <Image
+                                            source={
+                                                index === 0 ? require('../assets/icons/rank_1st.png') :
+                                                index === 1 ? require('../assets/icons/rank_2nd.png') :
+                                                require('../assets/icons/rank_3rd.png')
+                                            }
+                                            style={{ width: 24, height: 24, marginRight: 10 }}
+                                            resizeMode="contain"
+                                        />
                                         <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
                                             {city.name}
                                         </Text>
@@ -1757,9 +1795,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     }}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: '700', color: colors.textTertiary, marginRight: 10, width: 22 }}>
-                                            {index + 1}
-                                        </Text>
+                                        <Image
+                                            source={
+                                                index === 0 ? require('../assets/icons/rank_1st.png') :
+                                                index === 1 ? require('../assets/icons/rank_2nd.png') :
+                                                require('../assets/icons/rank_3rd.png')
+                                            }
+                                            style={{ width: 24, height: 24, marginRight: 10 }}
+                                            resizeMode="contain"
+                                        />
                                         <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
                                             {cuisine.name}
                                         </Text>
@@ -1808,16 +1852,18 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         sections={restaurantSections}
                         unsectionedOrder={unsectionedOrder}
                         isOwnProfile={isOwnProfile}
-                        onReorder={async (newSections, newUnsectioned) => {
-                            setRestaurantSections(newSections);
-                            setUnsectionedOrder(newUnsectioned);
+                        onReorder={(newSections, newUnsectioned) => {
+                            // Save to Firestore only — don't update state to avoid expensive footer rebuild
+                            // that causes the UI to freeze. The new order will load on next screen visit.
                             const currentUserId = auth().currentUser?.uid;
                             if (currentUserId) {
-                                await saveRestaurantSections(currentUserId, newSections, newUnsectioned);
+                                saveRestaurantSections(currentUserId, newSections, newUnsectioned).catch(e =>
+                                    console.error('Failed to save restaurant sections:', e)
+                                );
                             }
                         }}
                         onRestaurantPress={handleRestaurantPress}
-                        onAddSection={() => setShowAddSectionModal(true)}
+                        onAddSection={() => {}}
                         onDeleteSection={async (sectionId) => {
                             const currentUserId = auth().currentUser?.uid;
                             if (currentUserId) {
@@ -1833,19 +1879,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     />
                 )}
 
-                {/* Add Section Modal */}
-                <AddSectionModal
-                    visible={showAddSectionModal}
-                    existingSectionNames={restaurantSections.map(s => s.name)}
-                    onClose={() => setShowAddSectionModal(false)}
-                    onCreate={async (name) => {
-                        const currentUserId = auth().currentUser?.uid;
-                        if (currentUserId) {
-                            const newSection = await createSection(currentUserId, name);
-                            setRestaurantSections(prev => [...prev, newSection]);
-                        }
-                    }}
-                />
             </View>
 
             {/* Share button - only show if user has meals and it's their own profile */}
@@ -1865,7 +1898,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             )}
         </View>
-    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, showAddSectionModal, isOwnProfile, filteredMeals.length, userId]);
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId]);
 
     // Function to render each meal item — memoized with useCallback
     const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {
@@ -1948,19 +1981,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         <Text style={styles.restaurantName} numberOfLines={1}>{item.restaurant}</Text>
                     )}
 
-                    {/* Rating emoji/pixel art in bottom right */}
+                    {/* Rating emoji in bottom right */}
                     {!isUnrated && (
                         <View style={styles.ratingOverlay}>
-                            {/* Show pixel art icon if available, otherwise fallback to emoji rating */}
-                            {(item.pixel_art_url || item.pixel_art_data) ? (
-                                <Image
-                                    source={{ uri: item.pixel_art_url || `data:image/png;base64,${item.pixel_art_data}` }}
-                                    style={{ width: 28, height: 28 }}
-                                    resizeMode="contain"
-                                />
-                            ) : (
-                                <EmojiDisplay rating={item.rating} size={22} />
-                            )}
+                            <EmojiDisplay rating={item.rating} size={22} />
                         </View>
                     )}
                 </View>
@@ -2196,13 +2220,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.lightTan,
+        backgroundColor: 'transparent',
     },
     logoContainer: {
         alignItems: 'center',
         paddingTop: spacing.sm,
         paddingBottom: spacing.md,
-        backgroundColor: colors.lightTan,
+        backgroundColor: 'transparent',
     },
     logoText: {
         ...typography.h1,

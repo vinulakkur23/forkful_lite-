@@ -94,7 +94,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                             "uri": tempURL.path,
                             "width": image.size.width,
                             "height": image.size.height,
-                            "hasLocation": false
+                            "hasLocation": false,
+                            "creationTimestamp": 0
                         ]
                         strongSelf.currentResolver?(resultDict)
                         strongSelf.currentResolver = nil
@@ -102,7 +103,7 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                     }
                     return
                 }
-                
+
                 // Fetch the PHAsset
                 let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
                 guard let asset = fetchResult.firstObject else {
@@ -112,7 +113,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                             "uri": tempURL.path,
                             "width": image.size.width,
                             "height": image.size.height,
-                            "hasLocation": false
+                            "hasLocation": false,
+                            "creationTimestamp": 0
                         ]
                         strongSelf.currentResolver?(resultDict)
                         strongSelf.currentResolver = nil
@@ -134,7 +136,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                                 "longitude": location.coordinate.longitude,
                                 "source": "phasset"
                             ],
-                            "assetId": assetId
+                            "assetId": assetId,
+                            "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                         ]
                         strongSelf.currentResolver?(resultDict)
                         strongSelf.currentResolver = nil
@@ -142,7 +145,7 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                     }
                     return
                 }
-                
+
                 // Try to get location from EXIF data as a fallback
                 let options = PHContentEditingInputRequestOptions()
                 options.isNetworkAccessAllowed = true
@@ -162,7 +165,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                                         "width": image.size.width,
                                         "height": image.size.height,
                                         "hasLocation": false,
-                                        "assetId": assetId
+                                        "assetId": assetId,
+                                        "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                     ]
                                     strongSelf.currentResolver?(resultDict)
                                     strongSelf.currentResolver = nil
@@ -200,7 +204,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                                     "height": image.size.height,
                                     "hasLocation": hasCoordinates,
                                     "location": hasCoordinates ? locationData : nil,
-                                    "assetId": assetId
+                                    "assetId": assetId,
+                                    "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                 ]
                                 strongSelf.currentResolver?(resultDict)
                                 strongSelf.currentResolver = nil
@@ -214,7 +219,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                                     "width": image.size.width,
                                     "height": image.size.height,
                                     "hasLocation": false,
-                                    "assetId": assetId
+                                    "assetId": assetId,
+                                    "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                 ]
                                 strongSelf.currentResolver?(resultDict)
                                 strongSelf.currentResolver = nil
@@ -229,7 +235,8 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
                                 "width": image.size.width,
                                 "height": image.size.height,
                                 "hasLocation": false,
-                                "assetId": assetId
+                                "assetId": assetId,
+                                "creationTimestamp": 0
                             ]
                             strongSelf.currentResolver?(resultDict)
                             strongSelf.currentResolver = nil
@@ -536,5 +543,34 @@ extension PhotoGPSModule: CLLocationManagerDelegate {
         // Clear callbacks
         locationResolver = nil
         locationRejecter = nil
+    }
+
+    // MARK: - Get Photo Creation Date
+
+    @objc(getPhotoCreationDate:resolver:rejecter:)
+    func getPhotoCreationDate(assetId: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        print("PhotoGPS: Getting creation date for asset: \(assetId)")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
+            guard let asset = fetchResult.firstObject else {
+                print("PhotoGPS: Asset not found for creation date")
+                resolve(NSNull())
+                return
+            }
+
+            if let creationDate = asset.creationDate {
+                let timestamp = creationDate.timeIntervalSince1970
+                print("PhotoGPS: ✅ Creation date found: \(creationDate), timestamp: \(timestamp)")
+                DispatchQueue.main.async {
+                    resolve(NSNumber(value: timestamp))
+                }
+            } else {
+                print("PhotoGPS: ❌ No creation date on asset")
+                DispatchQueue.main.async {
+                    resolve(NSNull())
+                }
+            }
+        }
     }
 }

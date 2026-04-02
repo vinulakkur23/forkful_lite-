@@ -29,4 +29,9 @@ RCT_EXTERN_METHOD(getCurrentLocation:
                   (RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(getPhotoCreationDate:
+                  (NSString *)assetId
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

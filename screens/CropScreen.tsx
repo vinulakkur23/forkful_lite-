@@ -251,6 +251,7 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         uri: finalImageUri,  // Use the processed image
         width: croppedImage.width,
         height: croppedImage.height,
+        timestamp: route.params.photo?.timestamp, // Pass through photo creation date
       };
 
       const safeLocation = locationToUse ? {

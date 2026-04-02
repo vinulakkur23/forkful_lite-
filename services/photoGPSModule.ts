@@ -94,6 +94,24 @@ const PhotoGPS = {
     }
   },
 
+  // Get photo creation date from PHAsset
+  async getPhotoCreationDate(assetId: string): Promise<number | null> {
+    if (Platform.OS !== 'ios' || !assetId) {
+      return null;
+    }
+    try {
+      const timestamp = await PhotoGPSModule.getPhotoCreationDate(assetId);
+      if (timestamp && typeof timestamp === 'number' && timestamp > 0) {
+        console.log('📅 PhotoGPS: Got creation date:', new Date(timestamp * 1000).toISOString());
+        return timestamp;
+      }
+      return null;
+    } catch (error) {
+      console.error('📅 PhotoGPS: Error getting creation date:', error);
+      return null;
+    }
+  },
+
   // Get current device location with timeout and retry logic
   async getCurrentLocation(timeoutMs: number = 5000, retryCount: number = 2): Promise<LocationData | null> {
     if (Platform.OS !== 'ios') {

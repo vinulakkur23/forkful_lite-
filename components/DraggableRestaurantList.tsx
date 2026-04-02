@@ -306,65 +306,67 @@ const DraggableRestaurantList: React.FC<Props> = ({
         })}
       </View>
 
-      {/* Full-screen reorder modal */}
-      <Modal
-        visible={showReorderModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowReorderModal(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          {/* Modal header */}
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowReorderModal(false)} style={styles.modalCancelButton}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Reorder Restaurants</Text>
-            <TouchableOpacity onPress={handleDone} style={styles.modalDoneButton}>
-              <Text style={styles.modalDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Add section */}
-          {showAddSectionInput ? (
-            <View style={styles.addSectionInputRow}>
-              <TextInput
-                style={styles.addSectionInput}
-                placeholder="Section name (e.g., Favorites)"
-                placeholderTextColor="#999"
-                value={newSectionName}
-                onChangeText={setNewSectionName}
-                autoFocus
-                autoCapitalize="words"
-                onSubmitEditing={handleAddSection}
-                maxLength={40}
-              />
-              <TouchableOpacity onPress={handleAddSection} style={styles.addSectionConfirm}>
-                <Text style={styles.addSectionConfirmText}>Add</Text>
+      {/* Full-screen reorder modal — only render contents when visible to ensure clean gesture handler lifecycle */}
+      {showReorderModal && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowReorderModal(false)}
+        >
+          <SafeAreaView style={styles.modalContainer}>
+            {/* Modal header */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowReorderModal(false)} style={styles.modalCancelButton}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setShowAddSectionInput(false); setNewSectionName(''); }} style={styles.addSectionCancelBtn}>
-                <Text style={styles.addSectionCancelText}>×</Text>
+              <Text style={styles.modalTitle}>Reorder Restaurants</Text>
+              <TouchableOpacity onPress={handleDone} style={styles.modalDoneButton}>
+                <Text style={styles.modalDoneText}>Done</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => setShowAddSectionInput(true)} style={styles.addSectionRow}>
-              <View style={styles.addSectionIcon}>
-                <Text style={styles.addSectionIconText}>+</Text>
-              </View>
-              <Text style={styles.addSectionText}>Add Section</Text>
-            </TouchableOpacity>
-          )}
 
-          {/* Draggable list — owns the full screen, no scroll conflict */}
-          <DraggableFlatList
-            data={modalListItems}
-            renderItem={renderDragItem}
-            keyExtractor={(item) => item.key}
-            onDragEnd={({ data }) => setModalListItems(data)}
-            containerStyle={[styles.modalListContainer, { maxHeight: Dimensions.get('window').height - 180 }]}
-          />
-        </SafeAreaView>
-      </Modal>
+            {/* Add section */}
+            {showAddSectionInput ? (
+              <View style={styles.addSectionInputRow}>
+                <TextInput
+                  style={styles.addSectionInput}
+                  placeholder="Section name (e.g., Favorites)"
+                  placeholderTextColor="#999"
+                  value={newSectionName}
+                  onChangeText={setNewSectionName}
+                  autoFocus
+                  autoCapitalize="words"
+                  onSubmitEditing={handleAddSection}
+                  maxLength={40}
+                />
+                <TouchableOpacity onPress={handleAddSection} style={styles.addSectionConfirm}>
+                  <Text style={styles.addSectionConfirmText}>Add</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setShowAddSectionInput(false); setNewSectionName(''); }} style={styles.addSectionCancelBtn}>
+                  <Text style={styles.addSectionCancelText}>×</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => setShowAddSectionInput(true)} style={styles.addSectionRow}>
+                <View style={styles.addSectionIcon}>
+                  <Text style={styles.addSectionIconText}>+</Text>
+                </View>
+                <Text style={styles.addSectionText}>Add Section</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Draggable list — owns the full screen, no scroll conflict */}
+            <DraggableFlatList
+              data={modalListItems}
+              renderItem={renderDragItem}
+              keyExtractor={(item) => item.key}
+              onDragEnd={({ data }) => setModalListItems(data)}
+              containerStyle={[styles.modalListContainer, { maxHeight: Dimensions.get('window').height - 180 }]}
+            />
+          </SafeAreaView>
+        </Modal>
+      )}
     </View>
   );
 };

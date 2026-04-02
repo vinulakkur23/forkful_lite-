@@ -442,7 +442,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                             "uri": tempURL.path,
                             "width": image.size.width,
                             "height": image.size.height,
-                            "hasLocation": false
+                            "hasLocation": false,
+                            "creationTimestamp": 0
                         ]
                         strongSelf.currentResolver?(resultDict)
                         strongSelf.currentResolver = nil
@@ -481,7 +482,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                         "width": image.size.width,
                                         "height": image.size.height,
                                         "hasLocation": false,
-                                        "assetId": assetId
+                                        "assetId": assetId,
+                                        "creationTimestamp": 0
                                     ]
                                     strongSelf.currentResolver?(resultDict)
                                     strongSelf.currentResolver = nil
@@ -517,7 +519,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                         "accuracy": location.horizontalAccuracy,
                                         "timestamp": location.timestamp.timeIntervalSince1970
                                     ],
-                                    "assetId": assetId
+                                    "assetId": assetId,
+                                    "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                 ]
                                 strongSelf.currentResolver?(resultDict)
                                 strongSelf.currentResolver = nil
@@ -563,7 +566,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                         "width": image.size.width,
                                         "height": image.size.height,
                                         "hasLocation": false,
-                                        "assetId": assetId
+                                        "assetId": assetId,
+                                        "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                     ]
                                     strongSelf.currentResolver?(resultDict)
                                     strongSelf.currentResolver = nil
@@ -601,7 +605,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                     "height": image.size.height,
                                     "hasLocation": hasCoordinates,
                                     "location": hasCoordinates ? locationData : nil,
-                                    "assetId": assetId
+                                    "assetId": assetId,
+                                    "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                 ]
                                 strongSelf.currentResolver?(resultDict)
                                 strongSelf.currentResolver = nil
@@ -615,7 +620,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                     "width": image.size.width,
                                     "height": image.size.height,
                                     "hasLocation": false,
-                                    "assetId": assetId
+                                    "assetId": assetId,
+                                    "creationTimestamp": asset.creationDate?.timeIntervalSince1970 ?? 0
                                 ]
                                 strongSelf.currentResolver?(resultDict)
                                 strongSelf.currentResolver = nil
@@ -630,7 +636,8 @@ extension PhotoGPSModule: PHPickerViewControllerDelegate {
                                 "width": image.size.width,
                                 "height": image.size.height,
                                 "hasLocation": false,
-                                "assetId": assetId
+                                "assetId": assetId,
+                                "creationTimestamp": 0
                             ]
                             strongSelf.currentResolver?(resultDict)
                             strongSelf.currentResolver = nil
