@@ -28,6 +28,7 @@ import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
 import EmojiDisplay from '../components/EmojiDisplay';
+import { PixelArtChest, PixelArtShelfModal } from '../components/PixelArtShelf';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
@@ -206,6 +207,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // State for accolades section
     const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
     const [emojisLoading, setEmojisLoading] = useState(true);
+    const [showMealsModal, setShowMealsModal] = useState(false);
     const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
     const [challengesLoading, setChallengesLoading] = useState(true);
     const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
@@ -1387,15 +1389,6 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     };
     
     // Render functions for accolades sections
-    const renderEmojiItem = ({ item }: { item: string }) => (
-        <View style={styles.emojiItem}>
-            <Image
-                source={{ uri: item }}
-                style={styles.emojiImage}
-                resizeMode="contain"
-            />
-        </View>
-    );
 
     const renderChallengeItem = ({ item }: { item: UserChallenge }) => {
         const isCompleted = item.status === 'completed';
@@ -1670,23 +1663,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         <View>
             {/* Accolades Section */}
             <View style={styles.accoladesContainer}>
-                {/* I've Eaten Section - Pixel Art Emojis */}
+                {/* I've Eaten Section - Chest icon opens collection modal */}
                 {!emojisLoading && pixelArtEmojis.length > 0 && (
-                    <>
-                        <Text style={styles.sectionTitle}>Meals Eaten:</Text>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.challengeCarousel}
-                            contentContainerStyle={styles.challengeCarouselContent}
-                        >
-                            {pixelArtEmojis.map((item, index) => (
-                                <View key={`emoji_${index}`} style={styles.emojiCarouselWrapper}>
-                                    {renderEmojiItem({ item, index: 0, separators: null as any })}
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </>
+                    <PixelArtChest
+                        count={pixelArtEmojis.length}
+                        onPress={() => setShowMealsModal(true)}
+                    />
                 )}
 
                 {/* Meal Calendar */}
@@ -2238,6 +2220,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     </View>
                 </View>
             </Modal>
+
+            {/* Meals collection modal — rendered outside useMemo to support state */}
+            <PixelArtShelfModal
+                visible={showMealsModal}
+                onClose={() => setShowMealsModal(false)}
+                emojis={pixelArtEmojis}
+                isOwnProfile={isOwnProfile}
+            />
         </SafeAreaView>
     );
 };
@@ -2652,20 +2642,6 @@ const styles = StyleSheet.create({
     },
     carouselItemWrapper: {
         marginRight: spacing.sm,
-    },
-    emojiCarouselWrapper: {
-        marginRight: spacing.xs,
-    },
-    emojiItem: {
-        width: 50,
-        height: 50,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emojiImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: spacing.borderRadius.md,
     },
     cityItem: {
         width: CITY_SIZE,
