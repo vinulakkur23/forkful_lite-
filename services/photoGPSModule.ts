@@ -122,8 +122,8 @@ const PhotoGPS = {
       try {
         console.log(`PhotoGPS getCurrentLocation attempt ${attempt}/${retryCount} with ${timeoutMs}ms timeout`);
         
-        // Pass timeout to the native module directly
-        const result = await PhotoGPSModule.getCurrentLocation(timeoutMs);
+        // Native module has its own 10s timeout - don't pass args (bridge expects only resolve/reject)
+        const result = await PhotoGPSModule.getCurrentLocation();
         
         if (result) {
           console.log(`Successfully got current location on attempt ${attempt}:`, result);

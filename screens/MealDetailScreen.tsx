@@ -89,6 +89,11 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [editValue, setEditValue] = useState('');
   const [editModalVisible, setEditModalVisible] = useState(false);
 
+  // State for adding new tags
+  const [showAddTagModal, setShowAddTagModal] = useState(false);
+  const [addTagType, setAddTagType] = useState<'city' | 'cuisine' | 'tag' | null>(null);
+  const [addTagValue, setAddTagValue] = useState('');
+
   // Ref for ScrollView to enable auto-scrolling for comments
   const scrollViewRef = useRef<ScrollView>(null);
   
@@ -631,13 +636,6 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       const updateData: any = {};
 
       switch (editingField) {
-        case 'city':
-          // Update all city fields
-          updateData['location.city'] = trimmedValue;
-          updateData['city'] = trimmedValue;
-          updateData['metadata_enriched.city'] = trimmedValue;
-          break;
-
         case 'cuisine':
           // Update cuisine field
           updateData['metadata_enriched.cuisine_type'] = trimmedValue;
@@ -679,6 +677,192 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setEditModalVisible(false);
     setEditingField(null);
     setEditValue('');
+  };
+
+  // Helper to get all cities for this meal (from cities array + legacy single fields)
+  const getMealCities = (): string[] => {
+    if (!meal) return [];
+    const citiesArray: string[] = meal.cities || [];
+    // If the cities array is empty, build from legacy single-value fields
+    if (citiesArray.length === 0) {
+      const legacyCity = meal.location?.city || meal.city || meal.metadata_enriched?.city;
+      if (legacyCity) return [legacyCity];
+    }
+    return citiesArray;
+  };
+
+  // Handle adding a new tag
+  const handleAddTagSelect = (type: 'city' | 'cuisine' | 'tag') => {
+    setShowAddTagModal(false);
+    setAddTagType(type);
+    setAddTagValue('');
+
+    if (type === 'city') {
+      // City is now additive (like custom tags) — use addTagValue flow
+      setTimeout(() => {
+        setEditModalVisible(true);
+      }, 300);
+    } else if (type === 'cuisine') {
+      // Cuisine still replaces
+      setEditingField('cuisine');
+      setEditValue('');
+      setEditModalVisible(true);
+    } else {
+      // Custom tag
+      setTimeout(() => {
+        setEditModalVisible(true);
+      }, 300);
+    }
+  };
+
+  // Save custom tag
+  const handleSaveCustomTag = async () => {
+    if (!mealId || !addTagValue.trim()) return;
+
+    try {
+      const trimmedTag = addTagValue.trim();
+      const currentTags = meal?.custom_tags || [];
+
+      // Don't add duplicates
+      if (currentTags.some((t: string) => t.toLowerCase() === trimmedTag.toLowerCase())) {
+        Alert.alert('Duplicate', 'This tag already exists');
+        return;
+      }
+
+      await firestore()
+        .collection('mealEntries')
+        .doc(mealId)
+        .update({
+          custom_tags: firestore.FieldValue.arrayUnion(trimmedTag)
+        });
+
+      console.log(`Added custom tag: ${trimmedTag}`);
+      setEditModalVisible(false);
+      setAddTagType(null);
+      setAddTagValue('');
+      await fetchMealDetails();
+    } catch (error) {
+      console.error('Error adding custom tag:', error);
+      Alert.alert('Error', 'Failed to add tag');
+    }
+  };
+
+  // Delete custom tag
+  const handleDeleteCustomTag = (tag: string) => {
+    if (!isOwnMeal() || !mealId) return;
+
+    Alert.alert('Remove Tag', `Remove "${tag}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await firestore()
+              .collection('mealEntries')
+              .doc(mealId)
+              .update({
+                custom_tags: firestore.FieldValue.arrayRemove(tag)
+              });
+            console.log(`Removed custom tag: ${tag}`);
+            await fetchMealDetails();
+          } catch (error) {
+            console.error('Error removing custom tag:', error);
+            Alert.alert('Error', 'Failed to remove tag');
+          }
+        }
+      }
+    ]);
+  };
+
+  // Save city (additive — appends to cities array)
+  const handleSaveCity = async () => {
+    if (!mealId || !addTagValue.trim()) return;
+
+    try {
+      const trimmedCity = addTagValue.trim();
+      const currentCities = getMealCities();
+
+      // Don't add duplicates (case-insensitive)
+      if (currentCities.some((c: string) => c.toLowerCase() === trimmedCity.toLowerCase())) {
+        Alert.alert('Duplicate', 'This city is already added');
+        return;
+      }
+
+      const newCities = [...currentCities, trimmedCity];
+
+      // Update Firestore: set cities array + keep legacy city field as primary
+      const updateData: any = {
+        cities: newCities,
+      };
+      // If this is the first city, also set legacy fields for backward compat
+      if (currentCities.length === 0) {
+        updateData['location.city'] = trimmedCity;
+        updateData['city'] = trimmedCity;
+        updateData['metadata_enriched.city'] = trimmedCity;
+      }
+
+      await firestore()
+        .collection('mealEntries')
+        .doc(mealId)
+        .update(updateData);
+
+      console.log(`Added city: ${trimmedCity}, all cities: ${newCities}`);
+      setEditModalVisible(false);
+      setAddTagType(null);
+      setAddTagValue('');
+      await fetchMealDetails();
+      await refreshUserCounts();
+    } catch (error) {
+      console.error('Error adding city:', error);
+      Alert.alert('Error', 'Failed to add city');
+    }
+  };
+
+  // Delete a city from cities array
+  const handleDeleteCity = (city: string) => {
+    if (!isOwnMeal() || !mealId) return;
+
+    Alert.alert('Remove City', `Remove "${city}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const currentCities = getMealCities();
+            const newCities = currentCities.filter((c: string) => c !== city);
+
+            const updateData: any = {
+              cities: newCities,
+            };
+
+            // Update legacy fields to the first remaining city (or clear them)
+            if (newCities.length > 0) {
+              updateData['location.city'] = newCities[0];
+              updateData['city'] = newCities[0];
+              updateData['metadata_enriched.city'] = newCities[0];
+            } else {
+              updateData['location.city'] = firestore.FieldValue.delete();
+              updateData['city'] = firestore.FieldValue.delete();
+              updateData['metadata_enriched.city'] = firestore.FieldValue.delete();
+            }
+
+            await firestore()
+              .collection('mealEntries')
+              .doc(mealId)
+              .update(updateData);
+
+            console.log(`Removed city: ${city}`);
+            await fetchMealDetails();
+            await refreshUserCounts();
+          } catch (error) {
+            console.error('Error removing city:', error);
+            Alert.alert('Error', 'Failed to remove city');
+          }
+        }
+      }
+    ]);
   };
 
   // Navigate back to the correct screen
@@ -1030,9 +1214,48 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         {/* Enhanced Metadata Tags Section */}
-        {(meal.metadata_enriched || meal.enhanced_metadata_facts?.metadata || meal.quick_criteria_result || meal.aiMetadata) && (
+        {(meal.metadata_enriched || meal.enhanced_metadata_facts?.metadata || meal.quick_criteria_result || meal.aiMetadata || (meal.custom_tags && meal.custom_tags.length > 0) || isOwnMeal()) && (
           <View style={styles.metadataSection}>
             <View style={styles.metadataTagsContainer}>
+              {/* City tags — supports multiple cities per meal */}
+              {getMealCities().map((cityName: string, index: number) => (
+                <TouchableOpacity
+                  key={`city-${index}`}
+                  style={[styles.metadataTag, styles.cityTag, isOwnMeal() && styles.editableTag]}
+                  onLongPress={() => handleDeleteCity(cityName)}
+                  activeOpacity={isOwnMeal() ? 0.7 : 1}
+                >
+                  <Text style={styles.metadataTagText}>
+                    {cityName}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* Cuisine Type — moved to top for prominence */}
+              {((meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type !== 'Unknown') ||
+                (meal.enhanced_metadata_facts?.metadata?.cuisine_type && meal.enhanced_metadata_facts.metadata.cuisine_type !== 'Unknown') ||
+                (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type !== 'Unknown') ||
+                (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown')) && (
+                <TouchableOpacity
+                  style={[styles.metadataTag, styles.cuisineTag, isOwnMeal() && styles.editableTag]}
+                  onLongPress={() => handleMetadataLongPress('cuisine',
+                    meal.metadata_enriched?.cuisine_type ||
+                    meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
+                    meal.quick_criteria_result?.cuisine_type ||
+                    meal.aiMetadata?.cuisineType
+                  )}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.metadataTagText}>
+                    {meal.metadata_enriched?.cuisine_type ||
+                     meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
+                     meal.quick_criteria_result?.cuisine_type ||
+                     meal.aiMetadata?.cuisineType}
+                    {isOwnMeal() ? ' ✎' : ''}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {/* Dish Specific - prioritize metadata_enriched */}
               {((meal.metadata_enriched?.dish_specific && meal.metadata_enriched.dish_specific !== 'Unknown') ||
                 (meal.quick_criteria_result?.dish_specific && meal.quick_criteria_result.dish_specific !== 'Unknown')) && (
@@ -1053,32 +1276,8 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
               )}
 
-              {/* Cuisine Type - prioritize metadata_enriched */}
-              {((meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type !== 'Unknown') ||
-                (meal.enhanced_metadata_facts?.metadata?.cuisine_type && meal.enhanced_metadata_facts.metadata.cuisine_type !== 'Unknown') ||
-                (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type !== 'Unknown') ||
-                (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType !== 'Unknown')) && (
-                <TouchableOpacity
-                  style={styles.metadataTag}
-                  onLongPress={() => handleMetadataLongPress('cuisine',
-                    meal.metadata_enriched?.cuisine_type ||
-                    meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
-                    meal.quick_criteria_result?.cuisine_type ||
-                    meal.aiMetadata?.cuisineType
-                  )}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.metadataTagText}>
-                    {meal.metadata_enriched?.cuisine_type ||
-                     meal.enhanced_metadata_facts?.metadata?.cuisine_type ||
-                     meal.quick_criteria_result?.cuisine_type ||
-                     meal.aiMetadata?.cuisineType}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
               {/* Food Type - from old AI metadata if available */}
-              {meal.aiMetadata?.foodType && meal.aiMetadata.foodType.length > 0 && 
+              {meal.aiMetadata?.foodType && meal.aiMetadata.foodType.length > 0 &&
                !meal.aiMetadata.foodType.includes('Unknown') && (
                 <>
                   {Array.isArray(meal.aiMetadata.foodType) ? (
@@ -1094,7 +1293,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   )}
                 </>
               )}
-              
+
               {/* Meal Type - prioritize enhanced metadata, fallback to old AI metadata */}
               {((meal.enhanced_metadata_facts?.metadata?.meal_type && meal.enhanced_metadata_facts.metadata.meal_type !== 'Unknown') ||
                 (meal.aiMetadata?.mealType && meal.aiMetadata.mealType !== 'Unknown')) && (
@@ -1104,7 +1303,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   </Text>
                 </View>
               )}
-              
+
               {/* Cooking Method - prioritize metadata_enriched */}
               {((meal.metadata_enriched?.cooking_method && meal.metadata_enriched.cooking_method !== 'Unknown') ||
                 (meal.enhanced_metadata_facts?.metadata?.cooking_method && meal.enhanced_metadata_facts.metadata.cooking_method !== 'Unknown')) && (
@@ -1114,7 +1313,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   </Text>
                 </View>
               )}
-              
+
               {/* Presentation Style */}
               {meal.enhanced_metadata_facts?.metadata?.presentation_style && meal.enhanced_metadata_facts.metadata.presentation_style !== 'Unknown' && (
                 <View style={styles.metadataTag}>
@@ -1135,7 +1334,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.metadataTagText}>{meal.aiMetadata.dietType}</Text>
                 </View>
               )}
-              
+
               {/* Key Ingredients - prioritize metadata_enriched */}
               {(meal.metadata_enriched?.key_ingredients && Array.isArray(meal.metadata_enriched.key_ingredients) && meal.metadata_enriched.key_ingredients.length > 0) ? (
                 meal.metadata_enriched.key_ingredients.map((ingredient, index) => (
@@ -1143,14 +1342,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.metadataTagText}>{ingredient}</Text>
                   </View>
                 ))
-              ) : (meal.enhanced_metadata_facts?.metadata?.key_ingredients && Array.isArray(meal.enhanced_metadata_facts.metadata.key_ingredients) && 
+              ) : (meal.enhanced_metadata_facts?.metadata?.key_ingredients && Array.isArray(meal.enhanced_metadata_facts.metadata.key_ingredients) &&
                 meal.enhanced_metadata_facts.metadata.key_ingredients.map((ingredient, index) => (
                   <View key={`ingredient-${index}`} style={styles.metadataTag}>
                     <Text style={styles.metadataTagText}>{ingredient}</Text>
                   </View>
                 ))
               )}
-              
+
               {/* Flavor Profile - prioritize metadata_enriched */}
               {(meal.metadata_enriched?.flavor_profile && Array.isArray(meal.metadata_enriched.flavor_profile) && meal.metadata_enriched.flavor_profile.length > 0) ? (
                 meal.metadata_enriched.flavor_profile.map((flavor, index) => (
@@ -1158,14 +1357,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.metadataTagText}>{flavor}</Text>
                   </View>
                 ))
-              ) : (meal.enhanced_metadata_facts?.metadata?.flavor_profile && Array.isArray(meal.enhanced_metadata_facts.metadata.flavor_profile) && 
+              ) : (meal.enhanced_metadata_facts?.metadata?.flavor_profile && Array.isArray(meal.enhanced_metadata_facts.metadata.flavor_profile) &&
                 meal.enhanced_metadata_facts.metadata.flavor_profile.map((flavor, index) => (
                   <View key={`flavor-${index}`} style={styles.metadataTag}>
                     <Text style={styles.metadataTagText}>{flavor}</Text>
                   </View>
                 ))
               )}
-              
+
               {/* Dietary Info - prioritize metadata_enriched */}
               {(meal.metadata_enriched?.dietary_info && Array.isArray(meal.metadata_enriched.dietary_info) && meal.metadata_enriched.dietary_info.length > 0) ? (
                 meal.metadata_enriched.dietary_info.map((diet, index) => (
@@ -1173,14 +1372,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.metadataTagText}>{diet}</Text>
                   </View>
                 ))
-              ) : (meal.enhanced_metadata_facts?.metadata?.dietary_info && Array.isArray(meal.enhanced_metadata_facts.metadata.dietary_info) && 
+              ) : (meal.enhanced_metadata_facts?.metadata?.dietary_info && Array.isArray(meal.enhanced_metadata_facts.metadata.dietary_info) &&
                 meal.enhanced_metadata_facts.metadata.dietary_info.map((diet, index) => (
                   <View key={`diet-${index}`} style={styles.metadataTag}>
                     <Text style={styles.metadataTagText}>{diet}</Text>
                   </View>
                 ))
               )}
-              
+
               {/* Interesting Ingredient - prioritize metadata_enriched */}
               {((meal.metadata_enriched?.interesting_ingredient && meal.metadata_enriched.interesting_ingredient !== 'Unknown') ||
                 (meal.enhanced_metadata_facts?.metadata?.interesting_ingredient && meal.enhanced_metadata_facts.metadata.interesting_ingredient !== 'Unknown')) && (
@@ -1191,14 +1390,26 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
               )}
 
-              {/* City tag */}
-              {(meal.location?.city || meal.city || meal.metadata_enriched?.city) && (
+              {/* Custom Tags */}
+              {meal.custom_tags && Array.isArray(meal.custom_tags) && meal.custom_tags.map((tag: string, index: number) => (
                 <TouchableOpacity
-                  style={[styles.metadataTag, styles.cityTag]}
-                  onLongPress={() => handleMetadataLongPress('city', meal.location?.city || meal.city || meal.metadata_enriched?.city)}
+                  key={`custom-${index}`}
+                  style={styles.metadataTag}
+                  onLongPress={() => handleDeleteCustomTag(tag)}
+                  activeOpacity={isOwnMeal() ? 0.7 : 1}
+                >
+                  <Text style={styles.metadataTagText}>{tag}</Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* Add Tag Button — owner only */}
+              {isOwnMeal() && (
+                <TouchableOpacity
+                  style={styles.addTagButton}
+                  onPress={() => setShowAddTagModal(true)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.metadataTagText}>{meal.location?.city || meal.city || meal.metadata_enriched?.city}</Text>
+                  <Text style={styles.addTagButtonText}>+</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1337,12 +1548,20 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         visible={editModalVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={handleCancelEdit}
+        onRequestClose={() => {
+          handleCancelEdit();
+          setAddTagType(null);
+          setAddTagValue('');
+        }}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={handleCancelEdit}
+          onPress={() => {
+            handleCancelEdit();
+            setAddTagType(null);
+            setAddTagValue('');
+          }}
         >
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1353,37 +1572,116 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               onPress={(e) => e.stopPropagation()}
             >
               <Text style={styles.modalTitle}>
-                Edit {editingField && editingField.charAt(0).toUpperCase() + editingField.slice(1)}
+                {addTagType === 'city'
+                  ? 'Add City'
+                  : addTagType === 'tag'
+                    ? 'Add Tag'
+                    : editingField
+                      ? `Edit ${editingField.charAt(0).toUpperCase() + editingField.slice(1)}`
+                      : 'Edit'}
               </Text>
 
               <TextInput
                 style={styles.modalInput}
-                value={editValue}
-                onChangeText={setEditValue}
-                placeholder={`Enter ${editingField}`}
+                value={(addTagType === 'tag' || addTagType === 'city') ? addTagValue : editValue}
+                onChangeText={(addTagType === 'tag' || addTagType === 'city') ? setAddTagValue : setEditValue}
+                placeholder={
+                  addTagType === 'city' ? 'Enter city (e.g., Los Angeles, West Hollywood)' :
+                  addTagType === 'tag' ? 'Enter tag (e.g., date night, spicy)' :
+                  `Enter ${editingField}`
+                }
                 placeholderTextColor="#999"
                 autoFocus={true}
+                autoCapitalize="words"
                 returnKeyType="done"
-                onSubmitEditing={handleSaveMetadata}
+                onSubmitEditing={
+                  addTagType === 'city' ? handleSaveCity :
+                  addTagType === 'tag' ? handleSaveCustomTag :
+                  handleSaveMetadata
+                }
               />
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
-                  onPress={handleCancelEdit}
+                  onPress={() => {
+                    handleCancelEdit();
+                    setAddTagType(null);
+                    setAddTagValue('');
+                  }}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.modalButton, styles.saveButton]}
-                  onPress={handleSaveMetadata}
+                  onPress={
+                    addTagType === 'city' ? handleSaveCity :
+                    addTagType === 'tag' ? handleSaveCustomTag :
+                    handleSaveMetadata
+                  }
                 >
                   <Text style={styles.saveButtonText}>Save</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Add Tag Type Picker Modal */}
+      <Modal
+        visible={showAddTagModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAddTagModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddTagModal(false)}
+        >
+          <TouchableOpacity
+            style={[styles.modalContainer, { paddingHorizontal: 0, paddingTop: 16, paddingBottom: 8 }]}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { paddingHorizontal: 20, marginBottom: 8 }]}>Add to this meal</Text>
+
+            <TouchableOpacity
+              style={styles.addTagModalOption}
+              onPress={() => handleAddTagSelect('city')}
+            >
+              <Text style={styles.addTagModalOptionText}>Add City</Text>
+              <Text style={styles.addTagModalOptionSubtext}>
+                {getMealCities().length > 0
+                  ? `Current: ${getMealCities().join(', ')} — add another area`
+                  : 'Where you had this meal'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addTagModalOption}
+              onPress={() => handleAddTagSelect('cuisine')}
+            >
+              <Text style={styles.addTagModalOptionText}>
+                {(meal.metadata_enriched?.cuisine_type || meal.quick_criteria_result?.cuisine_type) ? 'Change Cuisine' : 'Cuisine'}
+              </Text>
+              <Text style={styles.addTagModalOptionSubtext}>
+                {(meal.metadata_enriched?.cuisine_type || meal.quick_criteria_result?.cuisine_type)
+                  ? `Currently: ${meal.metadata_enriched?.cuisine_type || meal.quick_criteria_result?.cuisine_type}`
+                  : 'The cuisine type of this dish'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.addTagModalOption, { borderBottomWidth: 0 }]}
+              onPress={() => handleAddTagSelect('tag')}
+            >
+              <Text style={styles.addTagModalOptionText}>Custom Tag</Text>
+              <Text style={styles.addTagModalOptionSubtext}>Add your own label (e.g., date night, spicy, comfort food)</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
@@ -2095,6 +2393,55 @@ const styles = StyleSheet.create({
   },
   cityTag: {
     backgroundColor: '#1a2b49', // Navy blue to match app theme
+  },
+  cuisineTag: {
+    backgroundColor: '#8B6F47', // Warm terra cotta/brown for cuisine
+  },
+  editableTag: {
+    borderWidth: 1,
+    borderStyle: 'dashed' as any,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  addTagButton: {
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: '#5B8A72',
+    borderStyle: 'dashed' as any,
+    backgroundColor: 'transparent',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  addTagButtonText: {
+    color: '#5B8A72',
+    fontSize: 14,
+    fontWeight: '600' as const,
+    fontFamily: 'Inter',
+  },
+  addTagModalOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  addTagModalOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter',
+    color: '#333',
+  },
+  addTagModalOptionSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter',
+    color: '#999',
+    marginTop: 2,
+  },
+  customTagDeleteHint: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.7)',
+    marginLeft: 4,
   },
   specialIngredientTag: {
     backgroundColor: '#ff6b6b', // Red/orange to highlight special ingredients

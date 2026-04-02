@@ -85,6 +85,8 @@ interface MealEntry {
   meal: string;
   // Add city as a top-level field
   city?: string;
+  // Multi-city support (one meal can belong to multiple cities)
+  cities?: string[];
   location: {
     latitude: number;
     longitude: number;
@@ -334,6 +336,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     meal: data.meal || '',
                     // Include top-level city field
                     city: data.city || '',
+                    cities: data.cities || undefined,
                     location: data.location,
                     createdAt: data.createdAt?.toDate?.() || Date.now(),
                     aiMetadata: {
@@ -650,6 +653,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             } else if (filter.type === 'city') {
                 const filterValueLower = filter.value.toLowerCase();
                 result = result.filter(meal => {
+                    // Check cities array first (new multi-city model)
+                    if (meal.cities && Array.isArray(meal.cities) && meal.cities.length > 0) {
+                        if (meal.cities.some((c: string) => c.toLowerCase() === filterValueLower)) {
+                            console.log(`Meal "${meal.meal}" matches city (cities array): ${filter.value}`);
+                            return true;
+                        }
+                    }
+
                     // Check top-level city property
                     if (meal.city && meal.city.toLowerCase() === filterValueLower) {
                         console.log(`Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
@@ -833,11 +844,23 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     }
                 }
 
-                // City counts - check both location.city and top-level city, normalize to lowercase
-                const city = data.location?.city || data.city;
-                if (city) {
-                    const cityKey = city.toLowerCase().trim();
-                    cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                // City counts - check cities array first, then legacy single fields
+                const citiesArray: string[] = data.cities || [];
+                if (citiesArray.length > 0) {
+                    // Multi-city: count this meal once per city
+                    citiesArray.forEach((c: string) => {
+                        const cityKey = c.toLowerCase().trim();
+                        if (cityKey) {
+                            cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                        }
+                    });
+                } else {
+                    // Legacy single-value fallback
+                    const city = data.location?.city || data.city;
+                    if (city) {
+                        const cityKey = city.toLowerCase().trim();
+                        cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                    }
                 }
 
                 // Cuisine counts

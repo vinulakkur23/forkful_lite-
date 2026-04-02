@@ -467,24 +467,27 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
     // Method to get current device location
     @objc(getCurrentLocation:rejecter:)
     func getCurrentLocation(resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        // Store as instance property so ARC doesn't deallocate before delegate fires
         let locationManager = CLLocationManager()
+        self.activeLocationManager = locationManager
         locationManager.delegate = self
-        
+
         // Store callbacks for later use
         self.locationResolver = resolve
         self.locationRejecter = reject
-        
+
         // Request when-in-use authorization
         locationManager.requestWhenInUseAuthorization()
-        
+
         // Start updating location
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.startUpdatingLocation()
-        
+
         // Set a timer to stop location updates after 10 seconds if no location is found
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             if let self = self, self.locationResolver != nil {
                 locationManager.stopUpdatingLocation()
+                self.activeLocationManager = nil
                 self.locationRejecter?("timeout", "Location request timed out", nil)
                 self.locationResolver = nil
                 self.locationRejecter = nil
@@ -505,6 +508,9 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
     private var currentRejecter: RCTPromiseRejectBlock?
     private var locationResolver: RCTPromiseResolveBlock?
     private var locationRejecter: RCTPromiseRejectBlock?
+    // Must be retained as instance property — local CLLocationManager gets deallocated by ARC
+    // before delegate callbacks can fire, causing perpetual timeouts
+    private var activeLocationManager: CLLocationManager?
 }
 
 // MARK: - CLLocationManagerDelegate
@@ -512,10 +518,10 @@ class PhotoGPSModule: NSObject, PHPickerViewControllerDelegate {
 extension PhotoGPSModule: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last, let resolver = locationResolver else { return }
-        
+
         // Stop updating location
         manager.stopUpdatingLocation()
-        
+
         // Resolve with the location data
         let result: [String: Any] = [
             "latitude": location.coordinate.latitude,
@@ -525,24 +531,26 @@ extension PhotoGPSModule: CLLocationManagerDelegate {
             "source": "device"
         ]
         resolver(result)
-        
-        // Clear callbacks
+
+        // Clear callbacks and release location manager
         locationResolver = nil
         locationRejecter = nil
+        activeLocationManager = nil
     }
-    
+
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard let rejecter = locationRejecter else { return }
-        
+
         // Stop updating location
         manager.stopUpdatingLocation()
-        
+
         // Reject with the error
         rejecter("location_error", "Error getting location: \(error.localizedDescription)", error)
-        
-        // Clear callbacks
+
+        // Clear callbacks and release location manager
         locationResolver = nil
         locationRejecter = nil
+        activeLocationManager = nil
     }
 
     // MARK: - Get Photo Creation Date

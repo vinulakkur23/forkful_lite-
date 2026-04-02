@@ -3,14 +3,17 @@ import { firebase, firestore, auth } from '../firebaseConfig';
 // import { extractCityFromMeal, extractCuisineFromMeal, isSushiMeal, isTakeoutMeal } from './achievementService';
 
 // Stub functions to replace achievement service functions
-const extractCityFromMeal = (meal: any) => {
-  // Try location.city first (primary source)
-  if (meal.location?.city) return meal.location.city;
-  // Try top-level city field
-  if (meal.city) return meal.city;
-  // Try metadata_enriched.city
-  if (meal.metadata_enriched?.city) return meal.metadata_enriched.city;
-  return null;
+// Returns all cities for a meal (supports multi-city via cities array)
+const extractCitiesFromMeal = (meal: any): string[] => {
+  // Check cities array first (new multi-city model)
+  if (meal.cities && Array.isArray(meal.cities) && meal.cities.length > 0) {
+    return meal.cities;
+  }
+  // Legacy single-value fallback
+  if (meal.location?.city) return [meal.location.city];
+  if (meal.city) return [meal.city];
+  if (meal.metadata_enriched?.city) return [meal.metadata_enriched.city];
+  return [];
 };
 
 const extractCuisineFromMeal = (meal: any) => {
@@ -84,10 +87,8 @@ export const refreshUserCounts = async (userId?: string): Promise<{
     let takeoutMealCount = 0;
 
     meals.forEach(meal => {
-      const city = extractCityFromMeal(meal);
-      if (city) {
-        uniqueCities.add(city);
-      }
+      const cities = extractCitiesFromMeal(meal);
+      cities.forEach(city => uniqueCities.add(city));
 
       const cuisine = extractCuisineFromMeal(meal);
       if (cuisine) {
