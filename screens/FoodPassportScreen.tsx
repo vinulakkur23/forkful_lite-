@@ -583,31 +583,32 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             console.log(`Applying filter: ${filter.type} = ${filter.value}`);
             
             if (filter.type === 'cuisineType') {
+                const filterValueLower = filter.value.toLowerCase();
                 result = result.filter(meal => {
                     // Check old aiMetadata format
-                    if (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType === filter.value) {
+                    if (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType.toLowerCase() === filterValueLower) {
                         console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (aiMetadata): ${filter.value}`);
                         return true;
                     }
-                    
+
                     // Check metadata_enriched format
-                    if (meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type === filter.value) {
+                    if (meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type.toLowerCase() === filterValueLower) {
                         console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (metadata_enriched): ${filter.value}`);
                         return true;
                     }
-                    
+
                     // Check enhanced_facts format
-                    if (meal.enhanced_facts?.food_facts?.cuisine_type && meal.enhanced_facts.food_facts.cuisine_type === filter.value) {
+                    if (meal.enhanced_facts?.food_facts?.cuisine_type && meal.enhanced_facts.food_facts.cuisine_type.toLowerCase() === filterValueLower) {
                         console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (enhanced_facts): ${filter.value}`);
                         return true;
                     }
-                    
+
                     // Check quick_criteria_result format
-                    if (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type === filter.value) {
+                    if (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type.toLowerCase() === filterValueLower) {
                         console.log(`FoodPassport: Meal "${meal.meal}" matches cuisineType (quick_criteria_result): ${filter.value}`);
                         return true;
                     }
-                    
+
                     return false;
                 });
             } else if (filter.type === 'foodType') {
@@ -647,38 +648,30 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     return false;
                 });
             } else if (filter.type === 'city') {
+                const filterValueLower = filter.value.toLowerCase();
                 result = result.filter(meal => {
-                    // First check if city is stored as top-level city property
-                    if (meal.city) {
-                        const matches = meal.city.toLowerCase() === filter.value.toLowerCase();
-                        if (matches) {
-                            console.log(`Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
-                        }
-                        return matches;
+                    // Check top-level city property
+                    if (meal.city && meal.city.toLowerCase() === filterValueLower) {
+                        console.log(`Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
+                        return true;
                     }
-                    
-                    // Next check if city is stored in location.city
-                    if (meal.location && meal.location.city) {
-                        const matches = meal.location.city.toLowerCase() === filter.value.toLowerCase();
-                        if (matches) {
-                            console.log(`Meal "${meal.meal}" matches city (location): ${filter.value}`);
-                        }
-                        return matches;
+
+                    // Check location.city
+                    if (meal.location?.city && meal.location.city.toLowerCase() === filterValueLower) {
+                        console.log(`Meal "${meal.meal}" matches city (location): ${filter.value}`);
+                        return true;
                     }
-                    
+
                     // Fallback: Try to match city in restaurant field
                     if (meal.restaurant && meal.restaurant.includes(',')) {
                         const restaurantParts = meal.restaurant.split(',');
                         if (restaurantParts.length > 1) {
-                            // Handle cases where city might be "Portland OR" format
                             const secondPart = restaurantParts[1].trim();
                             const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
-                            
-                            const matches = cityPart.toLowerCase() === filter.value.toLowerCase();
-                            if (matches) {
+                            if (cityPart.toLowerCase() === filterValueLower) {
                                 console.log(`Meal "${meal.meal}" matches city (restaurant): ${filter.value}`);
+                                return true;
                             }
-                            return matches;
                         }
                     }
                     return false;
@@ -840,10 +833,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     }
                 }
 
-                // City counts
-                const city = data.location?.city;
+                // City counts - check both location.city and top-level city, normalize to lowercase
+                const city = data.location?.city || data.city;
                 if (city) {
-                    cityMealCounts[city] = (cityMealCounts[city] || 0) + 1;
+                    const cityKey = city.toLowerCase().trim();
+                    cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
                 }
 
                 // Cuisine counts
@@ -893,7 +887,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 const capitalizedCityName = cityName.split(' ').map((word: string) =>
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
                 ).join(' ');
-                const mealCount = cityMealCounts[cityName] || cityMealCounts[capitalizedCityName] || 0;
+                // Lookup using lowercase key (matches how we count above)
+                const mealCount = cityMealCounts[cityName.toLowerCase().trim()] || 0;
+
+                // Skip cities with zero meals
+                if (mealCount === 0) continue;
 
                 if (cityDoc.exists) {
                     const cityData = cityDoc.data();
@@ -911,11 +909,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             // --- Build cuisines data ---
             const cuisinesWithData: Cuisine[] = [];
             for (const cuisineName of uniqueCuisines) {
-                const normalizedCuisineName = cuisineName.toLowerCase().trim().replace(/\s+/g, '-');
                 const capitalizedCuisineName = cuisineName.split(' ').map((word: string) =>
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
                 ).join(' ');
-                const mealCount = cuisineMealCounts[cuisineName] || cuisineMealCounts[normalizedCuisineName] || cuisineMealCounts[capitalizedCuisineName] || 0;
+                // Lookup using lowercase key (matches how we count above)
+                const mealCount = cuisineMealCounts[cuisineName.toLowerCase().trim()] || 0;
+
+                // Skip cuisines with zero meals
+                if (mealCount === 0) continue;
+
                 cuisinesWithData.push({ name: capitalizedCuisineName, imageUrl: '', mealCount });
             }
             cuisinesWithData.sort((a, b) => b.mealCount - a.mealCount);
@@ -1789,7 +1791,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     }}
                                     onPress={() => {
                                         if (onFilterChange && onTabChange) {
-                                            onFilterChange([{ type: 'cuisineType', value: cuisine.name, label: cuisine.name }]);
+                                            onFilterChange([{ type: 'cuisineType', value: cuisine.name.toLowerCase(), label: cuisine.name }]);
                                             onTabChange(0);
                                         }
                                     }}
@@ -1822,7 +1824,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         key={cuisine.name}
                                         onPress={() => {
                                             if (onFilterChange && onTabChange) {
-                                                onFilterChange([{ type: 'cuisineType', value: cuisine.name, label: cuisine.name }]);
+                                                onFilterChange([{ type: 'cuisineType', value: cuisine.name.toLowerCase(), label: cuisine.name }]);
                                                 onTabChange(0);
                                             }
                                         }}
