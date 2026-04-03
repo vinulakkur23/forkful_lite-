@@ -39,6 +39,7 @@ import MapView, { Marker, Callout } from 'react-native-maps';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
+import { loadPixelArtLayout, savePixelArtLayout, reconcilePixelArtLayout } from '../services/pixelArtOrderService';
 import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
 // Import for accolades section
@@ -206,6 +207,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
     // State for accolades section
     const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
+    const [emojiTableSizes, setEmojiTableSizes] = useState<number[]>([]);
     const [emojisLoading, setEmojisLoading] = useState(true);
     const [showMealsModal, setShowMealsModal] = useState(false);
     const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
@@ -525,6 +527,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         fetchMealEntries();
         loadAllAccolades();
         loadAllChallenges();
+    };
+
+    const handleEmojiReorder = async (tables: string[][]) => {
+        const flat = tables.reduce((acc, t) => [...acc, ...t], []);
+        setPixelArtEmojis(flat);
+        setEmojiTableSizes(tables.map(t => t.length));
+        const currentUserId = auth().currentUser?.uid;
+        if (currentUserId) {
+            await savePixelArtLayout(currentUserId, tables);
+        }
     };
 
     // Apply filter to meals - now handles multiple filters
@@ -962,9 +974,22 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             }
             restaurantsWithData.sort((a, b) => b.mealCount - a.mealCount);
 
+            // --- Apply saved emoji layout if available ---
+            const savedLayout = await loadPixelArtLayout(targetUserId);
+            let orderedEmojis: string[];
+            let loadedTableSizes: number[] = [];
+            if (savedLayout) {
+                const reconciledTables = reconcilePixelArtLayout(emojiUrls, savedLayout, 18);
+                orderedEmojis = reconciledTables.reduce((acc, t) => [...acc, ...t], []);
+                loadedTableSizes = reconciledTables.map(t => t.length);
+            } else {
+                orderedEmojis = emojiUrls;
+            }
+
             // --- Single batched state update ---
-            console.log(`📊 Accolades loaded: ${emojiUrls.length} emojis, ${citiesWithData.length} cities, ${cuisinesWithData.length} cuisines, ${restaurantsWithData.length} restaurants`);
-            setPixelArtEmojis(emojiUrls);
+            console.log(`📊 Accolades loaded: ${orderedEmojis.length} emojis, ${citiesWithData.length} cities, ${cuisinesWithData.length} cuisines, ${restaurantsWithData.length} restaurants`);
+            setPixelArtEmojis(orderedEmojis);
+            setEmojiTableSizes(loadedTableSizes);
             setCities(citiesWithData);
             setCuisines(cuisinesWithData);
             setRestaurants(restaurantsWithData);
@@ -2226,7 +2251,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 visible={showMealsModal}
                 onClose={() => setShowMealsModal(false)}
                 emojis={pixelArtEmojis}
+                tableSizes={emojiTableSizes}
                 isOwnProfile={isOwnProfile}
+                onReorder={handleEmojiReorder}
             />
         </SafeAreaView>
     );

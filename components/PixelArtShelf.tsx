@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Image,
@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors, spacing } from '../themes';
+import DraggableEmojiGrid from './DraggableEmojiGrid';
 
 // Tile assets for wooden table
 const tiles = {
@@ -24,6 +25,8 @@ const tiles = {
   bl: require('../assets/tiles/wooden_table/bl.png'),
   bc: require('../assets/tiles/wooden_table/bc.png'),
   br: require('../assets/tiles/wooden_table/br.png'),
+  leg_l: require('../assets/tiles/wooden_table/leg_l.png'),
+  leg_r: require('../assets/tiles/wooden_table/leg_r.png'),
 };
 
 // Placeholder for future pixel art chest/fridge/door asset
@@ -65,8 +68,9 @@ const TableGrid: React.FC<{
   cellSize: number;
   gridWidth: number;
 }> = ({ emojis, columns, cellSize, gridWidth }) => {
-  const totalRows = Math.max(1, Math.ceil(emojis.length / columns));
-  const gridHeight = totalRows * cellSize;
+  const totalRows = Math.max(2, Math.ceil(emojis.length / columns));
+  const legHeight = cellSize;
+  const gridHeight = totalRows * cellSize + legHeight;
 
   const tileGrid = useMemo(() => {
     const cells: { row: number; col: number; key: TileKey }[] = [];
@@ -111,6 +115,33 @@ const TableGrid: React.FC<{
           resizeMode="stretch"
         />
       ))}
+      {/* Table legs */}
+      <Image
+        source={tiles.leg_l}
+        style={[
+          styles.tile,
+          {
+            left: 0,
+            top: totalRows * cellSize,
+            width: cellSize,
+            height: legHeight,
+          },
+        ]}
+        resizeMode="stretch"
+      />
+      <Image
+        source={tiles.leg_r}
+        style={[
+          styles.tile,
+          {
+            left: (columns - 1) * cellSize,
+            top: totalRows * cellSize,
+            width: cellSize,
+            height: legHeight,
+          },
+        ]}
+        resizeMode="stretch"
+      />
       {emojiPositions.map(({ uri, row, col }, index) => (
         <View
           key={`emoji_${index}`}
@@ -161,35 +192,93 @@ export const PixelArtChest: React.FC<{
 
 /**
  * Modal showing the full emoji collection on tiled shelves.
- * Must be rendered outside useMemo (owns no state itself, controlled by parent).
+ * Must be rendered outside useMemo (owns state for edit mode).
  */
 export const PixelArtShelfModal: React.FC<{
   visible: boolean;
   onClose: () => void;
   emojis: string[];
+  tableSizes?: number[];
   isOwnProfile?: boolean;
+  onReorder?: (tables: string[][]) => void;
   columns?: number;
   maxRowsPerTable?: number;
 }> = ({
   visible,
   onClose,
   emojis,
+  tableSizes,
   isOwnProfile = false,
+  onReorder,
   columns = DEFAULT_COLUMNS,
   maxRowsPerTable = DEFAULT_MAX_ROWS,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTables, setEditTables] = useState<string[][]>([]);
+
   const screenWidth = Dimensions.get('window').width;
   const cellSize = Math.floor((screenWidth - 2 * HORIZONTAL_PADDING) / columns);
   const gridWidth = columns * cellSize;
   const emojisPerTable = maxRowsPerTable * columns;
 
+  // Build tables from saved sizes if available, otherwise chunk uniformly
   const tables = useMemo(() => {
+    if (tableSizes && tableSizes.length > 0) {
+      const result: string[][] = [];
+      let idx = 0;
+      for (const size of tableSizes) {
+        result.push(emojis.slice(idx, idx + size));
+        idx += size;
+      }
+      // Any remaining emojis (new meals added after last save)
+      if (idx < emojis.length) {
+        const remainder = emojis.slice(idx);
+        if (result.length > 0 && result[result.length - 1].length < emojisPerTable) {
+          const lastTable = result[result.length - 1];
+          const space = emojisPerTable - lastTable.length;
+          lastTable.push(...remainder.slice(0, space));
+          const overflow = remainder.slice(space);
+          for (let i = 0; i < overflow.length; i += emojisPerTable) {
+            result.push(overflow.slice(i, i + emojisPerTable));
+          }
+        } else {
+          for (let i = 0; i < remainder.length; i += emojisPerTable) {
+            result.push(remainder.slice(i, i + emojisPerTable));
+          }
+        }
+      }
+      return result.filter(t => t.length > 0);
+    }
     const chunks: string[][] = [];
     for (let i = 0; i < emojis.length; i += emojisPerTable) {
       chunks.push(emojis.slice(i, i + emojisPerTable));
     }
     return chunks;
-  }, [emojis, emojisPerTable]);
+  }, [emojis, tableSizes, emojisPerTable]);
+
+  const handleEnterEdit = () => {
+    setEditTables(tables.map(t => [...t]));
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditTables([]);
+  };
+
+  const handleDoneEdit = () => {
+    onReorder?.(editTables);
+    setIsEditing(false);
+    setEditTables([]);
+  };
+
+  const handleClose = () => {
+    if (isEditing) {
+      setIsEditing(false);
+      setEditTables([]);
+    }
+    onClose();
+  };
 
   if (!visible) return null;
 
@@ -198,20 +287,34 @@ export const PixelArtShelfModal: React.FC<{
       visible={true}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
-            <Text style={styles.modalCloseText}>Done</Text>
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>Meals Eaten</Text>
-          {isOwnProfile ? (
-            <TouchableOpacity style={styles.modalEditButton}>
-              <Text style={styles.modalEditText}>Edit</Text>
-            </TouchableOpacity>
+          {isEditing ? (
+            <>
+              <TouchableOpacity onPress={handleCancelEdit} style={styles.modalCloseButton}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Editing</Text>
+              <TouchableOpacity onPress={handleDoneEdit} style={styles.modalEditButton}>
+                <Text style={styles.modalDoneText}>Done</Text>
+              </TouchableOpacity>
+            </>
           ) : (
-            <View style={styles.modalEditButton} />
+            <>
+              <TouchableOpacity onPress={handleClose} style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseText}>Done</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Meals Eaten</Text>
+              {isOwnProfile ? (
+                <TouchableOpacity onPress={handleEnterEdit} style={styles.modalEditButton}>
+                  <Text style={styles.modalEditText}>Edit</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.modalEditButton} />
+              )}
+            </>
           )}
         </View>
 
@@ -219,21 +322,30 @@ export const PixelArtShelfModal: React.FC<{
           {emojis.length} {emojis.length === 1 ? 'meal' : 'meals'} collected
         </Text>
 
-        <ScrollView
-          style={styles.modalScrollView}
-          contentContainerStyle={styles.modalScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {tables.map((tableEmojis, tableIndex) => (
-            <TableGrid
-              key={`table_${tableIndex}`}
-              emojis={tableEmojis}
-              columns={columns}
-              cellSize={cellSize}
-              gridWidth={gridWidth}
-            />
-          ))}
-        </ScrollView>
+        {isEditing ? (
+          <DraggableEmojiGrid
+            tables={editTables}
+            columns={columns}
+            maxPerTable={maxRowsPerTable * columns}
+            onTablesChange={setEditTables}
+          />
+        ) : (
+          <ScrollView
+            style={styles.modalScrollView}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {tables.map((tableEmojis, tableIndex) => (
+              <TableGrid
+                key={`table_${tableIndex}`}
+                emojis={tableEmojis}
+                columns={columns}
+                cellSize={cellSize}
+                gridWidth={gridWidth}
+              />
+            ))}
+          </ScrollView>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -337,6 +449,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 15,
     fontWeight: '500',
+    color: '#5B8A72',
+  },
+  modalCancelText: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+    color: colors.textTertiary || '#858585',
+  },
+  modalDoneText: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#5B8A72',
   },
   modalCount: {
