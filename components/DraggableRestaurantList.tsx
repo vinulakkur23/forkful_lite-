@@ -22,22 +22,33 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { colors, spacing } from '../themes';
 import { RestaurantSection } from '../services/restaurantSectionsService';
+interface RestaurantMealInfo {
+  id: string;
+  meal: string;
+  rating: number;
+  photoUrl: string;
+  pixel_art_url?: string;
+  pixel_art_data?: string;
+}
 
 interface Restaurant {
   name: string;
   mealCount: number;
   emojiUrls?: string[];
+  city?: string;
+  meals?: RestaurantMealInfo[];
 }
 
 type ListItem =
   | { type: 'section-header'; sectionId: string; sectionName: string; key: string }
-  | { type: 'restaurant'; name: string; mealCount: number; emojiUrls?: string[]; sectionId: string | null; key: string };
+  | { type: 'restaurant'; name: string; mealCount: number; emojiUrls?: string[]; city?: string; meals?: RestaurantMealInfo[]; sectionId: string | null; key: string };
 
 interface Props {
   restaurants: Restaurant[];
   sections: RestaurantSection[];
   unsectionedOrder: string[];
   isOwnProfile: boolean;
+  cityFilter?: string;
   onReorder: (sections: RestaurantSection[], unsectionedOrder: string[]) => void;
   onRestaurantPress: (restaurant: Restaurant) => void;
   onAddSection: () => void;
@@ -49,6 +60,7 @@ const DraggableRestaurantList: React.FC<Props> = ({
   sections,
   unsectionedOrder,
   isOwnProfile,
+  cityFilter,
   onReorder,
   onRestaurantPress,
   onAddSection,
@@ -76,6 +88,8 @@ const DraggableRestaurantList: React.FC<Props> = ({
           name: r.name,
           mealCount: r.mealCount,
           emojiUrls: r.emojiUrls,
+          city: r.city,
+          meals: r.meals,
           sectionId: null,
           key: `rest_unsectioned_${r.name}`,
         });
@@ -97,6 +111,8 @@ const DraggableRestaurantList: React.FC<Props> = ({
             name: r.name,
             mealCount: r.mealCount,
             emojiUrls: r.emojiUrls,
+            city: r.city,
+            meals: r.meals,
             sectionId: section.id,
             key: `rest_${section.id}_${r.name}`,
           });
@@ -250,8 +266,26 @@ const DraggableRestaurantList: React.FC<Props> = ({
     );
   }, [onDeleteSection]);
 
-  // Build view items from current props
-  const viewItems = buildListItems();
+  // Build view items from current props, filtered for display only
+  const allViewItems = buildListItems();
+  const viewItems = cityFilter
+    ? allViewItems.filter((item, idx) => {
+        if (item.type === 'restaurant') {
+          return item.city?.toLowerCase() === cityFilter.toLowerCase();
+        }
+        // Keep section header only if it has at least one matching restaurant after it
+        for (let i = idx + 1; i < allViewItems.length; i++) {
+          const next = allViewItems[i];
+          if (next.type === 'section-header') break;
+          if (next.type === 'restaurant' && next.city?.toLowerCase() === cityFilter.toLowerCase()) return true;
+        }
+        return false;
+      })
+    : allViewItems;
+
+  // Hide entire section if filter leaves no restaurants
+  const hasVisibleRestaurants = viewItems.some(item => item.type === 'restaurant');
+  if (!hasVisibleRestaurants && cityFilter) return null;
 
   return (
     <View>
@@ -285,9 +319,14 @@ const DraggableRestaurantList: React.FC<Props> = ({
               style={styles.restaurantItem}
             >
               <View style={styles.restaurantItemInner}>
-                <Text style={styles.restaurantName} numberOfLines={1}>
-                  {item.name}
-                </Text>
+                <View style={styles.restaurantInfo}>
+                  <Text style={styles.restaurantName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {item.city ? (
+                    <Text style={styles.restaurantCity} numberOfLines={1}>{item.city}</Text>
+                  ) : null}
+                </View>
                 {item.emojiUrls && item.emojiUrls.length > 0 && (
                   <View style={styles.emojiContainer}>
                     {item.emojiUrls.slice(0, 5).map((url, index) => (
@@ -428,15 +467,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 11,
     paddingHorizontal: 14,
+  },
+  restaurantInfo: {
+    flex: 1,
+    marginRight: 8,
   },
   restaurantName: {
     fontFamily: 'Unna',
     fontSize: 16,
     fontWeight: '500',
     color: colors.textPrimary,
-    flex: 1,
+  },
+  restaurantCity: {
+    fontFamily: 'Inter',
+    fontSize: 12,
+    color: colors.textSecondary || '#858585',
+    marginTop: 2,
   },
   emojiContainer: {
     flexDirection: 'row',

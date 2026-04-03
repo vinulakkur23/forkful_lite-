@@ -10,12 +10,15 @@ import {
   Text,
   SafeAreaView,
   ScrollView,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { colors, spacing } from '../themes';
 import DraggableEmojiGrid from './DraggableEmojiGrid';
+import { TableConfig, FurnitureType, TABLE_PRESETS, DEFAULT_CONFIG } from '../services/pixelArtOrderService';
 
-// Tile assets for wooden table
-const tiles = {
+// Tile assets — one set per furniture type
+const woodenTableTiles = {
   tl: require('../assets/tiles/wooden_table/tl.png'),
   tc: require('../assets/tiles/wooden_table/tc.png'),
   tr: require('../assets/tiles/wooden_table/tr.png'),
@@ -29,15 +32,17 @@ const tiles = {
   leg_r: require('../assets/tiles/wooden_table/leg_r.png'),
 };
 
-// Placeholder for future pixel art chest/fridge/door asset
-// Replace with: const chestIcon = require('../assets/icons/chest.png');
+type TileSet = typeof woodenTableTiles;
+type TileKey = keyof TileSet;
 
-type TileKey = keyof typeof tiles;
+const TILE_SETS: Record<FurnitureType, TileSet> = {
+  wooden_table: woodenTableTiles,
+  // picnic_blanket: picnicBlanketTiles,  // future
+};
 
 const HORIZONTAL_PADDING = 16;
 const TABLE_GAP = 12;
 const DEFAULT_COLUMNS = 6;
-const DEFAULT_MAX_ROWS = 3;
 
 const getTileKey = (
   row: number,
@@ -67,7 +72,9 @@ const TableGrid: React.FC<{
   columns: number;
   cellSize: number;
   gridWidth: number;
-}> = ({ emojis, columns, cellSize, gridWidth }) => {
+  furniture?: FurnitureType;
+}> = ({ emojis, columns, cellSize, gridWidth, furniture = 'wooden_table' }) => {
+  const tileSet = TILE_SETS[furniture];
   const totalRows = Math.max(2, Math.ceil(emojis.length / columns));
   const legHeight = cellSize;
   const gridHeight = totalRows * cellSize + legHeight;
@@ -102,7 +109,7 @@ const TableGrid: React.FC<{
       {tileGrid.map(({ row, col, key }) => (
         <Image
           key={`tile_${row}_${col}`}
-          source={tiles[key]}
+          source={tileSet[key]}
           style={[
             styles.tile,
             {
@@ -117,7 +124,7 @@ const TableGrid: React.FC<{
       ))}
       {/* Table legs */}
       <Image
-        source={tiles.leg_l}
+        source={tileSet.leg_l}
         style={[
           styles.tile,
           {
@@ -130,7 +137,7 @@ const TableGrid: React.FC<{
         resizeMode="stretch"
       />
       <Image
-        source={tiles.leg_r}
+        source={tileSet.leg_r}
         style={[
           styles.tile,
           {
@@ -199,27 +206,25 @@ export const PixelArtShelfModal: React.FC<{
   onClose: () => void;
   emojis: string[];
   tableSizes?: number[];
+  tableConfigs?: TableConfig[];
   isOwnProfile?: boolean;
-  onReorder?: (tables: string[][]) => void;
-  columns?: number;
-  maxRowsPerTable?: number;
+  onReorder?: (tables: string[][], configs: TableConfig[]) => void;
 }> = ({
   visible,
   onClose,
   emojis,
   tableSizes,
+  tableConfigs: savedConfigs,
   isOwnProfile = false,
   onReorder,
-  columns = DEFAULT_COLUMNS,
-  maxRowsPerTable = DEFAULT_MAX_ROWS,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTables, setEditTables] = useState<string[][]>([]);
+  const [editConfigs, setEditConfigs] = useState<TableConfig[]>([]);
 
   const screenWidth = Dimensions.get('window').width;
-  const cellSize = Math.floor((screenWidth - 2 * HORIZONTAL_PADDING) / columns);
-  const gridWidth = columns * cellSize;
-  const emojisPerTable = maxRowsPerTable * columns;
+  // Uniform cellSize based on largest column count (6)
+  const cellSize = Math.floor((screenWidth - 2 * HORIZONTAL_PADDING) / DEFAULT_COLUMNS);
 
   // Build tables from saved sizes if available, otherwise chunk uniformly
   const tables = useMemo(() => {
@@ -233,51 +238,127 @@ export const PixelArtShelfModal: React.FC<{
       // Any remaining emojis (new meals added after last save)
       if (idx < emojis.length) {
         const remainder = emojis.slice(idx);
-        if (result.length > 0 && result[result.length - 1].length < emojisPerTable) {
+        const lastConfig = (savedConfigs && savedConfigs.length > 0)
+          ? savedConfigs[savedConfigs.length - 1]
+          : DEFAULT_CONFIG;
+        const lastCap = lastConfig.columns * lastConfig.maxRows;
+        if (result.length > 0 && result[result.length - 1].length < lastCap) {
           const lastTable = result[result.length - 1];
-          const space = emojisPerTable - lastTable.length;
+          const space = lastCap - lastTable.length;
           lastTable.push(...remainder.slice(0, space));
           const overflow = remainder.slice(space);
-          for (let i = 0; i < overflow.length; i += emojisPerTable) {
-            result.push(overflow.slice(i, i + emojisPerTable));
+          const defaultCap = DEFAULT_CONFIG.columns * DEFAULT_CONFIG.maxRows;
+          for (let i = 0; i < overflow.length; i += defaultCap) {
+            result.push(overflow.slice(i, i + defaultCap));
           }
         } else {
-          for (let i = 0; i < remainder.length; i += emojisPerTable) {
-            result.push(remainder.slice(i, i + emojisPerTable));
+          const defaultCap = DEFAULT_CONFIG.columns * DEFAULT_CONFIG.maxRows;
+          for (let i = 0; i < remainder.length; i += defaultCap) {
+            result.push(remainder.slice(i, i + defaultCap));
           }
         }
       }
       return result.filter(t => t.length > 0);
     }
+    const defaultCap = DEFAULT_CONFIG.columns * DEFAULT_CONFIG.maxRows;
     const chunks: string[][] = [];
-    for (let i = 0; i < emojis.length; i += emojisPerTable) {
-      chunks.push(emojis.slice(i, i + emojisPerTable));
+    for (let i = 0; i < emojis.length; i += defaultCap) {
+      chunks.push(emojis.slice(i, i + defaultCap));
     }
     return chunks;
-  }, [emojis, tableSizes, emojisPerTable]);
+  }, [emojis, tableSizes, savedConfigs]);
+
+  // Configs array matching tables (fill missing with default)
+  const configs = useMemo(() => {
+    if (savedConfigs && savedConfigs.length > 0) {
+      const result = [...savedConfigs];
+      // Fill any overflow tables with default config
+      while (result.length < tables.length) {
+        result.push({ ...DEFAULT_CONFIG });
+      }
+      return result.slice(0, tables.length);
+    }
+    return tables.map(() => ({ ...DEFAULT_CONFIG }));
+  }, [savedConfigs, tables]);
 
   const handleEnterEdit = () => {
     setEditTables(tables.map(t => [...t]));
+    setEditConfigs(configs.map(c => ({ ...c })));
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditTables([]);
+    setEditConfigs([]);
   };
 
   const handleDoneEdit = () => {
-    onReorder?.(editTables);
+    // Strip empty tables before saving
+    const finalTables: string[][] = [];
+    const finalConfigs: TableConfig[] = [];
+    for (let i = 0; i < editTables.length; i++) {
+      if (editTables[i].length > 0) {
+        finalTables.push(editTables[i]);
+        finalConfigs.push(editConfigs[i]);
+      }
+    }
+    onReorder?.(finalTables, finalConfigs);
     setIsEditing(false);
     setEditTables([]);
+    setEditConfigs([]);
   };
 
   const handleClose = () => {
     if (isEditing) {
       setIsEditing(false);
       setEditTables([]);
+      setEditConfigs([]);
     }
     onClose();
+  };
+
+  const handleAddTable = () => {
+    const options = ['Small Table (3×3)', 'Large Table (6×3)', 'Cancel'];
+    const cancelButtonIndex = 2;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex, title: 'Choose Table Size' },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            setEditTables(prev => [...prev, []]);
+            setEditConfigs(prev => [...prev, { ...TABLE_PRESETS.small }]);
+          } else if (buttonIndex === 1) {
+            setEditTables(prev => [...prev, []]);
+            setEditConfigs(prev => [...prev, { ...TABLE_PRESETS.large }]);
+          }
+        },
+      );
+    } else {
+      Alert.alert('Choose Table Size', undefined, [
+        {
+          text: 'Small Table (3×3)',
+          onPress: () => {
+            setEditTables(prev => [...prev, []]);
+            setEditConfigs(prev => [...prev, { ...TABLE_PRESETS.small }]);
+          },
+        },
+        {
+          text: 'Large Table (6×3)',
+          onPress: () => {
+            setEditTables(prev => [...prev, []]);
+            setEditConfigs(prev => [...prev, { ...TABLE_PRESETS.large }]);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  };
+
+  const handleEditTablesChange = (newTables: string[][], newConfigs: TableConfig[]) => {
+    setEditTables(newTables);
+    setEditConfigs(newConfigs);
   };
 
   if (!visible) return null;
@@ -325,9 +406,9 @@ export const PixelArtShelfModal: React.FC<{
         {isEditing ? (
           <DraggableEmojiGrid
             tables={editTables}
-            columns={columns}
-            maxPerTable={maxRowsPerTable * columns}
-            onTablesChange={setEditTables}
+            tableConfigs={editConfigs}
+            onTablesChange={handleEditTablesChange}
+            onAddTable={handleAddTable}
           />
         ) : (
           <ScrollView
@@ -335,15 +416,20 @@ export const PixelArtShelfModal: React.FC<{
             contentContainerStyle={styles.modalScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {tables.map((tableEmojis, tableIndex) => (
-              <TableGrid
-                key={`table_${tableIndex}`}
-                emojis={tableEmojis}
-                columns={columns}
-                cellSize={cellSize}
-                gridWidth={gridWidth}
-              />
-            ))}
+            {tables.map((tableEmojis, tableIndex) => {
+              const config = configs[tableIndex] || DEFAULT_CONFIG;
+              const tableGridWidth = config.columns * cellSize;
+              return (
+                <TableGrid
+                  key={`table_${tableIndex}`}
+                  emojis={tableEmojis}
+                  columns={config.columns}
+                  cellSize={cellSize}
+                  gridWidth={tableGridWidth}
+                  furniture={config.furniture}
+                />
+              );
+            })}
           </ScrollView>
         )}
       </SafeAreaView>

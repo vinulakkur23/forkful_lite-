@@ -14,7 +14,10 @@ import {
   ScrollView,
   Share,
   Modal,
-  RefreshControl
+  RefreshControl,
+  Linking,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -39,7 +42,7 @@ import MapView, { Marker, Callout } from 'react-native-maps';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
-import { loadPixelArtLayout, savePixelArtLayout, reconcilePixelArtLayout } from '../services/pixelArtOrderService';
+import { loadPixelArtLayout, savePixelArtLayout, reconcilePixelArtLayout, TableConfig } from '../services/pixelArtOrderService';
 import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
 // Import for accolades section
@@ -148,10 +151,21 @@ interface Cuisine {
   mealCount: number;
 }
 
+interface RestaurantMealInfo {
+  id: string;
+  meal: string;
+  rating: number;
+  photoUrl: string;
+  pixel_art_url?: string;
+  pixel_art_data?: string;
+}
+
 interface Restaurant {
   name: string;
   mealCount: number;
-  emojiUrls?: string[]; // Pixel art emojis for meals at this restaurant
+  emojiUrls?: string[];
+  city?: string;
+  meals?: RestaurantMealInfo[];
 }
 
 // Define the tab routes
@@ -191,6 +205,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // Restaurant modal state
     const [showRestaurantModal, setShowRestaurantModal] = useState(false);
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+    const [restaurantNotes, setRestaurantNotes] = useState<Record<string, string>>({});
+    const [isEditingRestaurantNote, setIsEditingRestaurantNote] = useState(false);
+    const [restaurantNoteText, setRestaurantNoteText] = useState('');
+    const [savingRestaurantNote, setSavingRestaurantNote] = useState(false);
 
     // Tab view state
     const [tabIndex, setTabIndex] = useState(0);
@@ -208,6 +226,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // State for accolades section
     const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
     const [emojiTableSizes, setEmojiTableSizes] = useState<number[]>([]);
+    const [emojiTableConfigs, setEmojiTableConfigs] = useState<TableConfig[]>([]);
     const [emojisLoading, setEmojisLoading] = useState(true);
     const [showMealsModal, setShowMealsModal] = useState(false);
     const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
@@ -529,13 +548,14 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         loadAllChallenges();
     };
 
-    const handleEmojiReorder = async (tables: string[][]) => {
+    const handleEmojiReorder = async (tables: string[][], configs: TableConfig[]) => {
         const flat = tables.reduce((acc, t) => [...acc, ...t], []);
         setPixelArtEmojis(flat);
         setEmojiTableSizes(tables.map(t => t.length));
+        setEmojiTableConfigs(configs);
         const currentUserId = auth().currentUser?.uid;
         if (currentUserId) {
-            await savePixelArtLayout(currentUserId, tables);
+            await savePixelArtLayout(currentUserId, tables, configs);
         }
     };
 
@@ -842,9 +862,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const cityMealCounts: { [city: string]: number } = {};
             // --- Derive cuisine meal counts ---
             const cuisineMealCounts: { [cuisine: string]: number } = {};
-            // --- Derive restaurant meal counts + emoji URLs ---
+            // --- Derive restaurant meal counts + emoji URLs + city + meals ---
             const restaurantMealCounts: { [restaurant: string]: number } = {};
             const restaurantEmojiUrls: { [restaurant: string]: string[] } = {};
+            const restaurantCities: { [restaurant: string]: string } = {};
+            const restaurantMeals: { [restaurant: string]: RestaurantMealInfo[] } = {};
 
             mealsQuery.docs.forEach(doc => {
                 const data = doc.data();
@@ -891,7 +913,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     }
                 }
 
-                // Restaurant counts + emoji URLs
+                // Restaurant counts + emoji URLs + city + meal info
                 if (data.restaurant) {
                     let restaurantName = data.restaurant.trim();
                     if (restaurantName.includes(',')) {
@@ -906,6 +928,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             if (!restaurantEmojiUrls[restaurantName]) restaurantEmojiUrls[restaurantName] = [];
                             restaurantEmojiUrls[restaurantName].push(`data:image/png;base64,${data.pixel_art_data}`);
                         }
+                        // Capture city (first one wins)
+                        if (!restaurantCities[restaurantName]) {
+                            const city = data.city || data.location?.city;
+                            if (city) restaurantCities[restaurantName] = city;
+                        }
+                        // Capture meal info for modal
+                        if (!restaurantMeals[restaurantName]) restaurantMeals[restaurantName] = [];
+                        restaurantMeals[restaurantName].push({
+                            id: doc.id,
+                            meal: data.meal || 'Untitled',
+                            rating: data.rating || 0,
+                            photoUrl: data.photoUrl || '',
+                            pixel_art_url: data.pixel_art_url,
+                            pixel_art_data: data.pixel_art_data,
+                        });
                     }
                 }
             });
@@ -916,6 +953,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const uniqueCities = userData?.uniqueCities || [];
             const uniqueCuisines = userData?.uniqueCuisines || [];
             const uniqueRestaurants = userData?.uniqueRestaurants || [];
+
+            // Load restaurant notes
+            if (userData?.restaurant_notes) {
+                setRestaurantNotes(userData.restaurant_notes);
+            }
 
             const citiesWithData: City[] = [];
             for (const cityName of uniqueCities) {
@@ -968,7 +1010,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     restaurantsWithData.push({
                         name: normalizedName,
                         mealCount,
-                        emojiUrls: restaurantEmojiUrls[normalizedName] || []
+                        emojiUrls: restaurantEmojiUrls[normalizedName] || [],
+                        city: restaurantCities[normalizedName],
+                        meals: restaurantMeals[normalizedName] || [],
                     });
                 }
             }
@@ -978,10 +1022,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const savedLayout = await loadPixelArtLayout(targetUserId);
             let orderedEmojis: string[];
             let loadedTableSizes: number[] = [];
+            let loadedConfigs: TableConfig[] = [];
             if (savedLayout) {
-                const reconciledTables = reconcilePixelArtLayout(emojiUrls, savedLayout, 18);
-                orderedEmojis = reconciledTables.reduce((acc, t) => [...acc, ...t], []);
-                loadedTableSizes = reconciledTables.map(t => t.length);
+                const reconciled = reconcilePixelArtLayout(emojiUrls, savedLayout);
+                orderedEmojis = reconciled.tables.reduce((acc, t) => [...acc, ...t], []);
+                loadedTableSizes = reconciled.tables.map(t => t.length);
+                loadedConfigs = reconciled.configs;
             } else {
                 orderedEmojis = emojiUrls;
             }
@@ -990,6 +1036,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             console.log(`📊 Accolades loaded: ${orderedEmojis.length} emojis, ${citiesWithData.length} cities, ${cuisinesWithData.length} cuisines, ${restaurantsWithData.length} restaurants`);
             setPixelArtEmojis(orderedEmojis);
             setEmojiTableSizes(loadedTableSizes);
+            setEmojiTableConfigs(loadedConfigs);
             setCities(citiesWithData);
             setCuisines(cuisinesWithData);
             setRestaurants(restaurantsWithData);
@@ -1554,7 +1601,57 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // Handle restaurant tap - show modal
     const handleRestaurantPress = (restaurant: Restaurant) => {
         setSelectedRestaurant(restaurant);
+        setIsEditingRestaurantNote(false);
+        setRestaurantNoteText(restaurantNotes[restaurant.name] || '');
         setShowRestaurantModal(true);
+    };
+
+    // Open Google Maps for a restaurant
+    const handleOpenRestaurantMaps = async (restaurant: Restaurant) => {
+        try {
+            let searchQuery = restaurant.name;
+            if (restaurant.city) {
+                searchQuery += `, ${restaurant.city}`;
+            }
+            const query = encodeURIComponent(searchQuery);
+            const googleMapsUrl = `comgooglemaps://?q=${query}`;
+            const canOpenGoogleMaps = await Linking.canOpenURL(googleMapsUrl);
+            if (canOpenGoogleMaps) {
+                await Linking.openURL(googleMapsUrl);
+            } else {
+                const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
+                await Linking.openURL(webUrl);
+            }
+        } catch (error) {
+            console.error('Error opening maps:', error);
+        }
+    };
+
+    // Save restaurant note
+    const handleSaveRestaurantNote = async () => {
+        if (!selectedRestaurant) return;
+        const currentUserId = auth().currentUser?.uid;
+        if (!currentUserId) return;
+        setSavingRestaurantNote(true);
+        Keyboard.dismiss();
+        try {
+            const trimmed = restaurantNoteText.trim();
+            const updatedNotes = { ...restaurantNotes };
+            if (trimmed) {
+                updatedNotes[selectedRestaurant.name] = trimmed;
+            } else {
+                delete updatedNotes[selectedRestaurant.name];
+            }
+            await firestore().collection('users').doc(currentUserId).update({
+                restaurant_notes: updatedNotes,
+            });
+            setRestaurantNotes(updatedNotes);
+            setIsEditingRestaurantNote(false);
+        } catch (error) {
+            console.error('Error saving restaurant note:', error);
+        } finally {
+            setSavingRestaurantNote(false);
+        }
     };
 
     // Handle viewing meals for a restaurant
@@ -1699,6 +1796,8 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 {/* Meal Calendar */}
                 <MealCalendar
                     meals={meals}
+                    isOwnProfile={isOwnProfile}
+                    userId={userId || auth().currentUser?.uid}
                     onMealPress={(meal) => {
                         navigation.navigate('MealDetail', {
                             mealId: meal.id,
@@ -1728,12 +1827,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 */}
 
                 {/* Cities Section — Top 3 + tags */}
-                {!citiesLoading && cities.length > 0 && (
+                {!citiesLoading && cities.length > 0 && (() => {
+                    const activeCityFilter = activeFilters?.find(f => f.type === 'city')?.value?.toLowerCase();
+                    return (
                     <>
                         <Text style={styles.sectionTitle}>Cities</Text>
                         {/* Top 3 cities with meal counts */}
                         <View style={{ paddingHorizontal: spacing.md }}>
-                            {cities.slice(0, 3).map((city, index) => (
+                            {cities.slice(0, 3).map((city, index) => {
+                                const isActive = activeCityFilter === city.name.toLowerCase();
+                                return (
                                 <TouchableOpacity
                                     key={city.name}
                                     style={{
@@ -1743,6 +1846,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         paddingVertical: 10,
                                         borderBottomWidth: index < 2 ? 1 : 0,
                                         borderBottomColor: colors.mediumGray,
+                                        ...(isActive ? { backgroundColor: '#EDF4F0', marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 8 } : {}),
                                     }}
                                     onPress={() => {
                                         if (onFilterChange && onTabChange) {
@@ -1761,7 +1865,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             style={{ width: 24, height: 24, marginRight: 10 }}
                                             resizeMode="contain"
                                         />
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: isActive ? '700' : '500', color: isActive ? '#5B8A72' : colors.textPrimary }}>
                                             {city.name}
                                         </Text>
                                     </View>
@@ -1769,12 +1873,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         {city.mealCount} {city.mealCount === 1 ? 'meal' : 'meals'}
                                     </Text>
                                 </TouchableOpacity>
-                            ))}
+                                );
+                            })}
                         </View>
                         {/* All cities as small tags */}
                         {cities.length > 3 && (
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
-                                {cities.slice(3).map(city => (
+                                {cities.slice(3).map(city => {
+                                    const isActive = activeCityFilter === city.name.toLowerCase();
+                                    return (
                                     <TouchableOpacity
                                         key={city.name}
                                         onPress={() => {
@@ -1784,31 +1891,37 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             }
                                         }}
                                         style={{
-                                            backgroundColor: colors.white,
+                                            backgroundColor: isActive ? '#5B8A72' : colors.white,
                                             borderWidth: 1,
-                                            borderColor: colors.mediumGray,
+                                            borderColor: isActive ? '#5B8A72' : colors.mediumGray,
                                             borderRadius: 16,
                                             paddingVertical: 5,
                                             paddingHorizontal: 12,
                                         }}
                                     >
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: colors.textSecondary }}>
-                                            {city.name} ({city.mealCount})
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: isActive ? '#fff' : colors.textSecondary }}>
+                                            {city.name}
                                         </Text>
                                     </TouchableOpacity>
-                                ))}
+                                    );
+                                })}
                             </View>
                         )}
                     </>
-                )}
+                    );
+                })()}
 
                 {/* Cuisines Section — Top 3 + tags */}
-                {!cuisinesLoading && cuisines.length > 0 && (
+                {!cuisinesLoading && cuisines.length > 0 && (() => {
+                    const activeCuisineFilter = activeFilters?.find(f => f.type === 'cuisineType')?.value?.toLowerCase();
+                    return (
                     <>
                         <Text style={styles.sectionTitle}>Cuisines</Text>
                         {/* Top 3 cuisines with meal counts */}
                         <View style={{ paddingHorizontal: spacing.md }}>
-                            {cuisines.slice(0, 3).map((cuisine, index) => (
+                            {cuisines.slice(0, 3).map((cuisine, index) => {
+                                const isActive = activeCuisineFilter === cuisine.name.toLowerCase();
+                                return (
                                 <TouchableOpacity
                                     key={cuisine.name}
                                     style={{
@@ -1818,6 +1931,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         paddingVertical: 10,
                                         borderBottomWidth: index < 2 ? 1 : 0,
                                         borderBottomColor: colors.mediumGray,
+                                        ...(isActive ? { backgroundColor: '#EDF4F0', marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 8 } : {}),
                                     }}
                                     onPress={() => {
                                         if (onFilterChange && onTabChange) {
@@ -1836,7 +1950,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             style={{ width: 24, height: 24, marginRight: 10 }}
                                             resizeMode="contain"
                                         />
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: '500', color: colors.textPrimary }}>
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: isActive ? '700' : '500', color: isActive ? '#5B8A72' : colors.textPrimary }}>
                                             {cuisine.name}
                                         </Text>
                                     </View>
@@ -1844,12 +1958,15 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                         {cuisine.mealCount} {cuisine.mealCount === 1 ? 'meal' : 'meals'}
                                     </Text>
                                 </TouchableOpacity>
-                            ))}
+                                );
+                            })}
                         </View>
                         {/* All cuisines as small tags */}
                         {cuisines.length > 3 && (
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
-                                {cuisines.slice(3).map(cuisine => (
+                                {cuisines.slice(3).map(cuisine => {
+                                    const isActive = activeCuisineFilter === cuisine.name.toLowerCase();
+                                    return (
                                     <TouchableOpacity
                                         key={cuisine.name}
                                         onPress={() => {
@@ -1859,28 +1976,31 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                             }
                                         }}
                                         style={{
-                                            backgroundColor: colors.white,
+                                            backgroundColor: isActive ? '#5B8A72' : colors.white,
                                             borderWidth: 1,
-                                            borderColor: colors.mediumGray,
+                                            borderColor: isActive ? '#5B8A72' : colors.mediumGray,
                                             borderRadius: 16,
                                             paddingVertical: 5,
                                             paddingHorizontal: 12,
                                         }}
                                     >
-                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: colors.textSecondary }}>
-                                            {cuisine.name} ({cuisine.mealCount})
+                                        <Text style={{ fontFamily: 'Inter', fontSize: 12, color: isActive ? '#fff' : colors.textSecondary }}>
+                                            {cuisine.name}
                                         </Text>
                                     </TouchableOpacity>
-                                ))}
+                                    );
+                                })}
                             </View>
                         )}
                     </>
-                )}
+                    );
+                })()}
 
                 {/* Restaurants Section — Draggable */}
                 {!restaurantsLoading && restaurants.length > 0 && (
                     <DraggableRestaurantList
                         restaurants={restaurants}
+                        cityFilter={activeFilters?.find(f => f.type === 'city')?.value}
                         sections={restaurantSections}
                         unsectionedOrder={unsectionedOrder}
                         isOwnProfile={isOwnProfile}
@@ -1930,7 +2050,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             )}
         </View>
-    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId]);
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters]);
 
     // Function to render each meal item — memoized with useCallback
     const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {
@@ -2189,61 +2309,157 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             </Modal>
 
-            {/* Restaurant Fact Modal */}
+            {/* Restaurant Detail Modal */}
             <Modal
                 visible={showRestaurantModal}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setShowRestaurantModal(false)}
+                onRequestClose={() => {
+                    if (!isEditingRestaurantNote) setShowRestaurantModal(false);
+                }}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.restaurantModalContent}>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => {
+                        if (!isEditingRestaurantNote) setShowRestaurantModal(false);
+                    }}
+                >
+                    <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation()} style={styles.restaurantModalContent}>
                         {selectedRestaurant && (
                             <>
+                                {/* Header: title + note button */}
                                 <View style={styles.restaurantModalHeader}>
                                     <View style={styles.restaurantModalTitleContainer}>
                                         <Text style={styles.restaurantModalTitle}>
                                             {selectedRestaurant.name}
                                         </Text>
+                                        {/* City + Maps link */}
+                                        {selectedRestaurant.city && (
+                                            <TouchableOpacity
+                                                onPress={() => handleOpenRestaurantMaps(selectedRestaurant)}
+                                                activeOpacity={0.6}
+                                            >
+                                                <Text style={styles.restaurantModalCity}>
+                                                    📍 {selectedRestaurant.city}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        {!selectedRestaurant.city && (
+                                            <TouchableOpacity
+                                                onPress={() => handleOpenRestaurantMaps(selectedRestaurant)}
+                                                activeOpacity={0.6}
+                                            >
+                                                <Text style={styles.restaurantModalCity}>
+                                                    📍 View on Maps
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
-                                    <TouchableOpacity
-                                        style={styles.modalCloseButton}
-                                        onPress={() => setShowRestaurantModal(false)}
-                                    >
-                                        <Text style={styles.modalCloseText}>✕</Text>
-                                    </TouchableOpacity>
+                                    {isOwnProfile && !isEditingRestaurantNote && (
+                                        <TouchableOpacity
+                                            style={styles.restaurantNoteButton}
+                                            onPress={() => {
+                                                setRestaurantNoteText(restaurantNotes[selectedRestaurant.name] || '');
+                                                setIsEditingRestaurantNote(true);
+                                            }}
+                                            activeOpacity={0.6}
+                                        >
+                                            <Text style={styles.restaurantNoteButtonText}>
+                                                {restaurantNotes[selectedRestaurant.name] ? '✎' : '+'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
 
-                                <View style={styles.restaurantDescriptionSection}>
-                                    <Text style={styles.restaurantDescriptionText}>
-                                        Brief description of restaurant
-                                    </Text>
-                                </View>
-
-                                {/* Display meal emojis */}
-                                {selectedRestaurant.emojiUrls && selectedRestaurant.emojiUrls.length > 0 && (
-                                    <View style={styles.restaurantModalEmojiContainer}>
-                                        {selectedRestaurant.emojiUrls.map((url, index) => (
-                                            <Image
-                                                key={index}
-                                                source={{ uri: url }}
-                                                style={styles.restaurantModalEmoji}
-                                                resizeMode="contain"
-                                            />
-                                        ))}
+                                {/* Existing note display */}
+                                {restaurantNotes[selectedRestaurant.name] && !isEditingRestaurantNote && (
+                                    <View style={styles.restaurantNoteDisplay}>
+                                        <Text style={styles.restaurantNoteDisplayText}>
+                                            {restaurantNotes[selectedRestaurant.name]}
+                                        </Text>
                                     </View>
                                 )}
 
-                                <TouchableOpacity
-                                    style={styles.viewMealsButton}
-                                    onPress={() => handleViewRestaurantMeals(selectedRestaurant)}
-                                >
-                                    <Text style={styles.viewMealsButtonText}>View Meals</Text>
-                                </TouchableOpacity>
+                                {/* Note editing */}
+                                {isEditingRestaurantNote && (
+                                    <View style={styles.restaurantNoteEditContainer}>
+                                        <TextInput
+                                            style={styles.restaurantNoteInput}
+                                            value={restaurantNoteText}
+                                            onChangeText={(text) => {
+                                                if (text.length <= 150) setRestaurantNoteText(text);
+                                            }}
+                                            placeholder="Add a note about this spot..."
+                                            placeholderTextColor="#B0B0B0"
+                                            multiline
+                                            maxLength={150}
+                                            autoFocus
+                                        />
+                                        <View style={styles.restaurantNoteEditFooter}>
+                                            <Text style={styles.restaurantNoteCharCount}>
+                                                {restaurantNoteText.length}/150
+                                            </Text>
+                                            <View style={styles.restaurantNoteEditButtons}>
+                                                <TouchableOpacity
+                                                    onPress={() => setIsEditingRestaurantNote(false)}
+                                                    style={styles.restaurantNoteCancelButton}
+                                                >
+                                                    <Text style={styles.restaurantNoteCancelText}>Cancel</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    onPress={handleSaveRestaurantNote}
+                                                    style={styles.restaurantNoteSaveButton}
+                                                    disabled={savingRestaurantNote}
+                                                >
+                                                    {savingRestaurantNote ? (
+                                                        <ActivityIndicator size="small" color="#fff" />
+                                                    ) : (
+                                                        <Text style={styles.restaurantNoteSaveText}>Save</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Meal list */}
+                                <ScrollView style={styles.restaurantModalScroll} showsVerticalScrollIndicator={false}>
+                                    {(selectedRestaurant.meals || []).map((meal, index) => {
+                                        const emojiUrl = meal.pixel_art_url || (meal.pixel_art_data ? `data:image/png;base64,${meal.pixel_art_data}` : null);
+                                        return (
+                                            <TouchableOpacity
+                                                key={meal.id}
+                                                style={[
+                                                    styles.restaurantModalMealRow,
+                                                    index < (selectedRestaurant.meals?.length || 0) - 1 && styles.restaurantModalMealRowBorder,
+                                                ]}
+                                                onPress={() => {
+                                                    setShowRestaurantModal(false);
+                                                    navigation.navigate('MealDetail', { mealId: meal.id } as any);
+                                                }}
+                                            >
+                                                {emojiUrl ? (
+                                                    <Image source={{ uri: emojiUrl }} style={styles.restaurantModalMealEmoji} resizeMode="contain" />
+                                                ) : meal.photoUrl ? (
+                                                    <Image source={{ uri: meal.photoUrl }} style={styles.restaurantModalMealPhoto} resizeMode="cover" />
+                                                ) : (
+                                                    <View style={[styles.restaurantModalMealPhoto, { backgroundColor: '#f0f0f0' }]} />
+                                                )}
+                                                <View style={styles.restaurantModalMealInfo}>
+                                                    <Text style={styles.restaurantModalMealName} numberOfLines={1}>{meal.meal}</Text>
+                                                </View>
+                                                {meal.rating > 0 && (
+                                                    <EmojiDisplay rating={meal.rating} size={22} />
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
                             </>
                         )}
-                    </View>
-                </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
 
             {/* Meals collection modal — rendered outside useMemo to support state */}
@@ -2252,6 +2468,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 onClose={() => setShowMealsModal(false)}
                 emojis={pixelArtEmojis}
                 tableSizes={emojiTableSizes}
+                tableConfigs={emojiTableConfigs}
                 isOwnProfile={isOwnProfile}
                 onReorder={handleEmojiReorder}
             />
@@ -2897,72 +3114,148 @@ const styles = StyleSheet.create({
     restaurantModalContent: {
         backgroundColor: '#fff',
         borderRadius: 16,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+        padding: 20,
+        width: '85%',
+        maxWidth: 360,
+        maxHeight: '70%',
     },
     restaurantModalHeader: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 20,
-    },
-    restaurantModalIcon: {
-        fontSize: 32,
-        marginRight: 12,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 2,
     },
     restaurantModalTitleContainer: {
         flex: 1,
     },
     restaurantModalTitle: {
+        fontFamily: 'Unna',
         fontSize: 20,
+        fontWeight: '700',
+        color: colors.textPrimary || '#1A1A1A',
+    },
+    restaurantModalCity: {
+        fontFamily: 'Inter',
+        fontSize: 13,
+        color: '#5B8A72',
+        marginTop: 2,
+    },
+    restaurantNoteButton: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: colors.lightTan || '#F8F6F2',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 8,
+    },
+    restaurantNoteButtonText: {
+        fontSize: 18,
+        color: '#5B8A72',
         fontWeight: '600',
-        color: '#1a2b49',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    restaurantNoteDisplay: {
+        backgroundColor: colors.lightTan || '#F8F6F2',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        marginTop: 8,
         marginBottom: 4,
     },
-    restaurantModalSubtitle: {
+    restaurantNoteDisplayText: {
+        fontFamily: 'Inter',
+        fontSize: 13,
+        color: colors.textPrimary || '#1A1A1A',
+        lineHeight: 18,
+    },
+    restaurantNoteEditContainer: {
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    restaurantNoteInput: {
+        fontFamily: 'Inter',
         fontSize: 14,
-        color: '#666',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+        color: colors.textPrimary || '#1A1A1A',
+        backgroundColor: colors.lightTan || '#F8F6F2',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingTop: 10,
+        paddingBottom: 10,
+        minHeight: 60,
+        maxHeight: 100,
+        textAlignVertical: 'top',
     },
-    modalCloseButton: {
-        padding: 4,
-    },
-    modalCloseText: {
-        fontSize: 24,
-        color: '#999',
-        fontWeight: '300',
-    },
-    restaurantDescriptionSection: {
-        backgroundColor: '#f8f9fa',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 20,
-    },
-    restaurantDescriptionText: {
-        fontSize: 14,
-        lineHeight: 20,
-        color: '#888',
-        fontStyle: 'italic',
-        fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
-        textAlign: 'center',
-    },
-    restaurantModalEmojiContainer: {
+    restaurantNoteEditFooter: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
-        gap: 12,
+        marginTop: 8,
     },
-    restaurantModalEmoji: {
-        width: 48,
-        height: 48,
+    restaurantNoteCharCount: {
+        fontFamily: 'Inter',
+        fontSize: 11,
+        color: '#B0B0B0',
+    },
+    restaurantNoteEditButtons: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    restaurantNoteCancelButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderRadius: 8,
+    },
+    restaurantNoteCancelText: {
+        fontFamily: 'Inter',
+        fontSize: 13,
+        color: '#858585',
+    },
+    restaurantNoteSaveButton: {
+        backgroundColor: '#5B8A72',
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        minWidth: 54,
+        alignItems: 'center',
+    },
+    restaurantNoteSaveText: {
+        fontFamily: 'Inter',
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    restaurantModalScroll: {
+        maxHeight: 300,
+        marginTop: 10,
+    },
+    restaurantModalMealRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+    },
+    restaurantModalMealRowBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: colors.mediumGray || '#EBEBEB',
+    },
+    restaurantModalMealEmoji: {
+        width: 36,
+        height: 36,
+        marginRight: 12,
+    },
+    restaurantModalMealPhoto: {
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        marginRight: 12,
+    },
+    restaurantModalMealInfo: {
+        flex: 1,
+    },
+    restaurantModalMealName: {
+        fontFamily: 'Inter',
+        fontSize: 15,
+        fontWeight: '600',
+        color: colors.textPrimary || '#1A1A1A',
     },
     viewMealsButton: {
         backgroundColor: '#4a90e2',

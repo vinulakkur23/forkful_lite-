@@ -6,14 +6,45 @@
 
 import { firestore } from '../firebaseConfig';
 
-export interface PixelArtLayout {
-  order: string[];       // flat emoji URL array (order preserved)
-  tableSizes: number[];  // how many emojis per table, e.g. [18, 18, 15, 10]
+// --- Types ---
+
+export type FurnitureType = 'wooden_table'; // extend later: 'picnic_blanket' | 'bookshelf'
+
+export interface TableConfig {
+  columns: number;
+  maxRows: number;
+  furniture: FurnitureType;
 }
 
-/**
- * Load saved pixel art layout from a user's profile
- */
+export const TABLE_PRESETS = {
+  small: { columns: 3, maxRows: 3, furniture: 'wooden_table' as const },  // 9 items
+  large: { columns: 6, maxRows: 3, furniture: 'wooden_table' as const },  // 18 items
+};
+
+export type TablePresetKey = keyof typeof TABLE_PRESETS;
+
+export const DEFAULT_CONFIG: TableConfig = TABLE_PRESETS.large;
+
+export interface PixelArtLayout {
+  order: string[];
+  tableSizes: number[];
+  tableConfigs?: TableConfig[];
+}
+
+export interface ReconciledResult {
+  tables: string[][];
+  configs: TableConfig[];
+}
+
+// --- Helpers ---
+
+const getCapacity = (config: TableConfig): number => config.columns * config.maxRows;
+
+const configsEqual = (a: TableConfig, b: TableConfig): boolean =>
+  a.columns === b.columns && a.maxRows === b.maxRows && a.furniture === b.furniture;
+
+// --- Load ---
+
 export const loadPixelArtLayout = async (userId: string): Promise<PixelArtLayout | null> => {
   try {
     const userDoc = await firestore().collection('users').doc(userId).get();
@@ -24,6 +55,7 @@ export const loadPixelArtLayout = async (userId: string): Promise<PixelArtLayout
     return {
       order: userData.pixel_art_emoji_order,
       tableSizes: userData.pixel_art_table_sizes || [],
+      tableConfigs: userData.pixel_art_table_configs || undefined,
     };
   } catch (error) {
     console.error('PixelArtOrderService: Error loading layout:', error);
@@ -31,36 +63,31 @@ export const loadPixelArtLayout = async (userId: string): Promise<PixelArtLayout
   }
 };
 
-/**
- * Save pixel art layout (order + table sizes) to a user's profile
- */
+// --- Save ---
+
 export const savePixelArtLayout = async (
   userId: string,
   tables: string[][],
+  configs: TableConfig[],
 ): Promise<void> => {
   try {
-    // Flatten tables to a single order array
     const flat = tables.reduce((acc, t) => [...acc, ...t], []);
-    // Only persist Firebase Storage URLs — base64 data strings are too large
-    // for Firestore. Base64 emojis will appear at the end on next load.
     const urlsOnly = flat.filter(url => !url.startsWith('data:'));
 
-    // Store table sizes so we can reconstruct the table structure on load.
-    // Adjust sizes to account for filtered base64 entries.
+    // Compute URL-only table sizes for backward compat
     const tableSizes: number[] = [];
-    let flatIdx = 0;
     for (const table of tables) {
       let urlCount = 0;
       for (const url of table) {
         if (!url.startsWith('data:')) urlCount++;
       }
       tableSizes.push(urlCount);
-      flatIdx += table.length;
     }
 
     await firestore().collection('users').doc(userId).update({
       pixel_art_emoji_order: urlsOnly,
       pixel_art_table_sizes: tableSizes,
+      pixel_art_table_configs: configs,
     });
     console.log('PixelArtOrderService: Layout saved');
   } catch (error) {
@@ -69,35 +96,37 @@ export const savePixelArtLayout = async (
   }
 };
 
-/**
- * Reconcile saved layout with current emojis.
- * Returns a table structure (string[][]) preserving saved table sizes.
- * New emojis are appended to the last table.
- */
+// --- Reconcile ---
+
 export const reconcilePixelArtLayout = (
   currentEmojis: string[],
   layout: PixelArtLayout,
-  maxPerTable: number,
-): string[][] => {
+): ReconciledResult => {
   const currentSet = new Set(currentEmojis);
 
-  // Step 1: Reconstruct tables from saved order using saved sizes FIRST,
-  // THEN filter deleted items within each table. This preserves table
-  // boundaries — a deletion in Table 3 only affects Table 3.
-  let rawTables: string[][] = [];
+  // Derive configs: use saved configs, or infer all-large from tableSizes
+  const savedConfigs: TableConfig[] = layout.tableConfigs && layout.tableConfigs.length > 0
+    ? layout.tableConfigs
+    : layout.tableSizes.map(() => ({ ...DEFAULT_CONFIG }));
+
+  // Step 1: Reconstruct tables from saved order using saved sizes,
+  // then filter deleted items within each table.
+  const rawTables: string[][] = [];
+  const rawConfigs: TableConfig[] = [];
   let idx = 0;
+
   if (layout.tableSizes.length > 0) {
-    for (const size of layout.tableSizes) {
-      // Slice the saved order by original table size
+    for (let i = 0; i < layout.tableSizes.length; i++) {
+      const size = layout.tableSizes[i];
+      const config = savedConfigs[i] || { ...DEFAULT_CONFIG };
       const originalTable = layout.order.slice(idx, idx + size);
-      // Filter to only items that still exist
       const filtered = originalTable.filter(url => currentSet.has(url));
       if (filtered.length > 0) {
         rawTables.push(filtered);
+        rawConfigs.push(config);
       }
       idx += size;
     }
-    // Any remaining saved items not covered by sizes
     if (idx < layout.order.length) {
       const remainder = layout.order.slice(idx).filter(url => currentSet.has(url));
       if (remainder.length > 0) {
@@ -105,14 +134,16 @@ export const reconcilePixelArtLayout = (
           rawTables[rawTables.length - 1].push(...remainder);
         } else {
           rawTables.push(remainder);
+          rawConfigs.push({ ...DEFAULT_CONFIG });
         }
       }
     }
   } else {
-    // No saved table sizes — filter then chunk
     const cleaned = layout.order.filter(url => currentSet.has(url));
-    for (let i = 0; i < cleaned.length; i += maxPerTable) {
-      rawTables.push(cleaned.slice(i, i + maxPerTable));
+    const cap = getCapacity(DEFAULT_CONFIG);
+    for (let i = 0; i < cleaned.length; i += cap) {
+      rawTables.push(cleaned.slice(i, i + cap));
+      rawConfigs.push({ ...DEFAULT_CONFIG });
     }
   }
 
@@ -120,48 +151,67 @@ export const reconcilePixelArtLayout = (
   const placedSet = new Set(layout.order.filter(url => currentSet.has(url)));
   const newEmojis = currentEmojis.filter(url => !placedSet.has(url));
 
-  // Consolidate: merge undersized tables into their neighbors.
-  // A table is "undersized" if it has fewer than half a row (< columns/2 = 3).
-  // Merge small trailing tables into the previous one if they fit.
-  const minTableSize = 3; // less than half a row
+  // Consolidation: merge undersized tables into neighbors,
+  // but ONLY if they share the same config (don't merge a small table into a large one).
+  const minTableSize = 3;
   const tables: string[][] = [];
-  for (const table of rawTables) {
+  const configs: TableConfig[] = [];
+
+  for (let i = 0; i < rawTables.length; i++) {
+    const table = rawTables[i];
+    const config = rawConfigs[i];
+
     if (tables.length > 0 && table.length < minTableSize) {
-      const prev = tables[tables.length - 1];
-      if (prev.length + table.length <= maxPerTable) {
-        prev.push(...table);
+      const prevIdx = tables.length - 1;
+      const prevConfig = configs[prevIdx];
+      if (configsEqual(config, prevConfig) && tables[prevIdx].length + table.length <= getCapacity(prevConfig)) {
+        tables[prevIdx].push(...table);
         continue;
       }
     }
     tables.push([...table]);
+    configs.push({ ...config });
   }
-  // Also merge the last table backward if it's tiny
+
+  // Merge last table backward if tiny and same config
   if (tables.length >= 2) {
-    const last = tables[tables.length - 1];
-    const secondLast = tables[tables.length - 2];
-    if (last.length < minTableSize && secondLast.length + last.length <= maxPerTable) {
-      secondLast.push(...last);
+    const lastIdx = tables.length - 1;
+    const secondLastIdx = lastIdx - 1;
+    if (
+      tables[lastIdx].length < minTableSize &&
+      configsEqual(configs[lastIdx], configs[secondLastIdx]) &&
+      tables[secondLastIdx].length + tables[lastIdx].length <= getCapacity(configs[secondLastIdx])
+    ) {
+      tables[secondLastIdx].push(...tables[lastIdx]);
       tables.pop();
+      configs.pop();
     }
   }
 
-  // Append new emojis to the last table (or create a new one)
+  // Append new emojis to the last table (using large preset for overflow)
   if (newEmojis.length > 0) {
     if (tables.length === 0) {
       tables.push([]);
+      configs.push({ ...DEFAULT_CONFIG });
     }
     let lastTable = tables[tables.length - 1];
+    let lastConfig = configs[configs.length - 1];
+    let lastCap = getCapacity(lastConfig);
+
     for (const emoji of newEmojis) {
-      if (lastTable.length < maxPerTable) {
+      if (lastTable.length < lastCap) {
         lastTable.push(emoji);
       } else {
-        // Last table is full, create a new one and update reference
+        const newConfig = { ...DEFAULT_CONFIG };
         const newTable = [emoji];
         tables.push(newTable);
+        configs.push(newConfig);
         lastTable = newTable;
+        lastConfig = newConfig;
+        lastCap = getCapacity(newConfig);
       }
     }
   }
 
-  return tables;
+  return { tables, configs };
 };

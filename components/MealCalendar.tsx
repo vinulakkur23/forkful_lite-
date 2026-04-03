@@ -2,9 +2,10 @@
  * MealCalendar
  * Beautiful monthly calendar showing pixel art emojis on days when meals were eaten.
  * Up to 4 emojis per day in a mini-grid. Tap a day to see all meals in a modal.
+ * Profile owners can add short notes to any day.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,9 +15,13 @@ import {
   Dimensions,
   Modal,
   ScrollView,
-  SafeAreaView,
+  TextInput,
+  Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { colors, spacing, shadows } from '../themes';
+import EmojiDisplay from './EmojiDisplay';
+import { firestore } from '../firebaseConfig';
 
 interface MealEntry {
   id: string;
@@ -33,6 +38,8 @@ interface MealEntry {
 interface Props {
   meals: MealEntry[];
   onMealPress?: (meal: MealEntry) => void;
+  isOwnProfile?: boolean;
+  userId?: string;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -42,6 +49,8 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+const NOTE_MAX_LENGTH = 150; // ~30-40 words
 
 // Calendar math utilities
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -78,15 +87,39 @@ const generateCalendarGrid = (year: number, month: number): (number | null)[][] 
   return rows;
 };
 
-const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
+const MealCalendar: React.FC<Props> = ({ meals, onMealPress, isOwnProfile = false, userId }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDayMeals, setSelectedDayMeals] = useState<MealEntry[] | null>(null);
   const [selectedDayLabel, setSelectedDayLabel] = useState('');
+  const [selectedDayKey, setSelectedDayKey] = useState('');
+
+  // Notes state
+  const [calendarNotes, setCalendarNotes] = useState<Record<string, string>>({});
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const today = new Date();
   const todayKey = getDateKey(today);
+
+  // Load calendar notes from Firestore
+  useEffect(() => {
+    if (!userId) return;
+    const loadNotes = async () => {
+      try {
+        const userDoc = await firestore().collection('users').doc(userId).get();
+        const data = userDoc.data();
+        if (data?.calendar_notes) {
+          setCalendarNotes(data.calendar_notes);
+        }
+      } catch (error) {
+        console.error('MealCalendar: Error loading notes:', error);
+      }
+    };
+    loadNotes();
+  }, [userId]);
 
   // Group meals by date — prefer photoTakenAt (when photo was taken) over createdAt (when posted)
   const mealsByDate = useMemo(() => {
@@ -144,7 +177,35 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
     if (dayMeals && dayMeals.length > 0) {
       const date = new Date(year, month, day);
       setSelectedDayLabel(date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }));
+      setSelectedDayKey(key);
       setSelectedDayMeals(dayMeals);
+      setIsEditingNote(false);
+      setNoteText(calendarNotes[key] || '');
+    }
+  };
+
+  // Save note to Firestore
+  const handleSaveNote = async () => {
+    if (!userId) return;
+    setSavingNote(true);
+    Keyboard.dismiss();
+    try {
+      const trimmed = noteText.trim();
+      const updatedNotes = { ...calendarNotes };
+      if (trimmed) {
+        updatedNotes[selectedDayKey] = trimmed;
+      } else {
+        delete updatedNotes[selectedDayKey];
+      }
+      await firestore().collection('users').doc(userId).update({
+        calendar_notes: updatedNotes,
+      });
+      setCalendarNotes(updatedNotes);
+      setIsEditingNote(false);
+    } catch (error) {
+      console.error('MealCalendar: Error saving note:', error);
+    } finally {
+      setSavingNote(false);
     }
   };
 
@@ -158,6 +219,7 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
     const dayMeals = mealsByDate.get(key) || [];
     const isToday = key === todayKey;
     const hasMeals = dayMeals.length > 0;
+    const hasNote = !!calendarNotes[key];
 
     return (
       <TouchableOpacity
@@ -171,51 +233,49 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
         activeOpacity={hasMeals ? 0.6 : 1}
         disabled={!hasMeals}
       >
-        {/* Emoji(s) */}
-        {hasMeals && (
-          <View style={styles.emojiGrid}>
-            {dayMeals.length === 1 && (
-              <View style={styles.singleEmojiContainer}>
-                {getEmojiUrl(dayMeals[0]) ? (
-                  <Image source={{ uri: getEmojiUrl(dayMeals[0])! }} style={styles.singleEmoji} resizeMode="contain" />
-                ) : (
-                  <View style={styles.mealDot} />
-                )}
-              </View>
-            )}
-            {dayMeals.length >= 2 && dayMeals.length <= 4 && (
-              <View style={styles.multiEmojiGrid}>
-                {dayMeals.slice(0, 4).map((meal, i) => (
-                  <View key={i} style={styles.miniEmojiCell}>
-                    {getEmojiUrl(meal) ? (
-                      <Image source={{ uri: getEmojiUrl(meal)! }} style={styles.miniEmoji} resizeMode="contain" />
-                    ) : (
-                      <View style={styles.miniMealDot} />
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-            {dayMeals.length > 4 && (
-              <View style={styles.multiEmojiGrid}>
-                {dayMeals.slice(0, 3).map((meal, i) => (
-                  <View key={i} style={styles.miniEmojiCell}>
-                    {getEmojiUrl(meal) ? (
-                      <Image source={{ uri: getEmojiUrl(meal)! }} style={styles.miniEmoji} resizeMode="contain" />
-                    ) : (
-                      <View style={styles.miniMealDot} />
-                    )}
-                  </View>
-                ))}
-                <View style={styles.miniEmojiCell}>
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>+{dayMeals.length - 3}</Text>
-                  </View>
+        {/* Emoji(s) + squiggle for notes */}
+        {hasMeals && (() => {
+          const maxEmojis = hasNote ? 3 : 4;
+          const visibleMeals = dayMeals.slice(0, maxEmojis);
+          const totalSlots = visibleMeals.length + (hasNote ? 1 : 0);
+          const useGrid = totalSlots >= 2;
+
+          if (!useGrid) {
+            // Single meal, no note
+            return (
+              <View style={styles.emojiGrid}>
+                <View style={styles.singleEmojiContainer}>
+                  {getEmojiUrl(dayMeals[0]) ? (
+                    <Image source={{ uri: getEmojiUrl(dayMeals[0])! }} style={styles.singleEmoji} resizeMode="contain" />
+                  ) : (
+                    <View style={styles.mealDot} />
+                  )}
                 </View>
               </View>
-            )}
-          </View>
-        )}
+            );
+          }
+
+          return (
+            <View style={styles.emojiGrid}>
+              <View style={styles.multiEmojiGrid}>
+                {visibleMeals.map((meal, i) => (
+                  <View key={i} style={styles.miniEmojiCell}>
+                    {getEmojiUrl(meal) ? (
+                      <Image source={{ uri: getEmojiUrl(meal)! }} style={styles.miniEmoji} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.miniMealDot} />
+                    )}
+                  </View>
+                ))}
+                {hasNote && (
+                  <View style={styles.miniEmojiCell}>
+                    <Image source={require('../assets/icons/squiggle.png')} style={styles.miniEmoji} resizeMode="contain" />
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Day number */}
         <Text style={[
@@ -229,11 +289,7 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
     );
   };
 
-  // Rating to emoji text
-  const ratingEmoji = (rating: number) => {
-    const emojis: { [key: number]: string } = { 1: '😟', 2: '😐', 3: '🙂', 4: '😊', 5: '😄', 6: '🤩' };
-    return emojis[rating] || '';
-  };
+  const existingNote = calendarNotes[selectedDayKey];
 
   return (
     <View style={styles.container}>
@@ -278,13 +334,76 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setSelectedDayMeals(null)}
+          onPress={() => {
+            if (!isEditingNote) setSelectedDayMeals(null);
+          }}
         >
           <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation()} style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
-            <Text style={styles.modalSubtitle}>
-              {selectedDayMeals?.length} {selectedDayMeals?.length === 1 ? 'meal' : 'meals'}
-            </Text>
+            {/* Header row: date + add note button */}
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
+              {isOwnProfile && !isEditingNote && (
+                <TouchableOpacity
+                  style={styles.addNoteButton}
+                  onPress={() => {
+                    setNoteText(existingNote || '');
+                    setIsEditingNote(true);
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <Text style={styles.addNoteButtonText}>{existingNote ? '✎' : '+'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Existing note display (view mode) */}
+            {existingNote && !isEditingNote && (
+              <View style={styles.noteDisplay}>
+                <Text style={styles.noteDisplayText}>{existingNote}</Text>
+              </View>
+            )}
+
+            {/* Note editing */}
+            {isEditingNote && (
+              <View style={styles.noteEditContainer}>
+                <TextInput
+                  style={styles.noteInput}
+                  value={noteText}
+                  onChangeText={(text) => {
+                    if (text.length <= NOTE_MAX_LENGTH) setNoteText(text);
+                  }}
+                  placeholder="Add a note about this day..."
+                  placeholderTextColor={colors.textTertiary || '#B0B0B0'}
+                  multiline
+                  maxLength={NOTE_MAX_LENGTH}
+                  autoFocus
+                />
+                <View style={styles.noteEditFooter}>
+                  <Text style={styles.noteCharCount}>
+                    {noteText.length}/{NOTE_MAX_LENGTH}
+                  </Text>
+                  <View style={styles.noteEditButtons}>
+                    <TouchableOpacity
+                      onPress={() => setIsEditingNote(false)}
+                      style={styles.noteCancelButton}
+                    >
+                      <Text style={styles.noteCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSaveNote}
+                      style={styles.noteSaveButton}
+                      disabled={savingNote}
+                    >
+                      {savingNote ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.noteSaveText}>Save</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
 
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {selectedDayMeals?.map((meal, index) => (
@@ -309,7 +428,7 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress }) => {
                     <Text style={styles.modalMealRestaurant} numberOfLines={1}>{meal.restaurant || ''}</Text>
                   </View>
                   {meal.rating > 0 && (
-                    <Text style={styles.modalMealRating}>{ratingEmoji(meal.rating)}</Text>
+                    <EmojiDisplay rating={meal.rating} size={22} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -442,18 +561,10 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: '#5B8A72',
   },
-  countBadge: {
-    backgroundColor: colors.warmTaupe,
-    borderRadius: 6,
-    width: 12,
-    height: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countBadgeText: {
-    color: colors.white,
-    fontSize: 7,
-    fontWeight: '700',
+  squigglePlaceholder: {
+    fontSize: 9,
+    color: '#333',
+    lineHeight: 12,
   },
 
   // Day detail modal
@@ -469,15 +580,110 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '85%',
     maxWidth: 360,
-    maxHeight: '60%',
+    maxHeight: '70%',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   modalTitle: {
     fontFamily: 'Unna',
     fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 2,
+    flex: 1,
   },
+  addNoteButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.lightTan || '#F8F6F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  addNoteButtonText: {
+    fontSize: 18,
+    color: '#5B8A72',
+    fontWeight: '600',
+  },
+
+  // Note display (view mode)
+  noteDisplay: {
+    backgroundColor: colors.lightTan || '#F8F6F2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  noteDisplayText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+
+  // Note editing
+  noteEditContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  noteInput: {
+    fontFamily: 'Inter',
+    fontSize: 14,
+    color: colors.textPrimary,
+    backgroundColor: colors.lightTan || '#F8F6F2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 60,
+    maxHeight: 100,
+    textAlignVertical: 'top',
+  },
+  noteEditFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  noteCharCount: {
+    fontFamily: 'Inter',
+    fontSize: 11,
+    color: colors.textTertiary || '#B0B0B0',
+  },
+  noteEditButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  noteCancelButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  noteCancelText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: colors.textTertiary || '#858585',
+  },
+  noteSaveButton: {
+    backgroundColor: '#5B8A72',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    minWidth: 54,
+    alignItems: 'center',
+  },
+  noteSaveText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
   modalSubtitle: {
     fontFamily: 'Inter',
     fontSize: 13,
@@ -486,6 +692,7 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     maxHeight: 300,
+    marginTop: 10,
   },
   modalMealRow: {
     flexDirection: 'row',

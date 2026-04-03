@@ -3,7 +3,13 @@
  * Records audio, transcribes via backend (OpenAI Whisper), and provides playback.
  */
 
-import AudioRecorderPlayer from 'react-native-audio-recorder-player';
+import AudioRecorderPlayer, {
+  AudioEncoderAndroidType,
+  AudioSourceAndroidType,
+  AVEncoderAudioQualityIOSType,
+  AVEncodingOption,
+  OutputFormatAndroidType,
+} from 'react-native-audio-recorder-player';
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 
@@ -53,7 +59,25 @@ export const startRecording = async (): Promise<string> => {
 
   console.log('🎙️ VoiceNote: Starting recording, path:', filePath || 'default (iOS)');
 
-  const result = await audioRecorderPlayer.startRecorder(filePath);
+  // Lower bitrate for faster upload — voice is fine at 32kbps mono
+  const audioSet = Platform.OS === 'android'
+    ? {
+        AudioEncoderAndroid: AudioEncoderAndroidType.AAC,
+        AudioSourceAndroid: AudioSourceAndroidType.MIC,
+        OutputFormatAndroid: OutputFormatAndroidType.MPEG_4,
+        AudioSamplingRateAndroid: 16000,
+        AudioChannelsAndroid: 1,
+        AudioEncodingBitRateAndroid: 32000,
+      }
+    : {
+        AVEncoderAudioQualityKeyIOS: AVEncoderAudioQualityIOSType.medium,
+        AVNumberOfChannelsKeyIOS: 1,
+        AVFormatIDKeyIOS: AVEncodingOption.aac,
+        AVSampleRateKeyIOS: 16000,
+        AVEncoderBitRateKeyIOS: 32000,
+      };
+
+  const result = await audioRecorderPlayer.startRecorder(filePath, audioSet);
   console.log('🎙️ VoiceNote: Recording started at:', result);
 
   return result; // The library returns the actual file path used
@@ -127,7 +151,7 @@ export const transcribeVoiceNote = async (filePath: string): Promise<Transcripti
     } as any);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout (Whisper + summarization + cold start)
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout (Whisper only + cold start)
 
     const response = await fetch(`${BASE_URL}/transcribe-voice-note`, {
       method: 'POST',
