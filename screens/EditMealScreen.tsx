@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard, Modal, Animated
+  ActivityIndicator, Alert, SafeAreaView, ScrollView, Platform, Keyboard, Modal, Animated,
+  // @ts-ignore — exported but not in RN types
+  unstable_batchedUpdates,
 } from 'react-native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import {
@@ -23,6 +25,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiRating from '../components/EmojiRating';
 import EmojiDisplay from '../components/EmojiDisplay';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
+import FoodFactsModal from '../components/FoodFactsModal';
 import { saveUserChallenge } from '../services/userChallengesService';
 import challengeNotificationService from '../services/challengeNotificationService';
 import { RootStackParamList, TabParamList } from '../App';
@@ -90,17 +93,12 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
   
-  // State for quick rating statements inline expansion
-  const [showQuickRatingsExpansion, setShowQuickRatingsExpansion] = useState<boolean>(false);
-  const [quickRatings, setQuickRatings] = useState<{ [key: string]: number }>({});
-  const [currentStatementIndex, setCurrentStatementIndex] = useState<number>(0);
-  const [pressedEmojiId, setPressedEmojiId] = useState<number | null>(null);
+  // State for "What to Look For" chip toggles
+  const [quickRatings, setQuickRatings] = useState<{ [key: string]: number | boolean }>({});
   const [showIngredientHistory, setShowIngredientHistory] = useState<boolean>(false);
   const [showRestaurantHistory, setShowRestaurantHistory] = useState<boolean>(false);
+  const [showFoodFactsModal, setShowFoodFactsModal] = useState<boolean>(false);
   
-  // Double-click detection for emoji rating
-  const [lastClickTime, setLastClickTime] = useState<number>(0);
-  const [lastClickedRating, setLastClickedRating] = useState<number>(0);
   
   // State to track if facts are being loaded
   const [factsLoading, setFactsLoading] = useState<boolean>(false);
@@ -134,6 +132,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [showPhotoSourceModal, setShowPhotoSourceModal] = useState<boolean>(false);
+  const [photoLoading, setPhotoLoading] = useState<boolean>(false);
+
+  // Ref to track current photos length (avoids stale closure in Firestore listener)
+  const photosRef = useRef<PhotoItem[]>([]);
 
   // Success modal state (Path 1 vs Path 2)
   const [showEmojiAwardModal, setShowEmojiAwardModal] = useState<boolean>(false);
@@ -142,6 +144,24 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Ref for scroll view
   const scrollViewRef = useRef<any>(null);
   const textInputRef = useRef<any>(null);
+
+  // Keep photosRef in sync with photos state (avoids stale closure in listener)
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+
+  // Safety timeout: stop showing photo loading after 30s if upload never completes
+  useEffect(() => {
+    if (photoLoading) {
+      const timeout = setTimeout(() => {
+        if (photosRef.current.length === 0) {
+          console.log('EditMealScreen - Photo loading timeout, hiding spinner');
+          setPhotoLoading(false);
+        }
+      }, 30000);
+      return () => clearTimeout(timeout);
+    }
+  }, [photoLoading]);
 
   // Track whether the user has made any local edits (rating, thoughts, quick ratings).
   // Once true, the Firestore listener will only update non-user-editable fields
@@ -259,9 +279,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
     }
     
     // Set photos from fresh data
-    if (freshMealData.photos && Array.isArray(freshMealData.photos)) {
+    if (freshMealData.photos && Array.isArray(freshMealData.photos) && freshMealData.photos.length > 0) {
       console.log('EditMealScreen - Setting photos from fresh data:', freshMealData.photos.length);
       setPhotos(freshMealData.photos);
+      setPhotoLoading(false);
     } else if (freshMealData.photoUrl) {
       console.log('EditMealScreen - Converting single photoUrl to photos array');
       setPhotos([{
@@ -270,17 +291,18 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         order: 0,
         uploadedAt: freshMealData.createdAt
       }]);
+      setPhotoLoading(false);
     } else {
+      // No photos yet — if this is a fresh meal, a background upload may be in progress
       setPhotos([]);
+      // Show loading if this meal was just created (no photoUrl yet = upload in progress)
+      if (freshMealData.meal && !freshMealData.photoUrl) {
+        setPhotoLoading(true);
+        console.log('EditMealScreen - No photo yet, showing loading (background upload likely in progress)');
+      }
     }
 
-    // Only reset expansion state when NOT from listener or when expansion is not active
-    // This prevents the listener from interfering with active quick rating sessions
-    if (!isFromListener || !showQuickRatingsExpansion) {
-      setCurrentStatementIndex(0);
-      setShowQuickRatingsExpansion(false);
-      // Don't reset quickRatings here - they should persist from Firestore data loaded above
-    }
+    // Don't reset quickRatings here - they should persist from Firestore data loaded above
   };
   
   // Set up Firestore listener to watch for enhanced_facts updates
@@ -297,34 +319,57 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           (documentSnapshot) => {
             if (documentSnapshot.exists) {
               const freshMealData = { id: documentSnapshot.id, ...documentSnapshot.data() };
-              
+
               // If user has made local edits, only update background-generated fields
               // (insights, pixel art, criteria, etc.) — never overwrite rating/thoughts.
               if (hasLocalEdits.current) {
                 console.log('EditMealScreen - User has local edits, updating only background fields');
-                // Update the meal object for background fields only
-                setMeal((prev: any) => ({
-                  ...prev,
-                  dish_insights: freshMealData.dish_insights || prev.dish_insights,
-                  dish_rating_criteria: freshMealData.dish_rating_criteria || prev.dish_rating_criteria,
-                  pixel_art_url: freshMealData.pixel_art_url || prev.pixel_art_url,
-                  enhanced_facts: freshMealData.enhanced_facts || prev.enhanced_facts,
-                  rating_statements_result: freshMealData.rating_statements_result || prev.rating_statements_result,
-                }));
-                if (freshMealData.pixel_art_url && !pixelArtUrl) {
-                  setPixelArtUrl(freshMealData.pixel_art_url);
-                }
-                if (freshMealData.pixel_art_options?.length > 0 && pixelArtOptions.length === 0) {
-                  setPixelArtOptions(freshMealData.pixel_art_options);
-                  // Auto-select first option if no pixel_art_url is set yet
-                  if (!freshMealData.pixel_art_url) {
-                    firestore().collection('mealEntries').doc(mealId).update({
-                      pixel_art_url: freshMealData.pixel_art_options[0],
-                    });
-                    setPixelArtUrl(freshMealData.pixel_art_options[0]);
-                    console.log('✅ Auto-selected first pixel art option as default');
+                // Batch all state updates to prevent Folly F14 hash map crash
+                // (Firestore listeners fire outside React's event system)
+                unstable_batchedUpdates(() => {
+                  // Update the meal object for background fields only
+                  setMeal((prev: any) => ({
+                    ...prev,
+                    photoUrl: freshMealData.photoUrl || prev.photoUrl,
+                    dish_insights: freshMealData.dish_insights || prev.dish_insights,
+                    dish_rating_criteria: freshMealData.dish_rating_criteria || prev.dish_rating_criteria,
+                    pixel_art_url: freshMealData.pixel_art_url || prev.pixel_art_url,
+                    enhanced_facts: freshMealData.enhanced_facts || prev.enhanced_facts,
+                    rating_statements_result: freshMealData.rating_statements_result || prev.rating_statements_result,
+                  }));
+                  // Update photos if photoUrl arrived from background upload
+                  // Use photosRef.current instead of photos to avoid stale closure
+                  if (freshMealData.photoUrl && photosRef.current.length === 0) {
+                    const newPhotos = [{
+                      url: freshMealData.photoUrl,
+                      isFlagship: true,
+                      order: 0,
+                    }];
+                    setPhotos(newPhotos);
+                    setPhotoLoading(false);
+                    console.log('EditMealScreen - Photo arrived from background upload');
                   }
-                }
+                  // Also handle photos array from Firestore
+                  if (freshMealData.photos && Array.isArray(freshMealData.photos) && freshMealData.photos.length > 0 && photosRef.current.length === 0) {
+                    setPhotos(freshMealData.photos);
+                    setPhotoLoading(false);
+                    console.log('EditMealScreen - Photos array arrived from background upload');
+                  }
+                  if (freshMealData.pixel_art_url && !pixelArtUrl) {
+                    setPixelArtUrl(freshMealData.pixel_art_url);
+                  }
+                  if (freshMealData.pixel_art_options?.length > 0 && pixelArtOptions.length === 0) {
+                    setPixelArtOptions(freshMealData.pixel_art_options);
+                    // Auto-select first option if no pixel_art_url is set yet
+                    if (!freshMealData.pixel_art_url) {
+                      firestore().collection('mealEntries').doc(mealId).update({
+                        pixel_art_url: freshMealData.pixel_art_options[0],
+                      });
+                      setPixelArtUrl(freshMealData.pixel_art_options[0]);
+                      console.log('✅ Auto-selected first pixel art option as default');
+                    }
+                  }
+                });
                 return;
               }
 
@@ -333,8 +378,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 console.log('EditMealScreen - Enhanced facts now available! Updating UI...');
               }
 
-              // Process the fresh data (this will update the UI with new facts)
-              processFreshMealData(freshMealData, true);
+              // Batch the full data processing too
+              unstable_batchedUpdates(() => {
+                processFreshMealData(freshMealData, true);
+              });
             }
           },
           (error) => {
@@ -353,7 +400,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         unsubscribe();
       }
     };
-  }, [mealId, showQuickRatingsExpansion]); // Added showQuickRatingsExpansion dependency
+  }, [mealId]);
   
   // Handle processed photo returned from CropScreen
   const handleProcessedPhotoReturn = useCallback(async (processedImageUri: string, editingPhotoIndex?: number) => {
@@ -443,10 +490,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     console.log('EditMealScreen - Meal ID received, all data will be loaded fresh from Firestore', mealId);
     // Reset all state when loading a new meal
-    setCurrentStatementIndex(0);
-    setShowQuickRatingsExpansion(false);
     setQuickRatings({});
-    setPressedEmojiId(null);
 
     // Reset voice recording state
     setVoiceState('idle');
@@ -509,22 +553,8 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleRating = (selectedRating: number): void => {
     hasLocalEdits.current = true;
     Keyboard.dismiss();
-
-    const currentTime = Date.now();
-    const timeDiff = currentTime - lastClickTime;
-    
-    // Check for double-click (within 500ms and same rating)
-    if (timeDiff < 500 && selectedRating === lastClickedRating && selectedRating === rating) {
-      console.log('EditMealScreen - Double-click detected, opening quick ratings expansion');
-      handleOpenQuickRatings();
-    } else {
-      // Single click - just set the rating
-      setRating(selectedRating);
-    }
-    
-    // Update click tracking
-    setLastClickTime(currentTime);
-    setLastClickedRating(selectedRating);
+    ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+    setRating(selectedRating);
   };
 
   // Helper function to get rating criteria from unified data structure
@@ -535,124 +565,10 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   // Handle quick ratings overlay
-  const handleOpenQuickRatings = (): void => {
-    Keyboard.dismiss();
-
-    // Get statements from any available data structure
-    const statements = getRatingStatements();
-
-    if (statements && statements.length > 0) {
-      // Find the first unrated statement
-      let nextUnratedIndex = 0;
-      for (let i = 0; i < statements.length; i++) {
-        if (!quickRatings[statements[i]]) {
-          nextUnratedIndex = i;
-          break;
-        }
-      }
-      
-      console.log('EditMealScreen - Opening quick ratings at index:', nextUnratedIndex, 'Total rated:', Object.keys(quickRatings).length);
-      setCurrentStatementIndex(nextUnratedIndex);
-      setShowQuickRatingsExpansion(true);
-    } else {
-      Alert.alert('No Rating Statements', 'No rating statements are available for this meal.');
-    }
-  };
-
-  const handleQuickRating = async (rating: number): Promise<void> => {
-    hasLocalEdits.current = true;
-    // Get statements from any available data structure
-    const statements = getRatingStatements();
-    if (!statements) return;
-    
-    // Show press feedback briefly
-    setPressedEmojiId(rating);
-    
-    // Brief delay to show the press feedback
-    setTimeout(async () => {
-      const currentStatement = statements[currentStatementIndex];
-      
-      // Save the rating for this statement
-      const updatedRatings = {
-        ...quickRatings,
-        [currentStatement]: rating
-      };
-      setQuickRatings(updatedRatings);
-      
-      // Save to Firestore immediately
-      try {
-        await firestore().collection('mealEntries').doc(mealId).update({
-          quick_ratings: updatedRatings
-        });
-        console.log('Quick rating saved to Firestore:', { statement: currentStatement, rating });
-      } catch (error) {
-        console.error('Error saving quick rating:', error);
-      }
-      
-      // Reset press feedback
-      setPressedEmojiId(null);
-      
-      // Move to next statement or show ingredient history
-      if (currentStatementIndex < statements.length - 1) {
-        setCurrentStatementIndex(currentStatementIndex + 1);
-      } else {
-        // All statements rated, show ingredient history if available
-        if (meal.dish_insights?.restaurant_fact || meal.enhanced_facts?.food_facts?.ingredient_history) {
-          setShowQuickRatingsExpansion(false);
-          setShowIngredientHistory(true);
-        } else {
-          // No ingredient history, just close
-          setShowQuickRatingsExpansion(false);
-          setCurrentStatementIndex(0);
-        }
-      }
-    }, 150); // 150ms delay for visual feedback
-  };
-
-
-  const handleCloseQuickRatings = (): void => {
-    setShowQuickRatingsExpansion(false);
-    setCurrentStatementIndex(0);
-  };
-
-  // Handler for below-rating mode - doesn't close the component
-  const handleBelowRating = async (rating: number): Promise<void> => {
-    // Get statements from any available data structure
-    const statements = getRatingStatements();
-    if (!statements) return;
-    
-    // Show press feedback briefly
-    setPressedEmojiId(rating);
-    
-    // Brief delay to show the press feedback
-    setTimeout(async () => {
-      const currentStatement = statements[currentStatementIndex];
-      
-      // Save the rating for this statement
-      const updatedRatings = {
-        ...quickRatings,
-        [currentStatement]: rating
-      };
-      setQuickRatings(updatedRatings);
-      
-      // DON'T save to Firestore immediately - it causes the listener to interfere
-      // The ratings will be saved when the user clicks "Save Changes"
-      console.log('Below rating updated locally:', { statement: currentStatement, rating });
-      
-      // Reset press feedback
-      setPressedEmojiId(null);
-      
-      // Move to next statement (but DON'T close anything)
-      if (currentStatementIndex < statements.length - 1) {
-        setCurrentStatementIndex(currentStatementIndex + 1);
-      }
-      // Note: We don't close or show ingredient history - just stay open
-    }, 150); // 150ms delay for visual feedback
-  };
+  // Old quick rating handlers removed — replaced by chip toggle in "What to Look For" section
 
   const handleCloseIngredientHistory = (): void => {
     setShowIngredientHistory(false);
-    setCurrentStatementIndex(0);
   };
 
   const handleCloseRestaurantHistory = (): void => {
@@ -1438,15 +1354,22 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       >
         {/* Meal photos */}
         <View style={styles.photosSection}>
-          <MultiPhotoGallery
-            photos={photos}
-            onAddPhoto={handleAddPhoto}
-            onRemovePhoto={handleRemovePhoto}
-            onSetFlagship={handleSetFlagship}
-            onPhotoPress={handlePhotoPress}
-            editable={true}
-            maxPhotos={5}
-          />
+          {photoLoading && photos.length === 0 ? (
+            <View style={styles.photoLoadingContainer}>
+              <ActivityIndicator size="large" color="#5B8A72" />
+              <Text style={styles.photoLoadingText}>Loading photo...</Text>
+            </View>
+          ) : (
+            <MultiPhotoGallery
+              photos={photos}
+              onAddPhoto={handleAddPhoto}
+              onRemovePhoto={handleRemovePhoto}
+              onSetFlagship={handleSetFlagship}
+              onPhotoPress={handlePhotoPress}
+              editable={true}
+              maxPhotos={5}
+            />
+          )}
           {uploadingPhoto && (
             <View style={styles.uploadingOverlay}>
               <ActivityIndicator size="small" color="#5B8A72" />
@@ -1457,139 +1380,26 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* Meal details */}
         <View style={styles.detailsCard}>
-          {/* Rating Section - shows either main rating or detailed expansion */}
+          {/* Rating Section */}
           <View style={styles.ratingSection}>
-            {!showQuickRatingsExpansion ? (
-              <>
-                {/* Main Rating Mode */}
-                <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionTitle}>How was your meal?</Text>
-                  <Text style={styles.sectionSubtitle}></Text>
-                </View>
-                <EmojiRating 
-                  rating={rating} 
-                  onRatingChange={handleRating}
-                  size={40}
-                  style={styles.interactiveRating}
-                />
-                
-                {/* Rating Description */}
-                {rating > 0 && (
-                  <View style={styles.ratingDescriptionContainer}>
-                    <Text style={styles.ratingDescription}>
-                      {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
-                    </Text>
-                  </View>
-                )}
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>How was your meal?</Text>
+              <Text style={styles.sectionSubtitle}></Text>
+            </View>
+            <EmojiRating
+              rating={rating}
+              onRatingChange={handleRating}
+              size={40}
+              style={styles.interactiveRating}
+            />
 
-                {/* Rating Statements - Show BELOW overall rating when rating > 0 */}
-                {rating > 0 && getRatingStatements() && (
-                  <View style={styles.belowRatingContainer}>
-                    <Text style={styles.ratingStatementText}>
-                      <Text style={styles.optionalPrefix}>(Optional) </Text>
-                      {renderTextWithBold(
-                        getRatingStatements()?.[currentStatementIndex] || ''
-                      )}
-                    </Text>
-                    <EmojiRating
-                      rating={quickRatings[getRatingStatements()?.[currentStatementIndex] || ''] || 0}
-                      onRatingChange={handleBelowRating}
-                      size={40}
-                      style={styles.interactiveRating}
-                      maxEmojis={3}
-                    />
-
-                    {/* Navigation controls */}
-                    <View style={styles.quickRatingNavigation}>
-                      <TouchableOpacity
-                        style={[styles.navButton, currentStatementIndex === 0 && styles.navButtonDisabled]}
-                        onPress={() => currentStatementIndex > 0 && setCurrentStatementIndex(currentStatementIndex - 1)}
-                        disabled={currentStatementIndex === 0}
-                      >
-                        <Text style={[styles.navButtonText, currentStatementIndex === 0 && styles.navButtonTextDisabled]}>← Back</Text>
-                      </TouchableOpacity>
-
-                      <Text style={styles.navProgress}>
-                        {currentStatementIndex + 1} of {getRatingStatements()?.length || 0}
-                      </Text>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.navButton,
-                          currentStatementIndex === (getRatingStatements()?.length || 0) - 1 && styles.navButtonDisabled
-                        ]}
-                        onPress={() => {
-                          const statements = getRatingStatements();
-                          if (statements && currentStatementIndex < statements.length - 1) {
-                            setCurrentStatementIndex(currentStatementIndex + 1);
-                          }
-                        }}
-                        disabled={currentStatementIndex === (getRatingStatements()?.length || 0) - 1}
-                      >
-                        <Text style={[
-                          styles.navButtonText,
-                          currentStatementIndex === (getRatingStatements()?.length || 0) - 1 && styles.navButtonTextDisabled
-                        ]}>
-                          Skip →
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </>
-            ) : (
-              // Detailed Rating Mode - same styling as main rating
-              getRatingStatements() && (
-                <>
-                  <Text style={styles.ratingStatementText}>
-                    <Text style={styles.optionalPrefix}>(Optional) </Text>
-                    {renderTextWithBold(
-                      getRatingStatements()?.[currentStatementIndex] || ''
-                    )}
-                  </Text>
-                  <EmojiRating
-                    rating={quickRatings[getRatingStatements()?.[currentStatementIndex] || ''] || 0}
-                    onRatingChange={handleQuickRating}
-                    size={40}
-                    style={styles.interactiveRating}
-                    maxEmojis={3}
-                  />
-
-                  {/* Navigation controls */}
-                  <View style={styles.quickRatingNavigation}>
-                    <TouchableOpacity
-                      style={[styles.navButton, currentStatementIndex === 0 && styles.navButtonDisabled]}
-                      onPress={() => currentStatementIndex > 0 && setCurrentStatementIndex(currentStatementIndex - 1)}
-                      disabled={currentStatementIndex === 0}
-                    >
-                      <Text style={[styles.navButtonText, currentStatementIndex === 0 && styles.navButtonTextDisabled]}>← Back</Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.navProgress}>
-                      {currentStatementIndex + 1} of {getRatingStatements()?.length || 0}
-                    </Text>
-
-                    <TouchableOpacity
-                      style={styles.navButton}
-                      onPress={() => {
-                        const statements = getRatingStatements();
-                        if (statements && currentStatementIndex < statements.length - 1) {
-                          setCurrentStatementIndex(currentStatementIndex + 1);
-                        } else {
-                          // Last statement - close the expansion
-                          handleCloseQuickRatings();
-                        }
-                      }}
-                    >
-                      <Text style={styles.navButtonText}>
-                        {currentStatementIndex === (getRatingStatements()?.length || 0) - 1
-                          ? 'Skip'
-                          : 'Skip →'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )
+            {/* Rating Description */}
+            {rating > 0 && (
+              <View style={styles.ratingDescriptionContainer}>
+                <Text style={styles.ratingDescription}>
+                  {EMOJI_DESCRIPTIONS[rating as keyof typeof EMOJI_DESCRIPTIONS]}
+                </Text>
+              </View>
             )}
           </View>
 
@@ -1688,7 +1498,7 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 ref={textInputRef}
                 key={`thoughts-${mealId}`}
                 style={styles.commentInput}
-                placeholder="What did you enjoy about this meal? What could be better?"
+                placeholder="Share your thoughts!"
                 placeholderTextColor="#999"
                 multiline={true}
                 blurOnSubmit={false}
@@ -1741,23 +1551,62 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
                 </TouchableOpacity>
               </View>
             )}
-            <Text style={styles.helperText}>
-              Sharing will help others find your review helpful and allow us to give you better recommendations.
-            </Text>
+
+            {/* What to Look For — toggleable chips */}
+            {getRatingStatements() && getRatingStatements()!.length > 0 && (
+              <View style={styles.whatToLookForContainer}>
+                <Text style={styles.whatToLookForTitle}>WHAT TO LOOK FOR</Text>
+                <View style={styles.chipsContainer}>
+                  {getRatingStatements()!.map((statement, index) => {
+                    const isSelected = !!quickRatings[statement];
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.chip, isSelected && styles.chipSelected]}
+                        onPress={() => {
+                          hasLocalEdits.current = true;
+                          ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+                          setQuickRatings(prev => {
+                            const next = { ...prev };
+                            if (next[statement]) {
+                              delete next[statement];
+                            } else {
+                              (next as any)[statement] = true;
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                          {statement}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
 
-          {/* Dish City History */}
+          {/* Dish City History — tap to see all food facts */}
           {(meal.dish_insights?.cultural_insight || meal.enhanced_facts?.food_facts?.dish_city_history) && (
-            <View style={styles.cityHistorySection}>
-              <Text style={styles.cityHistoryTitle}>Fun Fact!</Text>
+            <TouchableOpacity
+              style={styles.cityHistorySection}
+              onPress={() => setShowFoodFactsModal(true)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.cityHistoryTitle}>Fun Fact!</Text>
+                <Text style={{ fontFamily: 'Inter', fontSize: 12, color: '#5B8A72', fontWeight: '500' }}>See all →</Text>
+              </View>
               <Text style={styles.cityHistoryText}>
                 {renderTextWithBold(
-                  meal.dish_insights?.cultural_insight || 
-                  meal.enhanced_facts?.food_facts?.dish_city_history || 
+                  meal.dish_insights?.cultural_insight ||
+                  meal.enhanced_facts?.food_facts?.dish_city_history ||
                   'Delicious!'
                 )}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -1847,6 +1696,15 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       )}
+
+      {/* Food Facts Modal */}
+      <FoodFactsModal
+        visible={showFoodFactsModal}
+        onClose={() => setShowFoodFactsModal(false)}
+        dishName={meal.meal}
+        dishInsights={meal.dish_insights}
+        enhancedFacts={meal.enhanced_facts}
+      />
 
       {/* Photo Source Modal - COMMENTED OUT (CAUSES MEMORY ISSUES) - KEEP FOR FUTURE USE */}
       {/*
@@ -2081,6 +1939,19 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     position: 'relative',
   },
+  photoLoadingContainer: {
+    aspectRatio: 1,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#999',
+    fontWeight: '500',
+  },
   uploadingOverlay: {
     position: 'absolute',
     bottom: 12,
@@ -2115,7 +1986,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   ratingSection: {
-    marginBottom: 20,
+    marginBottom: 8,
   },
   criteriaSection: {
     marginBottom: 20,
@@ -2166,7 +2037,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
   },
   commentsSection: {
-    marginTop: 20,
+    marginTop: 8,
   },
   commentInput: {
     borderWidth: 1,
@@ -2190,6 +2061,43 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontStyle: 'italic',
     fontFamily: 'Inter',
+  },
+  whatToLookForContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  whatToLookForTitle: {
+    fontFamily: 'Inter',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#858585',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#DEDEDE',
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  chipSelected: {
+    backgroundColor: '#5B8A72',
+    borderColor: '#5B8A72',
+  },
+  chipText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: '#858585',
+  },
+  chipTextSelected: {
+    color: '#fff',
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -2333,7 +2241,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1A1A1A',
-    marginBottom: 8,
     fontFamily: 'Inter',
   },
   cityHistoryText: {

@@ -26,7 +26,8 @@ export const API_CONFIG = {
     MEAL_ENHANCEMENT_FOOD: '/meal-enhancement/food-history',
     MEAL_ENHANCEMENT_PHOTO_RATING: '/meal-enhancement/photo-rating',
     MEAL_ENHANCEMENT_PHOTO_SCORE: '/meal-enhancement/photo-score',
-    MEAL_ENHANCEMENT_RANDOM: '/meal-enhancement/random'
+    MEAL_ENHANCEMENT_RANDOM: '/meal-enhancement/random',
+    ENHANCE_PHOTO: '/enhance-photo'
   },
 
   // Timeout for API requests in milliseconds

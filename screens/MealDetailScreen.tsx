@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import EmojiDisplay from '../components/EmojiDisplay';
 import EmojiRating from '../components/EmojiRating';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
+import FoodFactsModal from '../components/FoodFactsModal';
 import CommentsSection from '../components/CommentsSection';
 import { RootStackParamList, TabParamList } from '../App';
 // Import Firebase from our central config
@@ -82,6 +83,7 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [dishCriteria, setDishCriteria] = useState<DishCriteria | null>(null);
   const [combinedResult, setCombinedResult] = useState<CombinedResponse | null>(null);
   const [quickRatings, setQuickRatings] = useState<{ [key: string]: number } | null>(null);
+  const [showFoodFactsModal, setShowFoodFactsModal] = useState<boolean>(false);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
 
   // State for editing metadata
@@ -1172,46 +1174,41 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Dish History Section */}
+        {/* Dish History Section — tap to see all food facts */}
         {meal.dish_insights?.dish_history && (
-          <View style={styles.dishHistoryContainer}>
-            <Text style={styles.dishHistoryLabel}>Dish History</Text>
+          <TouchableOpacity
+            style={styles.dishHistoryContainer}
+            onPress={() => setShowFoodFactsModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.dishHistoryLabel}>Dish History</Text>
+              <Text style={{ fontFamily: 'Inter', fontSize: 12, color: '#5B8A72', fontWeight: '500' }}>See all →</Text>
+            </View>
             <Text style={styles.dishHistoryText}>
               {renderTextWithBold(meal.dish_insights.dish_history)}
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
-        {/* Quick Ratings Section - only show rated statements */}
-        {quickRatings && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (
-          <View style={styles.quickRatingsSection}>
-            {(meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements)
-              .filter(statement => quickRatings[statement] !== undefined)
-              .map((statement, index) => (
-                <View key={index} style={styles.ratedStatementItem}>
-                  <Text style={styles.statementText}>
-                    {renderTextWithBold(statement)}
-                  </Text>
-                  <View style={styles.statementRating}>
-                    <Image
-                      source={
-                        quickRatings[statement] === 1 ? require('../assets/emojis/emoji-bad-inactive.png') :
-                        quickRatings[statement] === 2 ? require('../assets/emojis/emoji-ok-inactive.png') :
-                        quickRatings[statement] === 3 ? require('../assets/emojis/emoji-good-inactive.png') :
-                        quickRatings[statement] === 4 ? require('../assets/emojis/emoji-great-inactive.png') :
-                        quickRatings[statement] === 5 ? require('../assets/emojis/emoji-amazing-inactive.png') :
-                        quickRatings[statement] === 6 ? require('../assets/emojis/emoji-thebest-inactive.png') :
-                        require('../assets/emojis/emoji-good-inactive.png')
-                      }
-                      style={styles.ratingEmojiIcon}
-                      resizeMode="contain"
-                    />
+        {/* What to Look For — only show agreed/selected statements */}
+        {quickRatings && (meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements) && (() => {
+          const statements = meal.dish_rating_criteria?.rating_criteria || meal.quick_criteria_result?.rating_statements;
+          const agreedStatements = statements.filter((s: string) => quickRatings[s]);
+          if (agreedStatements.length === 0) return null;
+          return (
+            <View style={styles.quickRatingsSection}>
+              <Text style={styles.whatToLookForTitle}>WHAT TO LOOK FOR</Text>
+              <View style={styles.agreedChipsContainer}>
+                {agreedStatements.map((statement: string, index: number) => (
+                  <View key={index} style={styles.agreedChip}>
+                    <Text style={styles.agreedChipText}>{statement}</Text>
                   </View>
-                </View>
-              ))
-            }
-          </View>
-        )}
+                ))}
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Enhanced Metadata Tags Section */}
         {(meal.metadata_enriched || meal.enhanced_metadata_facts?.metadata || meal.quick_criteria_result || meal.aiMetadata || (meal.custom_tags && meal.custom_tags.length > 0) || isOwnMeal()) && (
@@ -1821,6 +1818,14 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+      {/* Food Facts Modal */}
+      <FoodFactsModal
+        visible={showFoodFactsModal}
+        onClose={() => setShowFoodFactsModal(false)}
+        dishName={meal.meal}
+        dishInsights={meal.dish_insights}
+        enhancedFacts={meal.enhanced_facts}
+      />
     </SafeAreaView>
   );
 };
@@ -2725,8 +2730,8 @@ const styles = StyleSheet.create({
   quickRatingsSection: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingTop: 16,
+    paddingBottom: 18,
     paddingHorizontal: 20,
     marginHorizontal: 12,
     marginTop: 25,
@@ -2737,30 +2742,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  ratedStatementItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  statementText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1A1A1A',
+  whatToLookForTitle: {
     fontFamily: 'Inter',
-    marginRight: 12,
-    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#858585',
+    letterSpacing: 0.8,
+    marginBottom: 12,
   },
-  statementRating: {
+  agreedChipsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  ratingEmojiIcon: {
-    width: 24,
-    height: 24,
+  agreedChip: {
+    backgroundColor: '#EDF4F0',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 13,
+  },
+  agreedChipText: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: '#5B8A72',
   },
   boldText: {
     fontWeight: 'bold',

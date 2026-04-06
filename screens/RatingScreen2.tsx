@@ -1174,26 +1174,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
       // };
       // checkChallengeCompletion();
 
-      // Upload image to Firebase Storage (skip for unrated meals - already uploaded)
-      let imageUrl = null;
-      if (!isUnratedMeal && freshPhoto?.uri) {
-        // Upload image to Firebase Storage (only for new meals)
-        imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
-
-        // Update the document with the image URL
-        await firestore().collection('mealEntries').doc(mealId).update({
-          imageUrl: imageUrl,
-          photoUrl: imageUrl // Keep backward compatibility with photoUrl field
-        });
-        logWithSession('Document updated with image URL');
-      } else if (isUnratedMeal) {
-        logWithSession('Unrated meal - photo already uploaded, skipping upload');
-      } else {
-        logWithSession('No photo to upload, continuing without image');
-      }
-
       // ========================================
-      // NAVIGATE IMMEDIATELY - API calls continue in background
+      // NAVIGATE IMMEDIATELY - image upload + API calls continue in background
       // ========================================
       const photoSource = route.params.photoSource;
       const resultParams = {
@@ -1222,23 +1204,50 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           _uniqueKey: sessionId,
         });
       } else if (photoSource === 'gallery') {
-        // Gallery flow: photo already cropped in CropScreen before RatingScreen2.
-        // Navigate to EditMeal for full rating (emoji + criteria) then Result.
-        logWithSession('Gallery flow: navigating to EditMeal for rating');
+        // Gallery flow: Navigate to EditMeal FIRST, upload image in background.
+        // EditMealScreen's Firestore listener will pick up the photoUrl once upload completes.
+        logWithSession('Gallery flow: navigating to EditMeal immediately (image uploads in background)');
         navigation.navigate('EditMeal', {
           mealId: mealId,
           meal: {
             id: mealId,
             meal: mealName,
             restaurant: restaurant,
-            photoUrl: imageUrl,
+            photoUrl: null, // Will be populated by Firestore listener after background upload
             rating: 0,
           },
         });
       } else {
-        // Default flow: Navigate to Result screen
+        // Default (camera) flow: upload image before navigating to Result screen
+        // (Result screen needs the image URL in params)
+        let imageUrl = null;
+        if (freshPhoto?.uri) {
+          imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
+          await firestore().collection('mealEntries').doc(mealId).update({
+            imageUrl: imageUrl,
+            photoUrl: imageUrl,
+          });
+          logWithSession('Document updated with image URL');
+        }
         logWithSession('Navigating to ResultScreen (default flow)');
         navigation.navigate('Result', resultParams);
+      }
+
+      // Upload image in background for gallery flow — EditMealScreen's listener will pick it up
+      if (photoSource === 'gallery' && !isUnratedMeal && freshPhoto?.uri) {
+        (async () => {
+          try {
+            logWithSession('Background image upload starting...');
+            const imageUrl = await uploadImageToFirebase(freshPhoto.uri, user.uid);
+            await firestore().collection('mealEntries').doc(mealId).update({
+              imageUrl: imageUrl,
+              photoUrl: imageUrl,
+            });
+            logWithSession('Background image upload complete');
+          } catch (err) {
+            console.error('❌ Background image upload failed:', err);
+          }
+        })();
       }
 
       // ========================================
@@ -1682,24 +1691,10 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         extraHeight={120}
       >
         <View style={styles.contentContainer}>
-          {/* Image Container */}
-          <View style={styles.imageContainer}>
-            {!imageError && getEffectivePhoto()?.uri ? (
-              <Image
-                source={{ uri: getEffectivePhoto().uri }}
-                style={styles.image}
-                resizeMode="cover"
-                onError={handleImageError}
-              />
-            ) : getEffectivePhoto() ? (
-              // Photo exists but has error or no URI
-              <View style={styles.imagePlaceholder}>
-                <MaterialIcon name="image" size={50} color="#ccc" />
-                <Text style={styles.placeholderText}>Image error</Text>
-              </View>
-            ) : (
-              // No photo provided - show "Add Photo" button
-              <TouchableOpacity 
+          {/* Add Photo option when no photo provided */}
+          {!getEffectivePhoto() && (
+            <View style={styles.imageContainer}>
+              <TouchableOpacity
                 style={styles.addPhotoContainer}
                 onPress={handleAddPhoto}
               >
@@ -1707,16 +1702,8 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
                 <Text style={styles.addPhotoText}>Optional: Add Photo Now</Text>
                 <Text style={styles.addPhotoSubtext}>(You can add it later if you haven't taken it yet)</Text>
               </TouchableOpacity>
-            )}
-            
-            {/* Processing overlay */}
-            {isProcessing && (
-              <View style={styles.processingOverlay}>
-                <ActivityIndicator size="large" color="white" />
-                <Text style={styles.processingText}>Processing...</Text>
-              </View>
-            )}
-          </View>
+            </View>
+          )}
 
           {/* Restaurant and Meal Input Section */}
           <View style={styles.infoSection}>

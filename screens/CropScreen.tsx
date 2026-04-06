@@ -33,6 +33,7 @@ import RNFS from 'react-native-fs';
 import ViewShot from 'react-native-view-shot';
 import { uploadImageToFirebase } from '../services/imageUploadService';
 import { auth } from '../firebaseConfig';
+import API_CONFIG, { ensureServerAwake } from '../config/api';
 
 // Extend the TabParamList to include exifData in the Crop screen params
 declare module '../App' {
@@ -89,6 +90,11 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const [croppedImage, setCroppedImage] = useState<{uri: string, width: number, height: number} | null>(null);
   const [hasEdits, setHasEdits] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhanceMode, setEnhanceMode] = useState<'lut_only' | 'gemini_only' | 'full' | null>(null);
+  const [originalBeforeEnhance, setOriginalBeforeEnhance] = useState<{uri: string, width: number, height: number} | null>(null);
+  const [isEnhanced, setIsEnhanced] = useState(false);
+  const [enhancedWith, setEnhancedWith] = useState<'lut_only' | 'gemini_only' | 'full' | null>(null);
   
   // Use refs to track component mounted state
   const isMounted = useRef(true);
@@ -152,10 +158,111 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       
       console.log('Filter applied and saved:', capturedImageUri);
       return capturedImageUri;
-      
+
     } catch (error) {
       console.error('Error capturing filtered image:', error);
       return imageUri;
+    }
+  };
+
+  const handleEnhance = async (mode: 'lut_only' | 'gemini_only' | 'full' = 'full') => {
+    if (!croppedImage?.uri || isEnhancing) return;
+
+    try {
+      setIsEnhancing(true);
+      setEnhanceMode(mode);
+
+      // Store original for revert (only if not already enhanced)
+      if (!originalBeforeEnhance) {
+        setOriginalBeforeEnhance({ ...croppedImage });
+      }
+
+      // Wake up the server if needed
+      await ensureServerAwake();
+
+      // Build FormData with the current image
+      const formData = new FormData();
+      formData.append('image', {
+        uri: croppedImage.uri,
+        name: 'food_photo.jpg',
+        type: 'image/jpeg',
+      } as any);
+      formData.append('mode', mode);
+
+      const timeoutMs = mode === 'lut_only' ? 30000 : 90000;
+      console.log(`Sending image for ${mode} enhancement...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(API_CONFIG.getUrl('/enhance-photo'), {
+        method: 'POST',
+        body: formData,
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Enhancement result:', result.mode, result.steps, result.output_size);
+
+      if (result.enhanced_image) {
+        // Write base64 to a temp file (more reliable than data URI in RN Image)
+        const base64Data = result.enhanced_image.replace(/^data:image\/\w+;base64,/, '');
+        const tempPath = `${RNFS.TemporaryDirectoryPath}/enhanced_${Date.now()}.jpg`;
+        await RNFS.writeFile(tempPath, base64Data, 'base64');
+
+        // Update displayed image
+        setCroppedImage({
+          uri: tempPath,
+          width: parseInt(result.output_size?.split('x')[0]) || 1024,
+          height: parseInt(result.output_size?.split('x')[1]) || 1024,
+        });
+        setIsEnhanced(true);
+        setEnhancedWith(mode);
+
+        // Reset sliders since the image changed
+        setBrightnessValue(1.0);
+        setContrastValue(1.0);
+        setSaturationValue(1.0);
+        setHasEdits(false);
+        setImageLoaded(false);
+      } else {
+        throw new Error('No enhanced image returned');
+      }
+    } catch (error: any) {
+      console.error('Enhancement failed:', error);
+      if (error.name === 'AbortError') {
+        Alert.alert('Timeout', 'Enhancement took too long. Please try again.');
+      } else {
+        Alert.alert('Enhancement Failed', 'Could not enhance the photo. You can continue with the original.');
+      }
+      // Only revert originalBeforeEnhance if nothing was previously enhanced
+      if (!isEnhanced) {
+        setOriginalBeforeEnhance(null);
+      }
+    } finally {
+      setIsEnhancing(false);
+      setEnhanceMode(null);
+    }
+  };
+
+  const handleRevertEnhance = () => {
+    if (originalBeforeEnhance) {
+      setCroppedImage(originalBeforeEnhance);
+      setOriginalBeforeEnhance(null);
+      setIsEnhanced(false);
+      setEnhancedWith(null);
+      // Reset sliders
+      setBrightnessValue(1.0);
+      setContrastValue(1.0);
+      setSaturationValue(1.0);
+      setHasEdits(false);
+      setImageLoaded(false);
     }
   };
   
@@ -336,6 +443,11 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         setCroppedImage(null);
         setHasEdits(false);
         setImageLoaded(false);
+        setIsEnhancing(false);
+        setEnhanceMode(null);
+        setIsEnhanced(false);
+        setEnhancedWith(null);
+        setOriginalBeforeEnhance(null);
         
         // IMMEDIATELY clear any previous prefetched suggestions to prevent using stale data
         if ((global as any).prefetchedSuggestions) {
@@ -961,6 +1073,73 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* Edit Controls */}
       <View style={styles.editControlsContainer}>
         <ScrollView style={styles.editControlsList} showsVerticalScrollIndicator={false}>
+          {/* AI Enhance Section */}
+          <View style={styles.enhanceSection}>
+            {!isEnhanced && !isEnhancing && (
+              <View style={styles.enhanceButtonRow}>
+                <TouchableOpacity
+                  style={styles.enhanceButtonCompact}
+                  onPress={() => handleEnhance('lut_only')}
+                >
+                  <Icon name="palette" size={18} color="#fff" />
+                  <View style={styles.enhanceButtonTextContainer}>
+                    <Text style={styles.enhanceButtonText}>Color Grade</Text>
+                    <Text style={styles.enhanceButtonSubtext}>Fast ~2s</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.enhanceButtonCompact, styles.enhanceButtonFull]}
+                  onPress={() => handleEnhance('gemini_only')}
+                >
+                  <Icon name="auto-fix-high" size={18} color="#fff" />
+                  <View style={styles.enhanceButtonTextContainer}>
+                    <Text style={styles.enhanceButtonText}>AI Enhance</Text>
+                    <Text style={styles.enhanceButtonSubtext}>Declutter + fix lighting</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+            {isEnhancing && (
+              <View style={styles.enhancingContainer}>
+                <ActivityIndicator size="small" color="#1a2b49" />
+                <Text style={styles.enhancingText}>
+                  {enhanceMode === 'lut_only' ? 'Color grading...' : enhanceMode === 'gemini_only' ? 'Enhancing photo...' : 'Enhancing photo...'}
+                </Text>
+              </View>
+            )}
+            {isEnhanced && !isEnhancing && (
+              <View style={styles.enhancedRow}>
+                <View style={styles.enhancedBadge}>
+                  <Icon name="check-circle" size={16} color="#5B8A72" />
+                  <Text style={styles.enhancedBadgeText}>
+                    {enhancedWith === 'lut_only' ? 'Color Graded' : 'Enhanced'}
+                  </Text>
+                </View>
+                <View style={styles.enhancedActions}>
+                  {enhancedWith === 'lut_only' && (
+                    <TouchableOpacity
+                      style={styles.upgradeButton}
+                      onPress={() => handleEnhance('gemini_only')}
+                    >
+                      <Text style={styles.upgradeText}>+ Declutter</Text>
+                    </TouchableOpacity>
+                  )}
+                  {enhancedWith === 'gemini_only' && (
+                    <TouchableOpacity
+                      style={[styles.upgradeButton, { backgroundColor: '#1a2b49' }]}
+                      onPress={() => handleEnhance('lut_only')}
+                    >
+                      <Text style={styles.upgradeText}>+ Color Grade</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={handleRevertEnhance}>
+                    <Text style={styles.revertText}>Undo</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+
           {/* Brightness Slider */}
           <View style={styles.editAdjustmentItem}>
             <View style={styles.editAdjustmentHeader}>
@@ -1092,6 +1271,91 @@ const styles = StyleSheet.create({
   },
   editControlsList: {
     flex: 1,
+  },
+  enhanceSection: {
+    paddingBottom: 12,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  enhanceButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  enhanceButtonCompact: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a2b49',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  enhanceButtonFull: {
+    backgroundColor: '#5B8A72',
+  },
+  enhanceButtonTextContainer: {
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  enhanceButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  enhanceButtonSubtext: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  enhancingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  enhancingText: {
+    marginLeft: 10,
+    color: '#1a2b49',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  enhancedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  enhancedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  enhancedBadgeText: {
+    marginLeft: 6,
+    color: '#5B8A72',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  enhancedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  upgradeButton: {
+    backgroundColor: '#5B8A72',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  upgradeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  revertText: {
+    color: '#D9534F',
+    fontSize: 14,
+    fontWeight: '600',
   },
   editAdjustmentItem: {
     paddingVertical: 8,
