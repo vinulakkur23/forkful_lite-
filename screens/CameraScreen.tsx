@@ -302,7 +302,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           });
 
           const [statementsResult, pixelArtResult] = await Promise.allSettled([
-            extractRatingStatements(dishData.dish_name, isDescriptive),
+            extractRatingStatements(dishData.dish_name, isDescriptive, resizedImage.uri),
             generatePixelArtIcon(dishData.dish_name, resizedImage.uri)
           ]);
 
@@ -327,7 +327,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 dishName: dishData.dish_name,
                 restaurantName: undefined,
                 city: undefined,
-                ratingStatements: statementsData.rating_statements
+                ratingStatements: statementsData.rating_statements,
+                drinkPairing: statementsData.drink_pairing || null,
+                funFact: statementsData.fun_fact || null,
               });
               console.log('✅ [Background] Notifications scheduled');
             } catch (notifError: any) {

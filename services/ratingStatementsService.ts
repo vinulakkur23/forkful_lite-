@@ -34,8 +34,16 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
+export interface DrinkPairing {
+  type: string;      // "wine", "beer", "cocktail", "sake", "tea", "coffee", "non-alcoholic"
+  name: string;      // "Chianti Classico"
+  reason: string;    // "The acidity cuts through the richness"
+}
+
 export interface RatingStatementsData {
-  rating_statements: string[]; // 6 specific rating statements
+  rating_statements: Array<{ title: string; description: string }>; // 3 actionable tips
+  drink_pairing?: DrinkPairing | null;
+  fun_fact?: string | null;
   extraction_timestamp: string;
   extraction_version: string;
   extraction_model: string;
@@ -54,17 +62,19 @@ export interface RatingStatementsResponse {
 }
 
 /**
- * Extract 6 rating statements for immediate display in ResultScreen
- * OPTIMIZED: Works with dish name only, no image processing needed
+ * Extract 3 actionable rating statements, drink pairing, and fun fact
+ * Sends the food photo to Claude for photo-specific tips
  * @param mealName - The name of the dish
  * @param isDescriptive - Whether this is a descriptive name (low confidence) vs specific dish name
+ * @param imageUri - Optional URI of the food photo for photo-specific tips
  */
 export const extractRatingStatements = async (
   mealName: string,
-  isDescriptive: boolean = false
+  isDescriptive: boolean = false,
+  imageUri?: string
 ): Promise<RatingStatementsData | null> => {
-  console.log('🚨 RatingStatementsService: FUNCTION CALLED - extractRatingStatements (text-only)');
-  console.log('🚨 RatingStatementsService: Parameters received:', { mealName, isDescriptive });
+  console.log('🚨 RatingStatementsService: FUNCTION CALLED - extractRatingStatements');
+  console.log('🚨 RatingStatementsService: Parameters received:', { mealName, isDescriptive, hasImage: !!imageUri });
 
   try {
     console.log('🚀 RatingStatementsService: Starting rating statements extraction (no image)');
@@ -76,15 +86,23 @@ export const extractRatingStatements = async (
       return null;
     }
 
-    // No image compression needed - text-only request
-    // Create FormData for text-only request
     const formData = new FormData();
 
-    // Add meal name (required for text-only mode)
+    // Add meal name
     formData.append('meal_name', mealName);
 
     // Add descriptive flag to help backend adjust prompt
     formData.append('is_descriptive', isDescriptive ? 'true' : 'false');
+
+    // Add food photo if available — enables photo-specific tips
+    if (imageUri) {
+      console.log('📸 RatingStatementsService: Attaching food photo for photo-specific tips');
+      formData.append('image', {
+        uri: imageUri,
+        name: 'food_photo.jpg',
+        type: 'image/jpeg',
+      } as any);
+    }
     
     console.log('🌐 RatingStatementsService: Making API call to extract-rating-statements');
     console.log('🌐 RatingStatementsService: URL:', `${BASE_URL}/extract-rating-statements`);

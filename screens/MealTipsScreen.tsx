@@ -20,9 +20,17 @@ interface RatingStatement {
   description: string;
 }
 
+interface DrinkPairing {
+  type: string;
+  name: string;
+  reason: string;
+}
+
 interface MealTipsData {
   dishName: string;
   ratingStatements: RatingStatement[];
+  drinkPairing?: DrinkPairing | null;
+  funFact?: string | null;
   pixelArtUrl?: string;
   pixelArtLocalPath?: string;
   localPixelArtPath?: string;
@@ -86,9 +94,14 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
       const pixelArtUrl = mealData?.pixel_art_url || null;
       const pixelArtLocalPath = mealData?.localPixelArtPath || mealData?.pixel_art_local_path || null;
 
+      const drinkPairing = ratingStatementsResult?.drink_pairing || null;
+      const funFact = ratingStatementsResult?.fun_fact || null;
+
       setTipsData({
         dishName: mealData?.meal || dishName || 'Your Meal',
         ratingStatements: statements,
+        drinkPairing,
+        funFact,
         pixelArtUrl,
         pixelArtLocalPath
       });
@@ -147,7 +160,7 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  const { dishName: loadedDishName, ratingStatements, pixelArtUrl } = tipsData;
+  const { dishName: loadedDishName, ratingStatements, drinkPairing, funFact, pixelArtUrl } = tipsData;
   const pixelArtSource = pixelArtUrl;
 
   return (
@@ -206,6 +219,31 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
           )}
         </View>
+
+        {/* Drink Pairing */}
+        {drinkPairing && drinkPairing.name && (
+          <View style={styles.extraCard}>
+            <View style={styles.extraCardHeader}>
+              <Text style={styles.extraCardEmoji}>🍷</Text>
+              <Text style={styles.extraCardTitle}>Drink Pairing</Text>
+            </View>
+            <Text style={styles.extraCardName}>{drinkPairing.name}</Text>
+            {drinkPairing.reason ? (
+              <Text style={styles.extraCardDescription}>{drinkPairing.reason}</Text>
+            ) : null}
+          </View>
+        )}
+
+        {/* Fun Fact */}
+        {funFact && (
+          <View style={styles.extraCard}>
+            <View style={styles.extraCardHeader}>
+              <Text style={styles.extraCardEmoji}>💡</Text>
+              <Text style={styles.extraCardTitle}>Did You Know?</Text>
+            </View>
+            <Text style={styles.extraCardDescription}>{funFact}</Text>
+          </View>
+        )}
 
         {/* Rate Button */}
         {(() => {
@@ -381,6 +419,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textTertiary,
     textAlign: 'center',
+  },
+  extraCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.mediumGray,
+  },
+  extraCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  extraCardEmoji: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  extraCardTitle: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  extraCardName: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#5B8A72',
+    marginBottom: 4,
+  },
+  extraCardDescription: {
+    fontFamily: 'Inter',
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   rateButton: {
     backgroundColor: 'transparent',

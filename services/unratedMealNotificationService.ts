@@ -15,6 +15,12 @@ interface RatingStatement {
   description: string;
 }
 
+interface DrinkPairing {
+  type: string;
+  name: string;
+  reason: string;
+}
+
 interface UnratedMealData {
   mealId: string;
   dishName: string;
@@ -22,6 +28,8 @@ interface UnratedMealData {
   city?: string;
   ratingStatements?: RatingStatement[]; // Top 3 rating statements (title + description)
   ratingCriteria?: string[]; // Backward compatibility
+  drinkPairing?: DrinkPairing | null;
+  funFact?: string | null;
 }
 
 /**
@@ -151,6 +159,91 @@ export const scheduleUnratedMealNotifications = async (
       }
     }
 
+    // Schedule drink pairing notification at 5 minutes
+    if (mealData.drinkPairing && mealData.drinkPairing.name) {
+      const pairingTime = new Date(Date.now() + 5 * 60 * 1000);
+      const pairingBody = mealData.drinkPairing.reason
+        ? `${mealData.drinkPairing.name} — ${mealData.drinkPairing.reason}`
+        : mealData.drinkPairing.name;
+
+      const pairingTrigger: TimestampTrigger = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: pairingTime.getTime(),
+      };
+
+      await notifee.createTriggerNotification(
+        {
+          id: `unrated-meal-pairing-${mealData.mealId}`,
+          title: '🍷 Drink Pairing',
+          body: pairingBody,
+          ios: {
+            sound: 'default',
+            foregroundPresentationOptions: {
+              alert: true,
+              banner: true,
+              sound: true,
+              badge: true,
+              list: true,
+            },
+            interruptionLevel: 'active',
+          },
+          android: {
+            channelId: 'meal-insights',
+            sound: 'default',
+            vibrationPattern: [300, 500, 300],
+          },
+          data: {
+            type: 'unrated-meal-pairing',
+            mealId: mealData.mealId,
+            dishName: mealData.dishName,
+          }
+        },
+        pairingTrigger
+      );
+      console.log('📬 Drink pairing notification scheduled for:', pairingTime.toLocaleTimeString());
+    }
+
+    // Schedule fun fact notification at 9 minutes
+    if (mealData.funFact) {
+      const factTime = new Date(Date.now() + 9 * 60 * 1000);
+
+      const factTrigger: TimestampTrigger = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: factTime.getTime(),
+      };
+
+      await notifee.createTriggerNotification(
+        {
+          id: `unrated-meal-fact-${mealData.mealId}`,
+          title: '💡 Did You Know?',
+          body: mealData.funFact,
+          ios: {
+            sound: 'default',
+            foregroundPresentationOptions: {
+              alert: true,
+              banner: true,
+              sound: true,
+              badge: true,
+              list: true,
+            },
+            interruptionLevel: 'active',
+          },
+          android: {
+            channelId: 'meal-insights',
+            sound: 'default',
+            vibrationPattern: [300, 500, 300],
+          },
+          data: {
+            type: 'unrated-meal-fact',
+            mealId: mealData.mealId,
+            dishName: mealData.dishName,
+          }
+        },
+        factTrigger
+      );
+      console.log('📬 Fun fact notification scheduled for:', factTime.toLocaleTimeString());
+    }
+
     // Schedule pixel art reveal notification for 10 minutes later
     // By then, pixel art will be generated and saved locally
     const pixelArtTime = new Date();
@@ -256,6 +349,10 @@ export const cancelUnratedMealNotifications = async (mealId: string): Promise<vo
     PushNotification.cancelLocalNotification(`unrated-meal-statement-${mealId}-${i}`);
     PushNotification.cancelLocalNotification(`unrated-meal-criteria-${mealId}-${i}`);
   }
+
+  // Cancel drink pairing and fun fact notifications
+  await notifee.cancelNotification(`unrated-meal-pairing-${mealId}`);
+  await notifee.cancelNotification(`unrated-meal-fact-${mealId}`);
 
   // Cancel pixel art reveal notification - Notifee
   await notifee.cancelNotification(`unrated-meal-pixel-art-${mealId}`);
