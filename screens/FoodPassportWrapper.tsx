@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView, Modal } from 'react-native';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView, Modal, RefreshControl } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
@@ -151,6 +151,10 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   // Notification state
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Pull-to-refresh state
+  const [refreshing, setRefreshing] = useState(false);
+  const passportRefreshRef = useRef<(() => void) | null>(null);
+
   // ScrollView ref for scrolling to top when filters change
   const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -186,6 +190,16 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
   const handleSortChange = (sort: 'chronological' | 'rating') => {
     console.log('FoodPassportWrapper: Sort changed to:', sort);
     setSortOption(sort);
+  };
+
+  // Handle pull-to-refresh on the wrapper ScrollView
+  const handleScrollRefresh = () => {
+    if (passportRefreshRef.current) {
+      setRefreshing(true);
+      passportRefreshRef.current();
+      // Auto-clear after a short delay (the child will set its own refreshing state)
+      setTimeout(() => setRefreshing(false), 1500);
+    }
   };
 
   // Scroll to top when filters change
@@ -439,6 +453,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               onTabChange={setTabIndex}
               onThemePress={isOwnProfile ? () => setShowColorPicker(true) : undefined}
               bgColor={bgColor}
+              onRefreshReady={(refresh, isRefreshing) => {
+                passportRefreshRef.current = refresh;
+              }}
             />
           </ErrorBoundary>
         );
@@ -501,6 +518,16 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         scrollEnabled={tabIndex !== 2}
+        refreshControl={
+          tabIndex === 0 ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleScrollRefresh}
+              tintColor="#5B8A72"
+              colors={['#5B8A72']}
+            />
+          ) : undefined
+        }
       >
         {/* Profile Card */}
         <ProfileCard

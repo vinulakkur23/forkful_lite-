@@ -161,6 +161,7 @@ export type RootStackParamList = {
   MealTips: {
     mealId: string;
     dishName?: string;
+    showPixelArtPicker?: boolean;
   };
 };
 
@@ -568,9 +569,10 @@ const App: React.FC = () => {
           if (type === EventType.PRESS) {
             const notificationData = detail.notification?.data;
 
-            // Handle taps on statement OR pixel art notifications - navigate to MealTipsScreen
+            // Handle taps on statement or pixel art notifications - navigate to MealTipsScreen
             if (notificationData?.type === 'unrated-meal-statement' || notificationData?.type === 'unrated-meal-pixel-art') {
-              console.log(`[App.tsx Foreground] User tapped ${notificationData?.type} notification - navigating to MealTipsScreen`);
+              const isPixelArt = notificationData?.type === 'unrated-meal-pixel-art';
+              console.log(`[App.tsx Foreground] User tapped ${notificationData?.type} notification - navigating to MealTipsScreen${isPixelArt ? ' with picker' : ''}`);
 
               const mealId = notificationData?.mealId;
               const dishName = notificationData?.dishName;
@@ -594,7 +596,8 @@ const App: React.FC = () => {
               try {
                 navigationRef.current.navigate('MealTips' as never, {
                   mealId: mealId,
-                  dishName: dishName || undefined
+                  dishName: dishName || undefined,
+                  showPixelArtPicker: isPixelArt,
                 } as never);
                 console.log('[App.tsx Foreground] Successfully navigated to MealTipsScreen');
               } catch (error: any) {
@@ -647,9 +650,10 @@ const App: React.FC = () => {
               try {
                 navigationRef.current.navigate('MealTips' as never, {
                   mealId: mealId,
-                  dishName: dishName || undefined
+                  dishName: dishName || undefined,
+                  showPixelArtPicker: true,
                 } as never);
-                console.log('[App.tsx Background] Successfully navigated to MealTipsScreen');
+                console.log('[App.tsx Background] Successfully navigated to MealTipsScreen with picker');
               } catch (error: any) {
                 console.error('[App.tsx Background] Navigation error:', error);
                 console.error('[App.tsx Background] Error details:', error.message, error.stack);

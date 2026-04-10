@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Image, Modal, Animated } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { firestore } from '../firebaseConfig';
 import { colors, typography, spacing, shadows } from '../themes';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 // Icon import removed — using custom back-icon.png instead
 
 type MealTipsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MealTips'>;
@@ -37,16 +38,40 @@ interface MealTipsData {
 }
 
 const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { mealId, dishName } = route.params;
+  const { mealId, dishName, showPixelArtPicker } = route.params;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tipsData, setTipsData] = useState<MealTipsData | null>(null);
   const [mealData, setMealData] = useState<any>(null);
 
+  // Pixel art picker state
+  const [showPickerModal, setShowPickerModal] = useState(false);
+  const [pixelArtOptions, setPixelArtOptions] = useState<string[]>([]);
+  const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState<number | null>(null);
+  const [pressingIndex, setPressingIndex] = useState<number | null>(null);
+
+  // Animation refs
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hapticIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jiggleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const jiggleAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     loadMealTips();
   }, [mealId]);
+
+  // Show pixel art picker modal when arriving from pixel art notification
+  useEffect(() => {
+    if (showPixelArtPicker && mealData && !mealData.pixel_art_user_selected) {
+      const options = mealData.pixel_art_options || [];
+      if (options.length > 0) {
+        setPixelArtOptions(options);
+        setShowPickerModal(true);
+      }
+    }
+  }, [showPixelArtPicker, mealData]);
 
   const loadMealTips = async () => {
     try {
@@ -132,6 +157,129 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
         isEditingExisting: false,
       },
     } as never);
+  };
+
+  // --- Pixel Art Picker Handlers (same UX as EditMealScreen) ---
+
+  const selectionCompleteRef = useRef(false);
+
+  const handlePixelArtPressIn = (index: number) => {
+    selectionCompleteRef.current = false;
+    setPressingIndex(index);
+
+    // Scale up to 1.3x
+    Animated.timing(scaleAnim, {
+      toValue: 1.3,
+      duration: 2000,
+      useNativeDriver: true,
+    }).start();
+
+    // Continuous jiggle while holding
+    const jiggle = Animated.loop(
+      Animated.sequence([
+        Animated.timing(jiggleAnim, { toValue: 3, duration: 60, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: -3, duration: 60, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: 2, duration: 50, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: -2, duration: 50, useNativeDriver: true }),
+      ])
+    );
+    jiggleAnimRef.current = jiggle;
+    jiggle.start();
+
+    // Continuous light haptic ticks while holding
+    hapticIntervalRef.current = setInterval(() => {
+      ReactNativeHapticFeedback.trigger('selection', {
+        enableVibrateFallback: true,
+        ignoreAndroidSystemSettings: false,
+      });
+    }, 100);
+
+    // After 2 seconds — selection complete
+    pressTimerRef.current = setTimeout(async () => {
+      selectionCompleteRef.current = true;
+
+      // Stop jiggle and haptic
+      if (jiggleAnimRef.current) {
+        jiggleAnimRef.current.stop();
+        jiggleAnimRef.current = null;
+      }
+      if (hapticIntervalRef.current) {
+        clearInterval(hapticIntervalRef.current);
+        hapticIntervalRef.current = null;
+      }
+      jiggleAnim.setValue(0);
+
+      // Final confirmation haptic
+      ReactNativeHapticFeedback.trigger('impactHeavy', {
+        enableVibrateFallback: true,
+        ignoreAndroidSystemSettings: false,
+      });
+
+      setSelectedPixelArtIndex(index);
+      setPressingIndex(null);
+
+      // Pop animation — scale up to 1.5x then settle back to 1.15x
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.5, duration: 120, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.15, duration: 200, useNativeDriver: true }),
+      ]).start();
+
+      // Save selection to Firestore
+      const selectedUrl = pixelArtOptions[index];
+      if (selectedUrl) {
+        try {
+          await firestore().collection('mealEntries').doc(mealId).update({
+            pixel_art_url: selectedUrl,
+            pixel_art_user_selected: true,
+          });
+          console.log('✅ [MealTips] Selected pixel art saved:', index + 1);
+
+          // Update local tipsData so header icon reflects selection
+          setTipsData(prev => prev ? { ...prev, pixelArtUrl: selectedUrl } : prev);
+        } catch (e) {
+          console.error('❌ [MealTips] Error saving pixel art selection:', e);
+        }
+      }
+
+      // Dismiss modal after a short delay
+      setTimeout(() => {
+        scaleAnim.setValue(1);
+        setShowPickerModal(false);
+      }, 500);
+    }, 2000);
+  };
+
+  const handlePixelArtPressOut = () => {
+    // If selection already completed, don't reset anything
+    if (selectionCompleteRef.current) return;
+
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    if (hapticIntervalRef.current) {
+      clearInterval(hapticIntervalRef.current);
+      hapticIntervalRef.current = null;
+    }
+    if (jiggleAnimRef.current) {
+      jiggleAnimRef.current.stop();
+      jiggleAnimRef.current = null;
+    }
+    jiggleAnim.setValue(0);
+    scaleAnim.setValue(1);
+    setPressingIndex(null);
+  };
+
+  const handlePickerDismiss = () => {
+    // Auto-select first option on dismiss (same as EditMealScreen)
+    const fallbackUrl = pixelArtOptions[0];
+    if (fallbackUrl) {
+      firestore().collection('mealEntries').doc(mealId).update({
+        pixel_art_url: fallbackUrl,
+      });
+      setTipsData(prev => prev ? { ...prev, pixelArtUrl: fallbackUrl } : prev);
+    }
+    setShowPickerModal(false);
   };
 
   if (loading) {
@@ -261,6 +409,57 @@ const MealTipsScreen: React.FC<Props> = ({ route, navigation }) => {
           );
         })()}
       </ScrollView>
+
+      {/* Pixel Art Picker Modal */}
+      <Modal
+        visible={showPickerModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handlePickerDismiss}
+      >
+        <TouchableOpacity
+          style={styles.pickerModalContainer}
+          activeOpacity={1}
+          onPress={handlePickerDismiss}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.pickerModalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.pickerModalTitle}>Choose Your Emoji</Text>
+            <Text style={styles.pickerModalSubtitle}>Hold to select</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
+              {pixelArtOptions.map((url, index) => {
+                const isSelected = selectedPixelArtIndex === index;
+                const isPressing = pressingIndex === index;
+                const isFaded = !isPressing && !isSelected && pressingIndex !== null;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    activeOpacity={1}
+                    onPressIn={() => handlePixelArtPressIn(index)}
+                    onPressOut={handlePixelArtPressOut}
+                    style={{ borderRadius: 12, padding: 3 }}
+                  >
+                    <Animated.View style={{
+                      transform: [
+                        { scale: isPressing ? scaleAnim : (isSelected && pressingIndex === null ? 1.15 : 1) },
+                        { translateX: isPressing ? jiggleAnim : 0 },
+                      ],
+                    }}>
+                      <Image
+                        source={{ uri: url }}
+                        style={[
+                          { width: 55, height: 55 },
+                          isFaded && { opacity: 0.35 },
+                        ]}
+                        resizeMode="contain"
+                      />
+                    </Animated.View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -473,6 +672,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#5B8A72',
+  },
+  // Pixel Art Picker Modal styles
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    minWidth: 260,
+  },
+  pickerModalTitle: {
+    fontFamily: 'Inter',
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  pickerModalSubtitle: {
+    fontFamily: 'Inter',
+    fontSize: 13,
+    color: '#999',
+    marginBottom: 14,
+    textAlign: 'center',
   },
 });
 

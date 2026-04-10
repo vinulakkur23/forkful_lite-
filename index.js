@@ -31,6 +31,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
         params: {
           mealId: notification.data.mealId,
           dishName: notification.data.dishName || undefined,
+          showPixelArtPicker: notificationType === 'unrated-meal-pixel-art',
         },
       };
       return;

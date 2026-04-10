@@ -1070,17 +1070,26 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
       // Start handling the challenge asynchronously (don't await)
       handlePendingChallenge();
 
-      // Always show pixel art selection modal after save
-      console.log('Showing pixel art selection modal');
-
-      setPixelArtUrl(null);
-      setPixelArtData(null);
-      setPixelArtOptions([]);
-      setSelectedPixelArtIndex(0);
+      // Show pixel art selection modal after save (unless user already chose via notification)
+      console.log('Checking pixel art selection status...');
 
       try {
         const freshMealDoc = await firestore().collection('mealEntries').doc(route.params.mealId).get();
         const freshMealData = freshMealDoc.data();
+
+        // If user already selected pixel art (e.g., from MealTips notification picker),
+        // skip the emoji selection modal and show a simple confirmation instead
+        if (freshMealData?.pixel_art_user_selected === true) {
+          console.log('✅ Pixel art already selected — showing confirmation');
+          setShowThankYouModal(true);
+          return;
+        }
+
+        console.log('Showing pixel art selection modal');
+        setPixelArtUrl(null);
+        setPixelArtData(null);
+        setPixelArtOptions([]);
+        setSelectedPixelArtIndex(0);
 
         if (freshMealData?.pixel_art_options?.length > 0) {
           console.log(`✅ ${freshMealData.pixel_art_options.length} pixel art options found`);

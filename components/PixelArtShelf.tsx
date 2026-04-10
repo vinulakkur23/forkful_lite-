@@ -12,6 +12,7 @@ import {
   ScrollView,
   ActionSheetIOS,
   Alert,
+  ImageSourcePropType,
 } from 'react-native';
 import { colors, spacing } from '../themes';
 import DraggableEmojiGrid from './DraggableEmojiGrid';
@@ -173,29 +174,102 @@ const TableGrid: React.FC<{
   );
 };
 
+// Chest visual options
+export type ChestVisualKey = 'wooden' | 'fridge' | 'picnic-basket' | 'food-crate';
+
+const CHEST_ASSETS: Record<ChestVisualKey, ImageSourcePropType> = {
+  wooden: require('../assets/icons/chest-wooden.png'),
+  fridge: require('../assets/icons/chest-fridge.png'),
+  'picnic-basket': require('../assets/icons/chest-picnic-basket.png'),
+  'food-crate': require('../assets/icons/chest-food-crate.png'),
+};
+
+const CHEST_LABELS: Record<ChestVisualKey, string> = {
+  wooden: 'Wooden Chest',
+  fridge: 'Fridge',
+  'picnic-basket': 'Picnic Basket',
+  'food-crate': 'Food Crate',
+};
+
+const CHEST_KEYS: ChestVisualKey[] = ['wooden', 'fridge', 'picnic-basket', 'food-crate'];
+
 /**
- * Chest icon trigger — stateless, safe to render inside useMemo.
+ * Chest icon trigger — shows selected chest visual.
+ * Long-press opens a picker to change the visual.
  */
 export const PixelArtChest: React.FC<{
   count: number;
   onPress: () => void;
-}> = ({ count, onPress }) => (
-  <TouchableOpacity
-    style={styles.chestButton}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <View style={styles.chestIconContainer}>
-      {/* Placeholder — replace with pixel art asset:
-          <Image source={require('../assets/icons/chest.png')} style={styles.chestImage} resizeMode="contain" /> */}
-      <Text style={{ fontSize: 32 }}>🍱</Text>
-    </View>
-    <View style={styles.chestBadge}>
-      <Text style={styles.chestBadgeText}>{count}</Text>
-    </View>
-    <Text style={styles.chestLabel}>Meals Eaten</Text>
-  </TouchableOpacity>
-);
+  chestVisual?: ChestVisualKey;
+  onChangeVisual?: (visual: ChestVisualKey) => void;
+  isOwnProfile?: boolean;
+}> = ({ count, onPress, chestVisual = 'wooden', onChangeVisual, isOwnProfile = true }) => {
+  const [showPicker, setShowPicker] = useState(false);
+
+  const handleLongPress = () => {
+    if (!isOwnProfile || !onChangeVisual) return;
+    setShowPicker(true);
+  };
+
+  const handleSelect = (key: ChestVisualKey) => {
+    onChangeVisual?.(key);
+    setShowPicker(false);
+  };
+
+  return (
+    <>
+      <TouchableOpacity
+        style={styles.chestButton}
+        onPress={onPress}
+        onLongPress={handleLongPress}
+        delayLongPress={400}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={CHEST_ASSETS[chestVisual]}
+          style={styles.chestImage}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+
+      {/* Chest visual picker modal */}
+      <Modal
+        visible={showPicker}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.chestPickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPicker(false)}
+        >
+          <View style={styles.chestPickerContainer}>
+            <View style={styles.chestPickerGrid}>
+              {CHEST_KEYS.map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.chestPickerOption,
+                    chestVisual === key && styles.chestPickerOptionSelected,
+                  ]}
+                  onPress={() => handleSelect(key)}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={CHEST_ASSETS[key]}
+                    style={styles.chestPickerImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+};
 
 /**
  * Modal showing the full emoji collection on tiled shelves.
@@ -441,58 +515,59 @@ const styles = StyleSheet.create({
   // Chest trigger
   chestButton: {
     alignItems: 'center',
-    alignSelf: 'center',
-    paddingVertical: 8,
-  },
-  chestIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: '#F5EDE0',
-    alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#D4C4A8',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#8B6F47',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
   chestImage: {
-    width: 44,
-    height: 44,
+    width: 52,
+    height: 52,
   },
-  chestBadge: {
-    position: 'absolute',
-    top: 2,
-    right: -8,
-    backgroundColor: '#5B8A72',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+
+  // Chest visual picker
+  chestPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chestPickerContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  chestPickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    width: 160,
+  },
+  chestPickerOption: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    width: 68,
+    height: 68,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  chestBadgeText: {
-    fontFamily: 'Inter',
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
+  chestPickerOptionSelected: {
+    borderColor: '#5B8A72',
+    backgroundColor: '#F0F7F4',
   },
-  chestLabel: {
-    fontFamily: 'Inter',
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary || '#858585',
-    marginTop: 6,
+  chestPickerImage: {
+    width: 52,
+    height: 52,
   },
 
   // Modal

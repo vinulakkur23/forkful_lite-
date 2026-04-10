@@ -11,7 +11,8 @@ import {
   StatusBar,
   SafeAreaView,
   TouchableOpacity,
-  ScrollView
+  ScrollView,
+  Animated
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { ColorMatrix, concatColorMatrices, brightness, contrast, saturate } from 'react-native-color-matrix-image-filters';
@@ -96,6 +97,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [enhancedWith, setEnhancedWith] = useState<'lut_only' | 'gemini_only' | 'full' | null>(null);
   
+  const enhanceProgressAnim = useRef(new Animated.Value(0)).current;
+
   // Use refs to track component mounted state
   const isMounted = useRef(true);
   const cropperOpened = useRef(false);
@@ -172,6 +175,14 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsEnhancing(true);
       setEnhanceMode(mode);
 
+      // Start progress bar animation
+      enhanceProgressAnim.setValue(0);
+      Animated.timing(enhanceProgressAnim, {
+        toValue: 1,
+        duration: mode === 'lut_only' ? 5000 : 30000,
+        useNativeDriver: false,
+      }).start();
+
       // Store original for revert (only if not already enhanced)
       if (!originalBeforeEnhance) {
         setOriginalBeforeEnhance({ ...croppedImage });
@@ -246,6 +257,8 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
         setOriginalBeforeEnhance(null);
       }
     } finally {
+      enhanceProgressAnim.stopAnimation();
+      enhanceProgressAnim.setValue(0);
       setIsEnhancing(false);
       setEnhanceMode(null);
     }
@@ -1076,62 +1089,41 @@ const CropScreen: React.FC<Props> = ({ route, navigation }) => {
           {/* AI Enhance Section */}
           <View style={styles.enhanceSection}>
             {!isEnhanced && !isEnhancing && (
-              <View style={styles.enhanceButtonRow}>
-                <TouchableOpacity
-                  style={styles.enhanceButtonCompact}
-                  onPress={() => handleEnhance('lut_only')}
-                >
-                  <Icon name="palette" size={18} color="#fff" />
-                  <View style={styles.enhanceButtonTextContainer}>
-                    <Text style={styles.enhanceButtonText}>Color Grade</Text>
-                    <Text style={styles.enhanceButtonSubtext}>Fast ~2s</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.enhanceButtonCompact, styles.enhanceButtonFull]}
-                  onPress={() => handleEnhance('gemini_only')}
-                >
-                  <Icon name="auto-fix-high" size={18} color="#fff" />
-                  <View style={styles.enhanceButtonTextContainer}>
-                    <Text style={styles.enhanceButtonText}>AI Enhance</Text>
-                    <Text style={styles.enhanceButtonSubtext}>Declutter + fix lighting</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.enhanceButtonCompact, styles.enhanceButtonFull, { alignSelf: 'center' }]}
+                onPress={() => handleEnhance('gemini_only')}
+              >
+                <Icon name="auto-fix-high" size={18} color="#fff" />
+                <View style={styles.enhanceButtonTextContainer}>
+                  <Text style={styles.enhanceButtonText}>Clean Using AI</Text>
+                </View>
+              </TouchableOpacity>
             )}
             {isEnhancing && (
               <View style={styles.enhancingContainer}>
-                <ActivityIndicator size="small" color="#1a2b49" />
-                <Text style={styles.enhancingText}>
-                  {enhanceMode === 'lut_only' ? 'Color grading...' : enhanceMode === 'gemini_only' ? 'Enhancing photo...' : 'Enhancing photo...'}
-                </Text>
+                <Text style={styles.enhancingText}>Cleaning photo...</Text>
+                <View style={styles.enhanceProgressBackground}>
+                  <Animated.View
+                    style={[
+                      styles.enhanceProgressFill,
+                      {
+                        width: enhanceProgressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
               </View>
             )}
             {isEnhanced && !isEnhancing && (
               <View style={styles.enhancedRow}>
                 <View style={styles.enhancedBadge}>
                   <Icon name="check-circle" size={16} color="#5B8A72" />
-                  <Text style={styles.enhancedBadgeText}>
-                    {enhancedWith === 'lut_only' ? 'Color Graded' : 'Enhanced'}
-                  </Text>
+                  <Text style={styles.enhancedBadgeText}>Cleaned</Text>
                 </View>
                 <View style={styles.enhancedActions}>
-                  {enhancedWith === 'lut_only' && (
-                    <TouchableOpacity
-                      style={styles.upgradeButton}
-                      onPress={() => handleEnhance('gemini_only')}
-                    >
-                      <Text style={styles.upgradeText}>+ Declutter</Text>
-                    </TouchableOpacity>
-                  )}
-                  {enhancedWith === 'gemini_only' && (
-                    <TouchableOpacity
-                      style={[styles.upgradeButton, { backgroundColor: '#1a2b49' }]}
-                      onPress={() => handleEnhance('lut_only')}
-                    >
-                      <Text style={styles.upgradeText}>+ Color Grade</Text>
-                    </TouchableOpacity>
-                  )}
                   <TouchableOpacity onPress={handleRevertEnhance}>
                     <Text style={styles.revertText}>Undo</Text>
                   </TouchableOpacity>
@@ -1309,16 +1301,27 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   enhancingContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
   },
   enhancingText: {
-    marginLeft: 10,
-    color: '#1a2b49',
+    color: '#5B8A72',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  enhanceProgressBackground: {
+    width: '70%',
+    height: 6,
+    backgroundColor: colors.mediumGray || '#EBEBEB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  enhanceProgressFill: {
+    height: '100%',
+    backgroundColor: '#5B8A72',
+    borderRadius: 3,
   },
   enhancedRow: {
     flexDirection: 'row',

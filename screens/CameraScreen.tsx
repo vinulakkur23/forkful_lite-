@@ -11,7 +11,9 @@ import {
   Image,
   ActivityIndicator,
   AppState,
+  Animated,
 } from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import Geolocation from '@react-native-community/geolocation';
 import { CompositeNavigationProp, useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -55,6 +57,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
+  const shutterOpacity = useRef(new Animated.Value(0)).current;
   const [saveToCameraRoll, setSaveToCameraRoll] = useState(false);
 
   // Track screen focus + app foreground state for camera activation
@@ -457,6 +460,13 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
           }
 
           setIsTakingPicture(true);
+
+          // Haptic feedback on capture
+          ReactNativeHapticFeedback.trigger('impactMedium', {
+            enableVibrateFallback: true,
+            ignoreAndroidSystemSettings: false,
+          });
+
           console.log("Taking photo...");
 
           // Clean up old persisted captures (keep only last 5 to save disk space)
@@ -511,11 +521,16 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
             enableShutterSound: false
           });
 
-          // Show camera flash animation immediately for feedback
+          // Animated shutter flash — snap in, hold, fade out
           setShowFlash(true);
-          setTimeout(() => {
+          shutterOpacity.setValue(0);
+          Animated.sequence([
+            Animated.timing(shutterOpacity, { toValue: 0.85, duration: 60, useNativeDriver: true }),
+            Animated.delay(120),
+            Animated.timing(shutterOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+          ]).start(() => {
             setShowFlash(false);
-          }, 200);
+          });
 
           // Verify we got a valid photo
           if (!photo || !photo.path) {
@@ -923,9 +938,9 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Camera flash overlay for snap feedback */}
+      {/* Camera shutter flash overlay */}
       {showFlash && (
-        <View style={styles.flashOverlay} />
+        <Animated.View style={[styles.flashOverlay, { opacity: shutterOpacity }]} />
       )}
 
       {/* Instructional text at top */}
@@ -1067,7 +1082,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'white',
-    opacity: 0.8,
     zIndex: 10,
   },
   overlay: {

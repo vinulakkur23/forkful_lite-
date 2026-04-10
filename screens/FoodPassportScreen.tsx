@@ -31,7 +31,7 @@ import Geolocation from '@react-native-community/geolocation';
 // Re-enable EXIF for extracting location data from images
 import Exif from 'react-native-exif';
 import EmojiDisplay from '../components/EmojiDisplay';
-import { PixelArtChest, PixelArtShelfModal } from '../components/PixelArtShelf';
+import { PixelArtChest, PixelArtShelfModal, ChestVisualKey } from '../components/PixelArtShelf';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
@@ -79,6 +79,7 @@ type Props = {
   onTabChange?: (tabIndex: number) => void;
   onThemePress?: () => void;
   bgColor?: string;
+  onRefreshReady?: (refresh: () => void, isRefreshing: () => boolean) => void;
 };
 
 interface MealEntry {
@@ -174,7 +175,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange, onThemePress, bgColor }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange, onThemePress, bgColor, onRefreshReady }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -229,6 +230,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     const [emojiTableConfigs, setEmojiTableConfigs] = useState<TableConfig[]>([]);
     const [emojisLoading, setEmojisLoading] = useState(true);
     const [showMealsModal, setShowMealsModal] = useState(false);
+    const [showSimpleGridModal, setShowSimpleGridModal] = useState(false);
+    const [chestVisual, setChestVisual] = useState<ChestVisualKey>('wooden');
+    const [mealsExpanded, setMealsExpanded] = useState(false);
+    const [citiesExpanded, setCitiesExpanded] = useState(false);
+    const [cuisinesExpanded, setCuisinesExpanded] = useState(false);
+    const [restaurantsExpanded, setRestaurantsExpanded] = useState(false);
     const [allChallenges, setAllChallenges] = useState<UserChallenge[]>([]);
     const [challengesLoading, setChallengesLoading] = useState(true);
     const [selectedChallenge, setSelectedChallenge] = useState<UserChallenge | null>(null);
@@ -464,6 +471,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 displayName: userData?.displayName || currentUser.displayName || 'User',
                                 photoURL: userData?.photoURL || currentUser.photoURL,
                             });
+                            // Load chest visual preference
+                            if (userData?.chestVisual) {
+                                setChestVisual(userData.chestVisual as ChestVisualKey);
+                            }
                         } else {
                             // Fallback to auth user data
                             setUserProfile({
@@ -543,10 +554,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     
     const handleRefresh = () => {
         setRefreshing(true);
+        setMealsExpanded(false);
+        setCitiesExpanded(false);
+        setCuisinesExpanded(false);
+        setRestaurantsExpanded(false);
         fetchMealEntries();
         loadAllAccolades();
         loadAllChallenges();
     };
+
+    // Expose refresh to parent wrapper for pull-to-refresh on ScrollView
+    React.useEffect(() => {
+        if (onRefreshReady) {
+            onRefreshReady(handleRefresh, () => refreshing);
+        }
+    }, [onRefreshReady, refreshing]);
 
     const handleEmojiReorder = async (tables: string[][], configs: TableConfig[]) => {
         const flat = tables.reduce((acc, t) => [...acc, ...t], []);
@@ -957,6 +979,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             // Load restaurant notes
             if (userData?.restaurant_notes) {
                 setRestaurantNotes(userData.restaurant_notes);
+            }
+
+            // Load chest visual preference
+            if (userData?.chestVisual) {
+                setChestVisual(userData.chestVisual as ChestVisualKey);
             }
 
             const citiesWithData: City[] = [];
@@ -1780,18 +1807,38 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         </>
     ), [userId, onThemePress, bgColor]);
 
+    // Handle chest visual change — save to Firestore
+    const handleChestVisualChange = async (visual: ChestVisualKey) => {
+        setChestVisual(visual);
+        const currentUser = auth().currentUser;
+        if (currentUser) {
+            try {
+                await firestore()
+                    .collection('users')
+                    .doc(currentUser.uid)
+                    .update({ chestVisual: visual });
+            } catch (error) {
+                console.error('Error saving chest visual:', error);
+            }
+        }
+    };
+
     // Memoize ListFooterComponent — only recompute when accolades data changes
     const listFooterComponent = useMemo(() => (
         <View>
+            {/* Show more meals arrow */}
+            {!mealsExpanded && filteredMeals.length > 20 && (
+                <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={() => setMealsExpanded(true)}
+                    activeOpacity={0.6}
+                >
+                    <Text style={styles.expandArrow}>▾</Text>
+                </TouchableOpacity>
+            )}
+
             {/* Accolades Section */}
             <View style={styles.accoladesContainer}>
-                {/* I've Eaten Section - Chest icon opens collection modal */}
-                {!emojisLoading && pixelArtEmojis.length > 0 && (
-                    <PixelArtChest
-                        count={pixelArtEmojis.length}
-                        onPress={() => setShowMealsModal(true)}
-                    />
-                )}
 
                 {/* Meal Calendar */}
                 <MealCalendar
@@ -1876,10 +1923,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 );
                             })}
                         </View>
-                        {/* All cities as small tags */}
+                        {/* All cities as small tags — show first 8 unless expanded */}
                         {cities.length > 3 && (
+                            <>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
-                                {cities.slice(3).map(city => {
+                                {(citiesExpanded ? cities.slice(3) : cities.slice(3, 11)).map(city => {
                                     const isActive = activeCityFilter === city.name.toLowerCase();
                                     return (
                                     <TouchableOpacity
@@ -1906,6 +1954,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     );
                                 })}
                             </View>
+                            {!citiesExpanded && cities.length > 11 && (
+                                <TouchableOpacity
+                                    style={styles.expandButton}
+                                    onPress={() => setCitiesExpanded(true)}
+                                    activeOpacity={0.6}
+                                >
+                                    <Text style={styles.expandArrow}>▾</Text>
+                                </TouchableOpacity>
+                            )}
+                            </>
                         )}
                     </>
                     );
@@ -1961,10 +2019,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                 );
                             })}
                         </View>
-                        {/* All cuisines as small tags */}
+                        {/* All cuisines as small tags — show first 8 unless expanded */}
                         {cuisines.length > 3 && (
+                            <>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, marginTop: 10, gap: 6 }}>
-                                {cuisines.slice(3).map(cuisine => {
+                                {(cuisinesExpanded ? cuisines.slice(3) : cuisines.slice(3, 11)).map(cuisine => {
                                     const isActive = activeCuisineFilter === cuisine.name.toLowerCase();
                                     return (
                                     <TouchableOpacity
@@ -1991,6 +2050,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                                     );
                                 })}
                             </View>
+                            {!cuisinesExpanded && cuisines.length > 11 && (
+                                <TouchableOpacity
+                                    style={styles.expandButton}
+                                    onPress={() => setCuisinesExpanded(true)}
+                                    activeOpacity={0.6}
+                                >
+                                    <Text style={styles.expandArrow}>▾</Text>
+                                </TouchableOpacity>
+                            )}
+                            </>
                         )}
                     </>
                     );
@@ -1998,8 +2067,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
                 {/* Restaurants Section — Draggable */}
                 {!restaurantsLoading && restaurants.length > 0 && (
+                    <>
                     <DraggableRestaurantList
-                        restaurants={restaurants}
+                        restaurants={restaurantsExpanded ? restaurants : restaurants.slice(0, 10)}
                         cityFilter={activeFilters?.find(f => f.type === 'city')?.value}
                         sections={restaurantSections}
                         unsectionedOrder={unsectionedOrder}
@@ -2029,13 +2099,33 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             }
                         }}
                     />
+                    {!restaurantsExpanded && restaurants.length > 10 && (
+                        <TouchableOpacity
+                            style={styles.expandButton}
+                            onPress={() => setRestaurantsExpanded(true)}
+                            activeOpacity={0.6}
+                        >
+                            <Text style={styles.expandArrow}>▾</Text>
+                        </TouchableOpacity>
+                    )}
+                    </>
                 )}
 
             </View>
 
-            {/* Share button - only show if user has meals and it's their own profile */}
-            {filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid) && (
-                <View style={styles.shareContainer}>
+            {/* Bottom row: chest icon + share button */}
+            <View style={styles.shareContainer}>
+                {!emojisLoading && pixelArtEmojis.length > 0 && (
+                    <PixelArtChest
+                        count={pixelArtEmojis.length}
+                        onPress={() => setShowSimpleGridModal(true)}
+                        /* onPress={() => setShowMealsModal(true)} // ORIGINAL — restore this */
+                        chestVisual={chestVisual}
+                        onChangeVisual={handleChestVisualChange}
+                        isOwnProfile={isOwnProfile}
+                    />
+                )}
+                {filteredMeals.length > 0 && (!userId || userId === auth().currentUser?.uid) && (
                     <TouchableOpacity
                         style={styles.shareButton}
                         onPress={handleSharePassport}
@@ -2047,10 +2137,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         />
                         <Text style={styles.shareButtonText}>Share</Text>
                     </TouchableOpacity>
-                </View>
-            )}
+                )}
+            </View>
         </View>
-    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters]);
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters, chestVisual, mealsExpanded, citiesExpanded, cuisinesExpanded, restaurantsExpanded]);
 
     // Function to render each meal item — memoized with useCallback
     const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {
@@ -2155,7 +2245,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             ) : (
                     <FlatList
-                        data={filteredMeals}
+                        data={mealsExpanded ? filteredMeals : filteredMeals.slice(0, 20)}
                         renderItem={renderMealItem}
                         keyExtractor={(item) => item.id}
                         numColumns={2}
@@ -2472,6 +2562,37 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 isOwnProfile={isOwnProfile}
                 onReorder={handleEmojiReorder}
             />
+
+            {/* Simple pixel art grid modal */}
+            <Modal
+                visible={showSimpleGridModal}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setShowSimpleGridModal(false)}
+            >
+                <SafeAreaView style={styles.simpleGridModalContainer}>
+                    <View style={styles.simpleGridHeader}>
+                        <TouchableOpacity onPress={() => setShowSimpleGridModal(false)}>
+                            <Text style={styles.simpleGridDone}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <ScrollView
+                        contentContainerStyle={styles.simpleGridContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <View style={styles.simpleGrid}>
+                            {pixelArtEmojis.map((uri, index) => (
+                                <Image
+                                    key={`emoji_${index}`}
+                                    source={{ uri }}
+                                    style={styles.simpleGridItem}
+                                    resizeMode="contain"
+                                />
+                            ))}
+                        </View>
+                    </ScrollView>
+                </SafeAreaView>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -2770,7 +2891,10 @@ const styles = StyleSheet.create({
         backgroundColor: colors.mediumGray,
     },
     shareContainer: {
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        gap: 40,
         paddingVertical: spacing.lg,
         paddingHorizontal: spacing.lg,
     },
@@ -2794,6 +2918,15 @@ const styles = StyleSheet.create({
     shareButtonText: {
         ...typography.buttonLarge,
         color: colors.charcoal,
+    },
+    // Expand/collapse
+    expandButton: {
+        alignItems: 'center',
+        paddingVertical: 6,
+    },
+    expandArrow: {
+        fontSize: 24,
+        color: '#5B8A72',
     },
     // Accolades section styles
     accoladesContainer: {
@@ -3268,6 +3401,37 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
         fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
+    },
+    // Simple grid modal
+    simpleGridModalContainer: {
+        flex: 1,
+        backgroundColor: colors.lightTan || '#F8F6F2',
+    },
+    simpleGridHeader: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.mediumGray || '#EBEBEB',
+    },
+    simpleGridDone: {
+        fontFamily: 'Inter',
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#5B8A72',
+    },
+    simpleGridContent: {
+        padding: 16,
+    },
+    simpleGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+    simpleGridItem: {
+        width: (width - 32 - 10 * 3) / 4,
+        height: (width - 32 - 10 * 3) / 4,
     },
 });
 

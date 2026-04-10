@@ -61,7 +61,7 @@ export const updatePixelArtNotificationWithImage = async (
       {
         id: `unrated-meal-pixel-art-${mealId}`,
         title: '', // Empty title so image shows first
-        body: 'Rate to unlock!', // Text as body instead
+        body: 'Tap to choose art!', // Text as body instead
         ios: {
           // iOS-specific configuration with image attachment
           attachments: [{

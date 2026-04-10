@@ -75,8 +75,8 @@ const EnjoyMealScreen: React.FC<Props> = ({ route, navigation }) => {
     }).start();
   }, []);
 
-  const goToFoodPassport = () => {
-    navigation.navigate('FoodPassport', { tabIndex: 0 });
+  const goToCaptureAnother = () => {
+    navigation.navigate('Camera' as never);
   };
 
   return (
@@ -138,9 +138,9 @@ const EnjoyMealScreen: React.FC<Props> = ({ route, navigation }) => {
         {/* Button */}
         <TouchableOpacity
           style={styles.passportButton}
-          onPress={goToFoodPassport}
+          onPress={goToCaptureAnother}
         >
-          <Text style={styles.passportButtonText}>Food Passport</Text>
+          <Text style={styles.passportButtonText}>Capture Another Dish</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
