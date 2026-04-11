@@ -81,6 +81,16 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       const citiesSet = new Set<string>();
       const dishNamesSet = new Set<string>();
       const ingredientsSet = new Set<string>();
+      // Canonical v2.0 metadata sets (populated from metadata_enriched).
+      const dietarySet = new Set<string>();
+      const flavorSet = new Set<string>();
+      const cookingMethodSet = new Set<string>();
+      const mealTypeSet = new Set<string>();
+      const textureSet = new Set<string>();
+      const heatLevelSet = new Set<string>();
+      const richnessSet = new Set<string>();
+      const proteinSet = new Set<string>();
+      const carbSet = new Set<string>();
       
       // Query for meals
       const mealsSnapshot = await firestore()
@@ -149,10 +159,41 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
           }
           
           // Also try to extract ingredients from interesting ingredient (if it's a string)
-          if (enrichedData.interesting_ingredient && 
+          if (enrichedData.interesting_ingredient &&
               typeof enrichedData.interesting_ingredient === 'string' &&
               enrichedData.interesting_ingredient.length > 2) {
             ingredientsSet.add(enrichedData.interesting_ingredient);
+          }
+
+          // --- Canonical v2.0 fields ---
+          // List fields
+          if (Array.isArray(enrichedData.dietary_info)) {
+            enrichedData.dietary_info.forEach((t: string) => t && dietarySet.add(t));
+          }
+          if (Array.isArray(enrichedData.flavor_profile)) {
+            enrichedData.flavor_profile.forEach((t: string) => t && flavorSet.add(t));
+          }
+          if (Array.isArray(enrichedData.texture)) {
+            enrichedData.texture.forEach((t: string) => t && textureSet.add(t));
+          }
+          // Scalar fields (with null/"none" filtering where applicable)
+          if (enrichedData.cooking_method) {
+            cookingMethodSet.add(enrichedData.cooking_method);
+          }
+          if (enrichedData.meal_type) {
+            mealTypeSet.add(enrichedData.meal_type);
+          }
+          if (enrichedData.heat_level && enrichedData.heat_level !== 'none') {
+            heatLevelSet.add(enrichedData.heat_level);
+          }
+          if (enrichedData.richness) {
+            richnessSet.add(enrichedData.richness);
+          }
+          if (enrichedData.primary_protein && enrichedData.primary_protein !== 'none') {
+            proteinSet.add(enrichedData.primary_protein);
+          }
+          if (enrichedData.primary_carb && enrichedData.primary_carb !== 'none') {
+            carbSet.add(enrichedData.primary_carb);
           }
         }
         
@@ -249,7 +290,36 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       Array.from(citiesSet).sort().forEach(city => {
         options.push({ type: 'city', value: city });
       });
-      
+
+      // Add canonical v2.0 filter options
+      Array.from(dietarySet).sort().forEach(v => {
+        options.push({ type: 'dietary', value: v });
+      });
+      Array.from(flavorSet).sort().forEach(v => {
+        options.push({ type: 'flavor', value: v });
+      });
+      Array.from(cookingMethodSet).sort().forEach(v => {
+        options.push({ type: 'cookingMethod', value: v });
+      });
+      Array.from(mealTypeSet).sort().forEach(v => {
+        options.push({ type: 'mealType', value: v });
+      });
+      Array.from(textureSet).sort().forEach(v => {
+        options.push({ type: 'texture', value: v });
+      });
+      Array.from(heatLevelSet).sort().forEach(v => {
+        options.push({ type: 'heat', value: v });
+      });
+      Array.from(richnessSet).sort().forEach(v => {
+        options.push({ type: 'richness', value: v });
+      });
+      Array.from(proteinSet).sort().forEach(v => {
+        options.push({ type: 'protein', value: v });
+      });
+      Array.from(carbSet).sort().forEach(v => {
+        options.push({ type: 'carb', value: v });
+      });
+
       setFilterOptions(options);
     } catch (error) {
       console.error('Error fetching filter options:', error);
@@ -363,9 +433,18 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
 
     // Get user search results
     const userResults = await searchUsers(searchText);
-    
+
+    // Always include a "free-text search" option at the top so users can
+    // run a query across canonical metadata (dietary/flavor/protein/etc.)
+    // even when no faceted match exists. This maps to filter.type === 'text'
+    // which FoodPassportScreen routes through utils/mealSearch.
+    const textSearchOption: FilterItem = {
+      type: 'text',
+      value: searchText.trim(),
+    };
+
     // Combine and return
-    return [...userResults, ...regularOptions];
+    return [textSearchOption, ...userResults, ...regularOptions];
   };
 
   // Handle option selection - now adds to the list of active filters
@@ -464,20 +543,33 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
                 >
                   <View style={styles.optionContent}>
                     {item.type === 'user' && (
-                      <Image 
+                      <Image
                         source={require('../assets/icons/profile-persona.png')}
                         style={[styles.userIcon, { width: 16, height: 16 }]}
                         resizeMode="contain"
                       />
                     )}
-                    <Text style={styles.optionText}>{item.value}</Text>
+                    <Text style={styles.optionText}>
+                      {item.type === 'text' ? `Search for "${item.value}"` : item.value}
+                    </Text>
                   </View>
                   <Text style={styles.optionType}>
                     {item.type === 'user' ? 'User' :
                      item.type === 'dishName' ? 'Dish' :
-                     item.type === 'cuisineType' ? 'Cuisine' : 
-                     item.type === 'foodType' ? 'Food' : 
-                     item.type === 'ingredient' ? 'Ingredient' : 'City'}
+                     item.type === 'cuisineType' ? 'Cuisine' :
+                     item.type === 'foodType' ? 'Food' :
+                     item.type === 'ingredient' ? 'Ingredient' :
+                     item.type === 'city' ? 'City' :
+                     item.type === 'dietary' ? 'Dietary' :
+                     item.type === 'flavor' ? 'Flavor' :
+                     item.type === 'cookingMethod' ? 'Method' :
+                     item.type === 'mealType' ? 'Meal' :
+                     item.type === 'texture' ? 'Texture' :
+                     item.type === 'heat' ? 'Heat' :
+                     item.type === 'richness' ? 'Richness' :
+                     item.type === 'protein' ? 'Protein' :
+                     item.type === 'carb' ? 'Carb' :
+                     item.type === 'text' ? 'Search' : item.type}
                   </Text>
                 </TouchableOpacity>
               )}

@@ -1,12 +1,13 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onCall, onRequest} = require('firebase-functions/v2/https');
-const {onDocumentUpdated} = require('firebase-functions/v2/firestore');
+const {onDocumentUpdated, onDocumentWritten} = require('firebase-functions/v2/firestore');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 const {getStorage} = require('firebase-admin/storage');
 const sharp = require('sharp');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
+const {recomputeTasteProfile} = require('./tasteProfile');
 
 // Initialize Firebase Admin
 initializeApp();
@@ -34,7 +35,13 @@ const extractCityFromMeal = (meal) => {
 };
 
 const extractCuisineFromMeal = (meal) => {
-  // Primary source: metadata_enriched.cuisine_type (this should always be present)
+  // Primary source: metadata_enriched.cuisine_type (this should always be present).
+  // Post-v2.0 migration (see services/metadata_normalizer.py) every meal has a
+  // canonical metadata_enriched block. The fallbacks below are kept temporarily
+  // as rollback insurance while migration rolls out to production.
+  // TODO(metadata-v2): after migration is verified in prod, delete the fallback
+  // block and keep only the metadata_enriched path. The legacy
+  // aiMetadata / quick_criteria_result / enhanced_facts fields are DEPRECATED.
   if (meal.metadata_enriched?.cuisine_type) {
     const cuisine = meal.metadata_enriched.cuisine_type.toLowerCase().trim();
     if (cuisine !== 'unknown' && cuisine !== 'n/a' && cuisine !== '' && cuisine !== 'null') {
@@ -42,7 +49,7 @@ const extractCuisineFromMeal = (meal) => {
     }
   }
 
-  // Fallback sources (for backward compatibility or edge cases)
+  // DEPRECATED fallback sources — remove after v2.0 migration is verified.
   const fallbackSources = [
     meal.quick_criteria_result?.cuisine_type,
     meal.enhanced_facts?.food_facts?.cuisine_type,
@@ -81,39 +88,52 @@ const extractRestaurantFromMeal = (meal) => {
 };
 
 const isSushiMeal = (meal) => {
-  if (!meal.aiMetadata) return false;
-  
   const sushiKeywords = ['sushi', 'sashimi', 'nigiri', 'maki', 'roll'];
-  
-  // Check food type
-  if (meal.aiMetadata.foodType) {
-    const foodTypes = Array.isArray(meal.aiMetadata.foodType) 
-      ? meal.aiMetadata.foodType 
-      : [meal.aiMetadata.foodType];
-    
-    for (const foodType of foodTypes) {
-      if (sushiKeywords.some((keyword) => foodType.toLowerCase().includes(keyword))) {
+
+  // Primary source: canonical metadata_enriched (post v2.0 migration).
+  if (meal.metadata_enriched) {
+    const enriched = meal.metadata_enriched;
+    const candidates = [
+      enriched.dish_specific,
+      enriched.dish_general,
+      enriched.cuisine_type,
+    ].filter(Boolean);
+    for (const c of candidates) {
+      if (sushiKeywords.some((k) => String(c).toLowerCase().includes(k))) {
         return true;
       }
     }
   }
-  
-  // Check meal name
+
+  // Check meal name (independent of metadata source).
   if (meal.meal) {
     const mealName = meal.meal.toLowerCase();
     if (sushiKeywords.some((keyword) => mealName.includes(keyword))) {
       return true;
     }
   }
-  
-  // Check cuisine type - only if it explicitly mentions sushi
-  if (meal.aiMetadata.cuisineType) {
-    const cuisine = meal.aiMetadata.cuisineType.toLowerCase();
-    if (cuisine.includes('sushi')) {
-      return true;
+
+  // DEPRECATED fallback: aiMetadata. Remove after v2.0 migration is verified.
+  // TODO(metadata-v2): delete this block.
+  if (meal.aiMetadata) {
+    if (meal.aiMetadata.foodType) {
+      const foodTypes = Array.isArray(meal.aiMetadata.foodType)
+        ? meal.aiMetadata.foodType
+        : [meal.aiMetadata.foodType];
+      for (const foodType of foodTypes) {
+        if (sushiKeywords.some((keyword) => foodType.toLowerCase().includes(keyword))) {
+          return true;
+        }
+      }
+    }
+    if (meal.aiMetadata.cuisineType) {
+      const cuisine = meal.aiMetadata.cuisineType.toLowerCase();
+      if (cuisine.includes('sushi')) {
+        return true;
+      }
     }
   }
-  
+
   return false;
 };
 
@@ -1488,5 +1508,75 @@ exports.processEnhancedMetadataManual = onRequest(async (req, res) => {
   } catch (error) {
     console.error('Error in manual enhanced metadata processing:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// =============================================================================
+// Taste Profile — Phase A
+// Recomputes users/{uid}/taste_profile/summary whenever a meal is created,
+// updated, or deleted. Re-aggregates from scratch across all of the user's
+// meals so the profile is always correct and drift-free.
+// =============================================================================
+
+exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
+  'mealEntries/{mealId}',
+  async (event) => {
+    try {
+      const before = event.data && event.data.before && event.data.before.data();
+      const after = event.data && event.data.after && event.data.after.data();
+
+      // Determine the userId of the affected meal. On delete, `after` is null.
+      const userIds = new Set();
+      if (before && before.userId) userIds.add(before.userId);
+      if (after && after.userId) userIds.add(after.userId);
+
+      if (userIds.size === 0) {
+        console.log('[tasteProfile] No userId on meal write; skipping');
+        return null;
+      }
+
+      // Skip recomputation if the only change was fields that don't affect
+      // the profile (e.g. view counts). Cheap check: re-run if rating,
+      // metadata_enriched, meal name, or photoUrl changed, OR on create/delete.
+      if (before && after) {
+        const affectsProfile =
+          before.rating !== after.rating ||
+          JSON.stringify(before.metadata_enriched || null) !==
+            JSON.stringify(after.metadata_enriched || null) ||
+          before.meal !== after.meal ||
+          before.photoUrl !== after.photoUrl ||
+          before.restaurant !== after.restaurant ||
+          JSON.stringify(before.location || null) !==
+            JSON.stringify(after.location || null);
+        if (!affectsProfile) {
+          console.log('[tasteProfile] Update does not affect profile; skipping');
+          return null;
+        }
+      }
+
+      for (const userId of userIds) {
+        await recomputeTasteProfile(userId);
+      }
+      return null;
+    } catch (err) {
+      console.error('[tasteProfile] Error in onMealWrite trigger:', err);
+      return null;
+    }
+  }
+);
+
+// Manual trigger to recompute the taste profile for the authed user.
+// Useful for debugging or for "refresh my taste profile" UI.
+exports.refreshTasteProfile = onCall(async (request) => {
+  if (!request.auth) {
+    throw new Error('User must be authenticated');
+  }
+  const userId = request.data.userId || request.auth.uid;
+  try {
+    await recomputeTasteProfile(userId);
+    return {success: true, userId};
+  } catch (err) {
+    console.error('[tasteProfile] refreshTasteProfile error:', err);
+    throw new Error(`Failed to refresh taste profile: ${err.message}`);
   }
 });

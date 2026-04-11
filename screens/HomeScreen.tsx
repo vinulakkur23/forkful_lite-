@@ -37,6 +37,8 @@ import { RootStackParamList } from '../App';
 // import TooltipOnboarding from '../components/TooltipOnboarding'; // Commented out for custom onboarding
 // Import theme
 import { colors, typography, spacing, shadows } from '../themes';
+import { useTasteProfile } from '../utils/useTasteProfile';
+import { computeTasteMatch, TASTE_MATCH_BADGE_THRESHOLD } from '../utils/tasteMatch';
 
 // Map toggle icons
 const MAP_HOME_ICONS = {
@@ -110,6 +112,12 @@ const { width } = Dimensions.get('window');
 const MAX_MEALS_TO_DISPLAY = 50; // Limit the number of meals shown on map to prevent performance issues
 
 const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
+  // Taste profile for the current user — used to render the "X% match" badge
+  // on feed meal cards. Subscribed once at the top level so per-card lookups
+  // are cheap.
+  const currentUserId = auth().currentUser?.uid || null;
+  const { profile: tasteProfile } = useTasteProfile(currentUserId);
+
   const [user, setUser] = useState<any>(null);
   const [allNearbyMeals, setAllNearbyMeals] = useState<MealEntry[]>([]);
   const [nearbyMeals, setNearbyMeals] = useState<MealEntry[]>([]);
@@ -982,7 +990,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         .collection('savedMeals')
         .doc(mealId);
 
-      // Store complete meal data for the wishlist
+      // Store complete meal data for the wishlist.
+      // DEPRECATED (metadata-v2): We used to snapshot `aiMetadata` into the
+      // saved meal. Canonical metadata now lives in `metadata_enriched`.
       await savedMealRef.set({
         mealId,
         photoUrl: mealData.photoUrl,
@@ -994,7 +1004,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         userPhoto: mealData.userPhoto,
         location: mealData.location,
         createdAt: mealData.createdAt,
-        aiMetadata: mealData.aiMetadata,
+        metadata_enriched: (mealData as any).metadata_enriched || null,
         savedAt: firestore.FieldValue.serverTimestamp(),
       });
 
@@ -1065,6 +1075,15 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   const DoubleTapMealCard = React.memo(({ item }: { item: MealEntry }) => {
     const [showHeart, setShowHeart] = useState(savedMealsRef.current.has(item.id));
     const lastTap = useRef<number>(0);
+
+    // Compute taste match score against the current user's taste profile.
+    // Returns null if the profile is locked or missing, in which case we hide
+    // the badge entirely (no negative framing, ever).
+    const tasteMatchScore = React.useMemo(() => {
+      return computeTasteMatch(item as any, tasteProfile);
+    }, [item, tasteProfile]);
+    const showTasteBadge =
+      tasteMatchScore !== null && tasteMatchScore >= TASTE_MATCH_BADGE_THRESHOLD;
     
     // Photo state for multi-photo support
     const photos = processMealPhotos(item);
@@ -1242,6 +1261,13 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
               {/* Right side: distance above, emoji below */}
               <View style={styles.rightInfoGroup}>
+                {showTasteBadge && (
+                  <View style={styles.tasteMatchBadge}>
+                    <Text style={styles.tasteMatchBadgeText}>
+                      {tasteMatchScore}% match
+                    </Text>
+                  </View>
+                )}
                 {item.distance !== undefined && (
                   <Text style={styles.distanceText}>
                     {formatDistance(item.distance, item)}
@@ -1660,6 +1686,22 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginBottom: 2,
+  },
+  tasteMatchBadge: {
+    backgroundColor: colors.lightTan,
+    borderWidth: 1,
+    borderColor: colors.warmTaupe,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 4,
+  },
+  tasteMatchBadgeText: {
+    fontSize: 10,
+    color: colors.warmTaupe,
+    fontFamily: 'Inter-Regular',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   emptyContainer: {
     padding: spacing.xl,

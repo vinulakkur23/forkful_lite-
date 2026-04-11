@@ -33,6 +33,12 @@ import Exif from 'react-native-exif';
 import EmojiDisplay from '../components/EmojiDisplay';
 import { PixelArtChest, PixelArtShelfModal, ChestVisualKey } from '../components/PixelArtShelf';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
+import { mealMatchesQuery } from '../utils/mealSearch';
+import TasteProfileStrip from '../components/TasteProfileStrip';
+import DiscoveryGrid from '../components/DiscoveryGrid';
+import { useTasteProfile } from '../utils/useTasteProfile';
+import { DISCOVERY_VALUES } from '../constants/canonicalVocab';
+import { buildDynamicChips, buildCityChips, DEFAULT_CHIPS } from '../utils/chipResolver';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
@@ -196,6 +202,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     // Follow state
     const [isUserFollowing, setIsUserFollowing] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
+
+    // Taste profile (single subscription, shared by strip + discovery grids)
+    const tasteProfileOwnerUid = (!userId || userId === auth().currentUser?.uid)
+        ? auth().currentUser?.uid || null
+        : null;
+    const {
+        profile: tasteProfile,
+        loading: tasteProfileLoading,
+        error: tasteProfileError,
+    } = useTasteProfile(tasteProfileOwnerUid);
     
     // Track if viewing own profile  
     const [isOwnProfile, setIsOwnProfile] = useState(!userId || userId === auth().currentUser?.uid);
@@ -823,6 +839,46 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                         return matches;
                     }
                     return false;
+                });
+            } else if (filter.type === 'text') {
+                // Free-text search across canonical metadata + meal/restaurant/notes.
+                // Multi-word queries are AND-ed by mealMatchesQuery.
+                result = result.filter(meal => mealMatchesQuery(meal as any, filter.value));
+            } else if (
+                filter.type === 'dietary' ||
+                filter.type === 'flavor' ||
+                filter.type === 'cookingMethod' ||
+                filter.type === 'mealType' ||
+                filter.type === 'texture' ||
+                filter.type === 'heat' ||
+                filter.type === 'richness' ||
+                filter.type === 'protein' ||
+                filter.type === 'carb'
+            ) {
+                // Canonical v2.0 metadata filters — all read from metadata_enriched.
+                const fieldMap: Record<string, string> = {
+                    dietary: 'dietary_info',
+                    flavor: 'flavor_profile',
+                    cookingMethod: 'cooking_method',
+                    mealType: 'meal_type',
+                    texture: 'texture',
+                    heat: 'heat_level',
+                    richness: 'richness',
+                    protein: 'primary_protein',
+                    carb: 'primary_carb',
+                };
+                const listFields = new Set(['dietary_info', 'flavor_profile', 'texture']);
+                const field = fieldMap[filter.type];
+                const wanted = filter.value.toLowerCase();
+                result = result.filter(meal => {
+                    const enriched: any = meal.metadata_enriched;
+                    if (!enriched) return false;
+                    const fieldValue = enriched[field];
+                    if (listFields.has(field)) {
+                        return Array.isArray(fieldValue) &&
+                            fieldValue.some((v: string) => typeof v === 'string' && v.toLowerCase() === wanted);
+                    }
+                    return typeof fieldValue === 'string' && fieldValue.toLowerCase() === wanted;
                 });
             }
             console.log(`After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
@@ -1776,7 +1832,43 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         );
     };
 
-    // Memoize ListHeaderComponent to avoid re-creating on every render
+    // Quick-filter chips:
+    //   - List tab: personalized taste chips from the user's taste profile
+    //     (falls back to DEFAULT_CHIPS when locked or no profile)
+    //   - Map tab: city chips from users/{uid}.uniqueCities
+    // Values must match the canonical taxonomies in metadata_normalizer.py
+    // (for taste chips) or the existing 'city' filter type (for map chips).
+    const QUICK_FILTER_CHIPS: Array<{ label: string; type: string; value: string }> = useMemo(() => {
+        if (tabIndex === 1) {
+            // Map tab — city chips from the already-loaded cities state.
+            // Sort by meal count desc so the top cities come first.
+            const sortedCityNames = [...cities]
+                .sort((a, b) => b.mealCount - a.mealCount)
+                .map((c) => c.name);
+            return buildCityChips(sortedCityNames, 12);
+        }
+        // List tab — dynamic taste chips or defaults.
+        if (tasteProfileOwnerUid) {
+            return buildDynamicChips(tasteProfile, 8);
+        }
+        return DEFAULT_CHIPS;
+    }, [tabIndex, tasteProfile, tasteProfileOwnerUid, cities]);
+
+    const isQuickChipActive = (chip: { type: string; value: string }) =>
+        !!activeFilters?.some(f => f.type === chip.type && f.value === chip.value);
+
+    const handleQuickChipPress = (chip: { label: string; type: string; value: string }) => {
+        if (!onFilterChange) return;
+        const current = activeFilters || [];
+        const active = isQuickChipActive(chip);
+        if (active) {
+            const next = current.filter(f => !(f.type === chip.type && f.value === chip.value));
+            onFilterChange(next.length > 0 ? next : null);
+        } else {
+            onFilterChange([...current, { type: chip.type, value: chip.value, label: chip.label }]);
+        }
+    };
+
     const listHeaderComponent = useMemo(() => (
         <>
             {/* Forkful Logo - only show on own profile */}
@@ -1804,8 +1896,113 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     )}
                 </View>
             )}
+
+            {/* Taste profile strip + discovery grids — own profile only */}
+            {tasteProfileOwnerUid && (
+                <>
+                    <TasteProfileStrip
+                        profile={tasteProfile}
+                        loading={tasteProfileLoading}
+                        error={tasteProfileError}
+                        onSignatureDishPress={(mealId) => {
+                            navigation.navigate('MealDetail', {
+                                mealId,
+                                previousScreen: 'FoodPassport',
+                                passportUserId: userId,
+                                passportUserName: userName,
+                                passportUserPhoto: userPhoto,
+                            });
+                        }}
+                        onFlavorChipPress={(flavor) => {
+                            if (onFilterChange) {
+                                const current = activeFilters || [];
+                                const already = current.some(f => f.type === 'flavor' && f.value === flavor);
+                                if (!already) {
+                                    onFilterChange([
+                                        ...current,
+                                        { type: 'flavor', value: flavor, label: flavor.charAt(0).toUpperCase() + flavor.slice(1).replace(/-/g, ' ') },
+                                    ]);
+                                }
+                            }
+                        }}
+                    />
+
+                    {/* Discovery grids — "fill it out" layer. First grid expanded by default. */}
+                    {(() => {
+                        const discovered = tasteProfile?.discovered || {};
+                        const applyFilter = (type: string, value: string) => {
+                            if (!onFilterChange) return;
+                            const current = activeFilters || [];
+                            const already = current.some(f => f.type === type && f.value === value);
+                            if (already) return;
+                            const label = value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ');
+                            onFilterChange([...current, { type, value, label }]);
+                        };
+                        return (
+                            <>
+                                <DiscoveryGrid
+                                    title="Flavors discovered"
+                                    allValues={DISCOVERY_VALUES.flavors}
+                                    discoveredValues={discovered.flavors || []}
+                                    onPillPress={(v) => applyFilter('flavor', v)}
+                                    showNudge
+                                    defaultExpanded
+                                />
+                                <DiscoveryGrid
+                                    title="Proteins tried"
+                                    allValues={DISCOVERY_VALUES.proteins}
+                                    discoveredValues={discovered.proteins || []}
+                                    onPillPress={(v) => applyFilter('protein', v)}
+                                />
+                                <DiscoveryGrid
+                                    title="Cooking methods"
+                                    allValues={DISCOVERY_VALUES.cooking_methods}
+                                    discoveredValues={discovered.cooking_methods || []}
+                                    onPillPress={(v) => applyFilter('cookingMethod', v)}
+                                />
+                                <DiscoveryGrid
+                                    title="Textures"
+                                    allValues={DISCOVERY_VALUES.textures}
+                                    discoveredValues={discovered.textures || []}
+                                    onPillPress={(v) => applyFilter('texture', v)}
+                                />
+                                <DiscoveryGrid
+                                    title="Dietary"
+                                    allValues={DISCOVERY_VALUES.dietary}
+                                    discoveredValues={discovered.dietary || []}
+                                    onPillPress={(v) => applyFilter('dietary', v)}
+                                />
+                            </>
+                        );
+                    })()}
+                </>
+            )}
+
+            {/* Quick filter chips */}
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.quickChipsRow}
+                style={styles.quickChipsContainer}
+            >
+                {QUICK_FILTER_CHIPS.map(chip => {
+                    const active = isQuickChipActive(chip);
+                    return (
+                        <TouchableOpacity
+                            key={`${chip.type}-${chip.value}`}
+                            style={[styles.quickChip, active && styles.quickChipActive]}
+                            onPress={() => handleQuickChipPress(chip)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
+                                {chip.label}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
         </>
-    ), [userId, onThemePress, bgColor]);
+    ), [userId, onThemePress, bgColor, activeFilters, onFilterChange, tasteProfile, tasteProfileLoading, tasteProfileError, tasteProfileOwnerUid, userName, userPhoto, navigation, QUICK_FILTER_CHIPS, tabIndex]);
 
     // Handle chest visual change — save to Firestore
     const handleChestVisualChange = async (visual: ChestVisualKey) => {
@@ -2927,6 +3124,39 @@ const styles = StyleSheet.create({
     expandArrow: {
         fontSize: 24,
         color: '#5B8A72',
+    },
+    // Quick-filter chips (canonical v2.0 metadata shortcuts)
+    quickChipsContainer: {
+        marginTop: 4,
+        marginBottom: 8,
+    },
+    quickChipsRow: {
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    quickChip: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        borderRadius: 16,
+        paddingVertical: 5,
+        paddingHorizontal: 12,
+        marginRight: 8,
+    },
+    quickChipActive: {
+        backgroundColor: '#5B8A72',
+        borderColor: '#5B8A72',
+    },
+    quickChipText: {
+        fontSize: 12,
+        color: '#555',
+        fontFamily: 'Inter-Regular',
+    },
+    quickChipTextActive: {
+        color: '#FFFFFF',
+        fontWeight: '600',
     },
     // Accolades section styles
     accoladesContainer: {

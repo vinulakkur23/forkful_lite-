@@ -108,12 +108,13 @@ export const processImageMetadataViaAPI = async (mealId: string, photoUrl: strin
     console.log('API Response:', result);
     
     if (result.status === 'success' && result.metadata) {
-      // Update the Firestore document with the received metadata
-      await firestore().collection('mealEntries').doc(mealId).update({
-        aiMetadata: result.metadata,
-      });
-      
-      console.log('Successfully updated meal with AI metadata from API');
+      // DEPRECATED (metadata-v2): This service used to write `aiMetadata` back
+      // to the Firestore meal doc. That field is part of the legacy taxonomy
+      // that has been superseded by `metadata_enriched` (canonical v2.0 vocab,
+      // populated by the backend enhanced_metadata_service). We no longer
+      // write `aiMetadata` so new meals stay clean. The service is kept for
+      // any caller that still wants the metadata as a return value.
+      console.log('apiMetadataService: aiMetadata write disabled (legacy field)');
       return result.metadata;
     } else {
       throw new Error('Invalid API response format - missing metadata or success status');

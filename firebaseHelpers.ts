@@ -115,20 +115,12 @@ export const saveMealEntry = async (mealData: {
         month,
         year,
         timestamp
-      },
-
-      // Initialize AI metadata as empty - will be filled by backend service
-      aiMetadata: {
-        cuisineType: 'Unknown',
-        foodType: 'Unknown',
-        mealType: 'Unknown',
-        primaryProtein: 'Unknown',
-        dietType: 'Unknown',
-        eatingMethod: 'Unknown',
-        setting: 'Unknown',
-        platingStyle: 'Unknown',
-        beverageType: 'Unknown'
       }
+
+      // DEPRECATED (metadata-v2): The legacy `aiMetadata` block used to be
+      // initialized here with all "Unknown" values. It has been removed so
+      // new meals only use `metadata_enriched` (canonical v2.0, populated by
+      // the backend enhanced_metadata_service).
     };
 
     // Add to 'mealEntries' collection

@@ -166,12 +166,10 @@ export const processImageMetadata = async (
           const result = await response.json();
 
           if (result.status === 'success' && result.metadata) {
-            // Update the Firestore document with the received metadata
-            await firestore().collection('mealEntries').doc(mealId).update({
-              aiMetadata: result.metadata,
-            });
-
-            console.log('Successfully updated meal with AI metadata from FormData API');
+            // DEPRECATED (metadata-v2): Legacy `aiMetadata` write disabled.
+            // Canonical metadata now lives in `metadata_enriched`, populated
+            // by the backend enhanced_metadata_service. See CLAUDE.md.
+            console.log('aiMetadataService: aiMetadata write disabled (FormData path, legacy field)');
             return result.metadata;
           } else {
             throw new Error('Invalid API response format - missing metadata or success status');
@@ -244,12 +242,9 @@ export const processImageMetadata = async (
           const result = await response.json();
 
           if (result.status === 'success' && result.metadata) {
-            // Update the Firestore document with the received metadata
-            await firestore().collection('mealEntries').doc(mealId).update({
-              aiMetadata: result.metadata,
-            });
-
-            console.log('Successfully updated meal with AI metadata from URL API');
+            // DEPRECATED (metadata-v2): Legacy `aiMetadata` write disabled.
+            // Canonical metadata now lives in `metadata_enriched`.
+            console.log('aiMetadataService: aiMetadata write disabled (URL path, legacy field)');
             return result.metadata;
           } else {
             throw new Error('Invalid URL API response format - missing metadata or success status');
@@ -333,16 +328,10 @@ export const processImageMetadata = async (
       };
     }
 
-    // Update Firestore with fallback metadata (marked as fallback)
-    try {
-      await firestore().collection('mealEntries').doc(mealId).update({
-        aiMetadata: fallbackMetadata,
-        metadataSource: 'fallback' // Mark this as fallback data for future reference
-      });
-    } catch (updateError) {
-      console.error('Failed to update Firestore with fallback metadata:', updateError);
-    }
-
+    // DEPRECATED (metadata-v2): No longer writing legacy `aiMetadata` fallback
+    // to Firestore. Canonical metadata lives in `metadata_enriched`, and if
+    // the primary extraction fails the backend already writes a fallback there.
+    console.log('aiMetadataService: fallback aiMetadata write disabled (legacy field)');
     return fallbackMetadata;
   }
 };
