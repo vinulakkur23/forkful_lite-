@@ -98,7 +98,23 @@ const TasteProfileStrip: React.FC<Props> = ({
   if (error || !profile) return null;
 
   const tier = profile.tier || 'locked';
-  const oneLiner = buildTasteOneLiner(profile);
+  // Phase H: at full/refined tier, prefer the LLM-generated taste story when
+  // it's been written. Otherwise fall back to the deterministic template.
+  const hasStory =
+    (tier === 'full' || tier === 'refined') &&
+    typeof profile.taste_story === 'string' &&
+    profile.taste_story.trim().length > 0;
+  const oneLiner = hasStory
+    ? (profile.taste_story as string)
+    : buildTasteOneLiner(profile);
+  const archetype = hasStory
+    ? (profile.taste_story_archetype || '').trim()
+    : '';
+  const insights = hasStory
+    ? (profile.taste_story_insights || []).filter(
+        (s) => typeof s === 'string' && s.trim().length > 0,
+      )
+    : [];
   const subtitle = buildTasteSubtitle(profile);
   const topFlavors = (profile.top_flavors || []).slice(0, 3);
 
@@ -134,10 +150,34 @@ const TasteProfileStrip: React.FC<Props> = ({
 
       <View style={styles.headerRow}>
         <Text style={styles.title}>Your taste</Text>
-        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        {subtitle && !archetype && (
+          <Text style={styles.subtitle}>{subtitle}</Text>
+        )}
       </View>
 
-      <Text style={styles.oneLiner}>{oneLiner}</Text>
+      {archetype ? (
+        <View style={styles.archetypePill}>
+          <Text style={styles.archetypePillText}>{archetype}</Text>
+        </View>
+      ) : null}
+
+      {insights.length >= 1 ? (
+        <View style={styles.insightsList}>
+          {insights.map((ins, idx) => (
+            <View
+              key={idx}
+              style={[
+                styles.insightBlock,
+                idx < insights.length - 1 && styles.insightBlockDivider,
+              ]}
+            >
+              <Text style={styles.insightText}>{ins}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.oneLiner}>{oneLiner}</Text>
+      )}
 
       {topFlavors.length > 0 && (
         <View style={styles.flavorRow}>
@@ -263,6 +303,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  insightsList: {
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  insightBlock: {
+    paddingVertical: 10,
+  },
+  insightBlockDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.warmTaupe || '#d9cfc2',
+  },
+  insightText: {
+    fontSize: 14.5,
+    color: colors.textPrimary,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
+  archetypePill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.warmTaupe,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  archetypePillText: {
+    fontSize: 11,
+    color: colors.white,
+    fontFamily: 'Inter-Regular',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   flavorRow: {
     flexDirection: 'row',

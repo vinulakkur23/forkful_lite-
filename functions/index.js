@@ -8,6 +8,10 @@ const sharp = require('sharp');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
 const {recomputeTasteProfile} = require('./tasteProfile');
+const {
+  maybeGenerateTasteStory,
+  forceGenerateTasteStory,
+} = require('./tasteStory');
 
 // Initialize Firebase Admin
 initializeApp();
@@ -1555,7 +1559,15 @@ exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
       }
 
       for (const userId of userIds) {
-        await recomputeTasteProfile(userId);
+        const signal = await recomputeTasteProfile(userId);
+        // Phase H: after the profile is recomputed, evaluate whether the
+        // user's LLM-generated taste story needs to be (re)generated.
+        // This is best-effort — never block the trigger on it.
+        try {
+          await maybeGenerateTasteStory(userId, signal);
+        } catch (storyErr) {
+          console.error('[tasteStory] maybeGenerate failed:', storyErr);
+        }
       }
       return null;
     } catch (err) {
@@ -1573,10 +1585,145 @@ exports.refreshTasteProfile = onCall(async (request) => {
   }
   const userId = request.data.userId || request.auth.uid;
   try {
-    await recomputeTasteProfile(userId);
+    const signal = await recomputeTasteProfile(userId);
+    try {
+      await maybeGenerateTasteStory(userId, signal);
+    } catch (storyErr) {
+      console.error('[tasteStory] maybeGenerate failed in refresh:', storyErr);
+    }
     return {success: true, userId};
   } catch (err) {
     console.error('[tasteProfile] refreshTasteProfile error:', err);
     throw new Error(`Failed to refresh taste profile: ${err.message}`);
   }
 });
+
+// Phase H dev/debug callable: bypass the regeneration gate and force a
+// fresh taste-story generation for the authed (or specified) user. Still
+// respects a 5-minute throttle to avoid accidental hammer loops.
+exports.regenerateTasteStory = onCall(async (request) => {
+  if (!request.auth) {
+    throw new Error('User must be authenticated');
+  }
+  const userId = request.data.userId || request.auth.uid;
+  try {
+    const result = await forceGenerateTasteStory(userId);
+    return {success: true, userId, ...result};
+  } catch (err) {
+    console.error('[tasteStory] regenerateTasteStory error:', err);
+    throw new Error(`Failed to regenerate taste story: ${err.message}`);
+  }
+});
+
+// Phase H admin HTTP endpoint: regenerate taste stories for EVERY user who
+// has a full/refined profile. PUBLIC — no auth check. Use sparingly and
+// DELETE this function when you're done with the bulk refresh.
+//
+// Usage (from your terminal, once deployed):
+//   curl "https://us-central1-<project>.cloudfunctions.net/regenerateAllTasteStories?dryRun=1"
+//   curl "https://us-central1-<project>.cloudfunctions.net/regenerateAllTasteStories"
+exports.regenerateAllTasteStories = onRequest(
+  {timeoutSeconds: 540, memory: '512MiB'},
+  async (req, res) => {
+    const dryRun = req.query && (req.query.dryRun === '1' || req.query.dryRun === 'true');
+    const onlyTier = req.query && req.query.tier; // optional filter, e.g. 'full'
+    const allowedTiers = onlyTier ? [onlyTier] : ['full', 'refined'];
+    const db = getFirestore();
+
+    try {
+      // Iterate users directly (avoids needing a collectionGroup composite
+      // index on taste_profile.tier). Reads each summary doc in parallel
+      // batches and filters client-side by tier.
+      const usersSnap = await db.collection('users').get();
+      const allUserIds = [];
+      usersSnap.forEach((doc) => allUserIds.push(doc.id));
+
+      console.log(
+        `[regenerateAllTasteStories] Scanning ${allUserIds.length} users for tier in [${allowedTiers.join(',')}]`
+      );
+
+      const userIds = [];
+      const BATCH = 25;
+      for (let i = 0; i < allUserIds.length; i += BATCH) {
+        const batch = allUserIds.slice(i, i + BATCH);
+        const summaries = await Promise.all(
+          batch.map((uid) =>
+            db
+              .collection('users')
+              .doc(uid)
+              .collection('taste_profile')
+              .doc('summary')
+              .get()
+              .then((s) => ({uid, data: s.exists ? s.data() : null}))
+              .catch(() => ({uid, data: null}))
+          )
+        );
+        for (const {uid, data} of summaries) {
+          if (data && allowedTiers.includes(data.tier)) userIds.push(uid);
+        }
+      }
+
+      console.log(
+        `[regenerateAllTasteStories] Found ${userIds.length} qualifying ` +
+        `users (dryRun=${dryRun}, tier=${onlyTier || 'full|refined'})`
+      );
+
+      if (dryRun) {
+        res.json({
+          success: true,
+          dryRun: true,
+          qualifying_user_count: userIds.length,
+          user_ids: userIds,
+        });
+        return;
+      }
+
+      const results = [];
+      let fired = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      // Sequential with a small delay between calls — avoids hammering the
+      // backend / Gemini quota. ~1 req/sec is plenty for a batch of a few
+      // hundred users and keeps us well under the 9-min timeout.
+      for (let i = 0; i < userIds.length; i++) {
+        const uid = userIds[i];
+        try {
+          // Defensive: recompute the profile first so the summary doc
+          // reflects current meals (post-deletes, post-edits) before we
+          // hand it to the LLM. Without this, a stale signature_dish or
+          // top-N can leak into the regenerated story.
+          await recomputeTasteProfile(uid);
+          const r = await forceGenerateTasteStory(uid, {bypassThrottle: true});
+          if (r.fired) fired++;
+          else skipped++;
+          results.push({uid, ...r});
+        } catch (err) {
+          errors++;
+          results.push({uid, error: err.message || String(err)});
+          console.error(`[regenerateAllTasteStories] ${uid} failed:`, err);
+        }
+        // Small inter-request delay to be nice to the backend.
+        if (i < userIds.length - 1) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+
+      console.log(
+        `[regenerateAllTasteStories] Done. fired=${fired} skipped=${skipped} errors=${errors}`
+      );
+
+      res.json({
+        success: true,
+        total: userIds.length,
+        fired,
+        skipped,
+        errors,
+        results,
+      });
+    } catch (err) {
+      console.error('[regenerateAllTasteStories] fatal:', err);
+      res.status(500).json({error: err.message || String(err)});
+    }
+  }
+);

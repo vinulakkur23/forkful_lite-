@@ -8,13 +8,14 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type TasteTier = 'locked' | 'basic' | 'full' | 'refined';
+export type TasteTier = 'locked' | 'basic' | 'enhanced' | 'full' | 'refined';
 
 const TIER_RANK: Record<TasteTier, number> = {
   locked: 0,
   basic: 1,
-  full: 2,
-  refined: 3,
+  enhanced: 2,
+  full: 3,
+  refined: 4,
 };
 
 const storageKey = (userId: string) => `@taste_tier_last_seen:${userId}`;
@@ -26,7 +27,13 @@ export async function getLastSeenTier(userId: string): Promise<TasteTier | null>
   try {
     const v = await AsyncStorage.getItem(storageKey(userId));
     if (!v) return null;
-    if (v === 'locked' || v === 'basic' || v === 'full' || v === 'refined') {
+    if (
+      v === 'locked' ||
+      v === 'basic' ||
+      v === 'enhanced' ||
+      v === 'full' ||
+      v === 'refined'
+    ) {
       return v;
     }
     return null;
@@ -65,8 +72,10 @@ export function getUnlockMessage(
   switch (newTier) {
     case 'basic':
       return 'Your taste profile is unlocked — first picture of who you are as an eater.';
+    case 'enhanced':
+      return 'Your profile is sharpening — your favorites are becoming clearer.';
     case 'full':
-      return 'Your taste profile leveled up — you\'ve unlocked your signature dish.';
+      return 'Your taste story is ready — we\'ve unlocked your signature dish.';
     case 'refined':
       return 'Your taste is refined. Full personalization unlocked.';
     default:

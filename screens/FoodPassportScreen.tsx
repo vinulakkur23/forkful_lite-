@@ -937,7 +937,12 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             // --- Derive pixel art emojis ---
             const emojiUrls: string[] = [];
             // --- Derive city meal counts ---
+            // cityMealCounts is keyed by lowercase city name (used for joining
+            // against cityImages/uniqueCities). cityDisplayNames preserves the
+            // first original-cased spelling we see, so we don't lose "São Paulo"
+            // or "New York" when the only source is lowercase.
             const cityMealCounts: { [city: string]: number } = {};
+            const cityDisplayNames: { [cityLower: string]: string } = {};
             // --- Derive cuisine meal counts ---
             const cuisineMealCounts: { [cuisine: string]: number } = {};
             // --- Derive restaurant meal counts + emoji URLs + city + meals ---
@@ -963,17 +968,21 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 if (citiesArray.length > 0) {
                     // Multi-city: count this meal once per city
                     citiesArray.forEach((c: string) => {
+                        if (typeof c !== 'string') return;
                         const cityKey = c.toLowerCase().trim();
-                        if (cityKey) {
-                            cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
-                        }
+                        if (!cityKey) return;
+                        cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                        if (!cityDisplayNames[cityKey]) cityDisplayNames[cityKey] = c.trim();
                     });
                 } else {
                     // Legacy single-value fallback
                     const city = data.location?.city || data.city;
-                    if (city) {
+                    if (typeof city === 'string') {
                         const cityKey = city.toLowerCase().trim();
-                        cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                        if (cityKey) {
+                            cityMealCounts[cityKey] = (cityMealCounts[cityKey] || 0) + 1;
+                            if (!cityDisplayNames[cityKey]) cityDisplayNames[cityKey] = city.trim();
+                        }
                     }
                 }
 
@@ -1042,29 +1051,59 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 setChestVisual(userData.chestVisual as ChestVisualKey);
             }
 
-            const citiesWithData: City[] = [];
-            for (const cityName of uniqueCities) {
-                const normalizedCityName = cityName.toLowerCase().trim().replace(/\s+/g, '-');
-                const cityDoc = await firestore().collection('cityImages').doc(normalizedCityName).get();
-                const capitalizedCityName = cityName.split(' ').map((word: string) =>
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ');
-                // Lookup using lowercase key (matches how we count above)
-                const mealCount = cityMealCounts[cityName.toLowerCase().trim()] || 0;
+            // Build cities from the authoritative source: the meal-entry scan
+            // above (cityMealCounts). We used to iterate uniqueCities from the
+            // users doc, but that cache is stale or missing for a lot of users
+            // which caused the map-tab city chips to disappear entirely.
+            // uniqueCities is now only consulted as a best-effort hint for
+            // proper-cased display names.
+            const uniqueCitiesMap: { [cityLower: string]: string } = {};
+            for (const raw of uniqueCities) {
+                if (typeof raw !== 'string') continue;
+                const k = raw.toLowerCase().trim();
+                if (k) uniqueCitiesMap[k] = raw;
+            }
 
-                // Skip cities with zero meals
+            const citiesWithData: City[] = [];
+            const cityKeys = Object.keys(cityMealCounts);
+            // Hydrate cityImages in parallel — one read per unique city.
+            const cityImagePromises = cityKeys.map((cityKey) => {
+                const normalized = cityKey.replace(/\s+/g, '-');
+                return firestore()
+                    .collection('cityImages')
+                    .doc(normalized)
+                    .get()
+                    .then((doc) => ({ cityKey, doc }))
+                    .catch(() => ({ cityKey, doc: null as any }));
+            });
+            const cityImageResults = await Promise.all(cityImagePromises);
+
+            for (const { cityKey, doc } of cityImageResults) {
+                const mealCount = cityMealCounts[cityKey] || 0;
                 if (mealCount === 0) continue;
 
-                if (cityDoc.exists) {
-                    const cityData = cityDoc.data();
-                    if (cityData?.imageUrl) {
-                        citiesWithData.push({ name: capitalizedCityName, imageUrl: cityData.imageUrl, mealCount });
-                    } else {
-                        citiesWithData.push({ name: capitalizedCityName, imageUrl: '', mealCount });
-                    }
-                } else {
-                    citiesWithData.push({ name: capitalizedCityName, imageUrl: '', mealCount });
-                }
+                // Choose the nicest display name we have:
+                //   1. original casing from users.uniqueCities
+                //   2. original casing captured off the meal doc
+                //   3. title-cased fallback from the lowercase key
+                const rawName =
+                    uniqueCitiesMap[cityKey] ||
+                    cityDisplayNames[cityKey] ||
+                    cityKey;
+                const capitalizedCityName = rawName
+                    .split(' ')
+                    .map((word: string) =>
+                        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                    )
+                    .join(' ');
+
+                const imageUrl =
+                    (doc && doc.exists && doc.data()?.imageUrl) || '';
+                citiesWithData.push({
+                    name: capitalizedCityName,
+                    imageUrl,
+                    mealCount,
+                });
             }
             citiesWithData.sort((a, b) => b.mealCount - a.mealCount);
 

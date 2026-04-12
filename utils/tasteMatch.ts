@@ -25,7 +25,14 @@ export interface TasteProfile {
   top_proteins?: string[];
   top_cooking_methods?: string[];
   top_dietary?: string[];
+  top_textures?: string[];
+  top_carbs?: string[];
   avoid_tags?: string[];
+  /** Phase H: LLM-generated taste story (present at full/refined tier). */
+  taste_story?: string;
+  taste_story_archetype?: string;
+  taste_story_insights?: string[];
+  taste_story_updated_at?: unknown;
   discovered?: {
     flavors?: string[];
     cuisines?: string[];
@@ -45,7 +52,7 @@ export interface TasteProfile {
   meal_count?: number;
   unique_cuisines_count?: number;
   unique_cities_count?: number;
-  tier?: 'locked' | 'basic' | 'full' | 'refined';
+  tier?: 'locked' | 'basic' | 'enhanced' | 'full' | 'refined';
 }
 
 // =============================================================================
