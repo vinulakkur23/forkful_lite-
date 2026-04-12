@@ -126,6 +126,8 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress, isOwnProfile = fals
     const map = new Map<string, MealEntry[]>();
     meals.forEach(meal => {
       try {
+        // Only show meals that have been rated (rating > 0)
+        if (!meal.rating || meal.rating <= 0) return;
         // Use photoTakenAt if available, otherwise fall back to createdAt
         const rawDate = meal.photoTakenAt || meal.createdAt;
         const date = rawDate?.toDate?.() || new Date(rawDate);

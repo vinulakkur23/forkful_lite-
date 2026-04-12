@@ -1564,12 +1564,14 @@ exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
 
       if (isCreate) {
         // No full recompute — just bump meal_count so the progress bar moves.
+        // Only count rated meals (rating > 0) toward taste profile progress.
         const userId = after.userId;
         if (userId) {
           const db = getFirestore();
           const countSnap = await db
             .collection('mealEntries')
             .where('userId', '==', userId)
+            .where('rating', '>', 0)
             .count()
             .get();
           const newCount = countSnap.data().count;
@@ -1608,14 +1610,15 @@ exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
           ? (summarySnap.data().meal_count || 0)
           : 0;
 
-        // Count current enriched meals (cheap aggregation query)
-        const enrichedSnap = await db
+        // Count current rated meals (cheap aggregation query).
+        // Only rated meals (rating > 0) count toward taste profile progress.
+        const ratedSnap = await db
           .collection('mealEntries')
           .where('userId', '==', userId)
-          .where('metadata_enriched', '!=', null)
+          .where('rating', '>', 0)
           .count()
           .get();
-        const newMealCount = enrichedSnap.data().count;
+        const newMealCount = ratedSnap.data().count;
 
         const crossedMilestone =
           Math.floor(newMealCount / 5) > Math.floor(oldMealCount / 5);
@@ -1640,13 +1643,13 @@ exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
         const userId = before.userId;
         if (userId) {
           const db = getFirestore();
-          const enrichedSnap = await db
+          const ratedSnap = await db
             .collection('mealEntries')
             .where('userId', '==', userId)
-            .where('metadata_enriched', '!=', null)
+            .where('rating', '>', 0)
             .count()
             .get();
-          const newMealCount = enrichedSnap.data().count;
+          const newMealCount = ratedSnap.data().count;
           await db
             .collection('users')
             .doc(userId)

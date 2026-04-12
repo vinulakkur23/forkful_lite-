@@ -319,9 +319,14 @@ async function recomputeTasteProfile(userId) {
     .where('userId', '==', userId)
     .get();
 
+  // Only count rated meals (rating > 0) toward taste profile progress.
+  // Unrated meals are excluded from both the count and scoring.
   const meals = [];
   mealsSnapshot.forEach((doc) => {
-    meals.push({_id: doc.id, ...doc.data()});
+    const data = doc.data();
+    if (typeof data.rating === 'number' && data.rating > 0) {
+      meals.push({_id: doc.id, ...data});
+    }
   });
 
   const mealCount = meals.length;
