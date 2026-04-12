@@ -1,67 +1,174 @@
 /**
- * TasteProfileStrip — the "Your taste" header on the Food Passport profile.
+ * TasteProfileStrip — the "Your taste" section on the Food Passport.
  *
- * Reads `users/{uid}/taste_profile/summary` (written by the Cloud Function in
- * functions/tasteProfile.js) and renders one of three states:
+ * Renders progressively richer content as the user logs more meals:
  *
- *   locked  (0–4 meals):  "Log N more meals to unlock your taste profile." + progress pill
- *   basic   (5–14):       Top flavor chips + basic one-liner + "Log X more to refine."
- *   full    (15+):        Top flavor chips + signature dish card + richer one-liner
+ *   locked   (0–4):   "Log N more meals…" + progress bar
+ *   basic    (5–9):   Top flavor chips + one-liner + progress bar
+ *   enhanced (10–14): Flavors & Textures word cloud + one-liner + progress bar
+ *   full     (15–19): Archetype + 1 AI insight (bold) + full word cloud + progress bar
+ *   refined  (20+):   Archetype + 3 AI insights (bold) + full word cloud + progress bar to next 5-meal refresh
  *
- * The strip updates live via onSnapshot, so logging a new meal refreshes it
- * without a refetch.
+ * Updates live via onSnapshot.
  */
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
-import { colors, spacing, shadows } from '../themes';
-import { buildTasteOneLiner, buildTasteSubtitle } from '../utils/tasteOneLiner';
-import { useTasteProfile } from '../utils/useTasteProfile';
-import type { TasteProfile } from '../utils/tasteMatch';
+import {colors, spacing, shadows} from '../themes';
+import {buildTasteOneLiner, buildTasteSubtitle} from '../utils/tasteOneLiner';
+import {useTasteProfile} from '../utils/useTasteProfile';
+import type {TasteProfile} from '../utils/tasteMatch';
 import {
   getLastSeenTier,
   setLastSeenTier,
   getUnlockMessage,
   type TasteTier,
 } from '../utils/tierTransition';
+import WordCloud from './WordCloud';
+import FlavorMap from './FlavorMap';
+import {
+  buildWordCloudItems,
+  WORD_CLOUD_CATEGORIES,
+} from '../utils/wordCloudData';
+
+// Toggle between visualizations — flip to 'wordcloud' to revert instantly
+const FLAVOR_VIZ: 'tags' | 'wordcloud' = 'tags';
+
+// ---------------------------------------------------------------------------
+// Bold text helper — splits "some **bold** text" into mixed-weight spans
+// ---------------------------------------------------------------------------
+
+function renderBoldText(text: string): React.ReactNode {
+  const parts = text.split(/\*\*(.*?)\*\*/g);
+  if (parts.length === 1) return text; // no bold markers
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <Text key={i} style={{fontWeight: '700'}}>
+        {part}
+      </Text>
+    ) : (
+      part
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Segmented progress bar — 5 segments with 4 divots
+// ---------------------------------------------------------------------------
+
+function SegmentedProgressBar({progress}: {progress: ProgressInfo}) {
+  return (
+    <View style={styles.progressContainer}>
+      <View style={styles.progressTrack}>
+        <View
+          style={[
+            styles.progressFill,
+            {width: `${Math.min(100, progress.fraction * 100)}%`},
+          ]}
+        />
+        {/* 4 divots at 20%, 40%, 60%, 80% */}
+        {[1, 2, 3, 4].map((i) => (
+          <View
+            key={i}
+            style={[
+              styles.progressDivot,
+              {left: `${i * 20}%`},
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={styles.progressLabel}>{progress.label}</Text>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progress bar config per tier
+// ---------------------------------------------------------------------------
+
+interface ProgressInfo {
+  current: number;
+  target: number;
+  label: string;
+  fraction: number;
+}
+
+function getProgressInfo(
+  tier: string,
+  mealCount: number,
+): ProgressInfo | null {
+  // Every tier uses the same 0–5 progress toward the next 5-meal milestone.
+  const nextMilestone = Math.ceil((mealCount + 1) / 5) * 5;
+  const prevMilestone = nextMilestone - 5;
+  const withinBucket = mealCount - prevMilestone; // 0–4
+  const remaining = nextMilestone - mealCount;
+  const fraction = withinBucket / 5;
+
+  switch (tier) {
+    case 'locked':
+      return {
+        current: withinBucket,
+        target: 5,
+        label: `Capture ${remaining} more meal${remaining === 1 ? '' : 's'} to unlock your taste profile`,
+        fraction,
+      };
+    case 'basic':
+    case 'enhanced':
+    case 'full':
+      return {
+        current: withinBucket,
+        target: 5,
+        label: `Capture ${remaining} more meal${remaining === 1 ? '' : 's'} to evolve your taste profile`,
+        fraction,
+      };
+    case 'refined':
+      return {
+        current: withinBucket,
+        target: 5,
+        label: `Capture ${remaining} more meal${remaining === 1 ? '' : 's'} to refresh your taste profile`,
+        fraction,
+      };
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface Props {
-  /** Either pass a userId to subscribe internally, or pass a `profile` to
-   *  render data fetched elsewhere (preferred when the parent also uses the
-   *  profile, to avoid duplicate subscriptions). */
   userId?: string;
   profile?: TasteProfile | null;
   loading?: boolean;
   error?: boolean;
-  /** Called when the signature dish card is tapped. */
-  onSignatureDishPress?: (mealId: string) => void;
-  /** Called when a top-flavor chip is tapped (optional — enables filter apply). */
+  /** Called when a word cloud word or flavor chip is tapped. */
   onFlavorChipPress?: (flavor: string) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 const TasteProfileStrip: React.FC<Props> = ({
   userId,
   profile: profileProp,
   loading: loadingProp,
   error: errorProp,
-  onSignatureDishPress,
   onFlavorChipPress,
 }) => {
-  // If a profile wasn't passed in, subscribe to it ourselves.
   const internal = useTasteProfile(profileProp === undefined ? userId : null);
   const profile = profileProp !== undefined ? profileProp : internal.profile;
   const loading = loadingProp !== undefined ? loadingProp : internal.loading;
   const error = errorProp !== undefined ? errorProp : internal.error;
 
-  // Tier unlock detection. Compares new tier against AsyncStorage-cached
-  // last-seen tier. If the user just leveled up, show a dismissible banner.
+  // Tier unlock detection
   const [unlockMessage, setUnlockMessage] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -71,10 +178,7 @@ const TasteProfileStrip: React.FC<Props> = ({
       if (!uid) return;
       const last = await getLastSeenTier(uid);
       const msg = getUnlockMessage(last, profile.tier as TasteTier);
-      if (msg && !cancelled) {
-        setUnlockMessage(msg);
-      }
-      // Always sync the cache so we don't keep firing.
+      if (msg && !cancelled) setUnlockMessage(msg);
       await setLastSeenTier(uid, profile.tier as TasteTier);
     };
     run();
@@ -94,45 +198,73 @@ const TasteProfileStrip: React.FC<Props> = ({
     );
   }
 
-  // Hide on error — don't block the profile from rendering.
   if (error || !profile) return null;
 
   const tier = profile.tier || 'locked';
-  // Phase H: at full/refined tier, prefer the LLM-generated taste story when
-  // it's been written. Otherwise fall back to the deterministic template.
+  const mealCount = profile.meal_count || 0;
+
+  // AI story data
   const hasStory =
     (tier === 'full' || tier === 'refined') &&
     typeof profile.taste_story === 'string' &&
     profile.taste_story.trim().length > 0;
-  const oneLiner = hasStory
-    ? (profile.taste_story as string)
-    : buildTasteOneLiner(profile);
   const archetype = hasStory
     ? (profile.taste_story_archetype || '').trim()
     : '';
-  const insights = hasStory
+  const allInsights = hasStory
     ? (profile.taste_story_insights || []).filter(
         (s) => typeof s === 'string' && s.trim().length > 0,
       )
     : [];
+  // full tier: show 1 insight; refined: show all 3
+  const insights = tier === 'full' ? allInsights.slice(0, 1) : allInsights;
+
+  // Deterministic one-liner for basic/enhanced
+  const oneLiner = buildTasteOneLiner(profile);
   const subtitle = buildTasteSubtitle(profile);
   const topFlavors = (profile.top_flavors || []).slice(0, 3);
 
-  // --- Locked state ---
+  // Word cloud — enhanced: only Flavors & Textures; full/refined: one merged cloud
+  const showWordCloud =
+    tier === 'enhanced' || tier === 'full' || tier === 'refined';
+  const wordCloudSections = useMemo(() => {
+    if (!showWordCloud || !profile) return [];
+    if (tier === 'enhanced') {
+      // Enhanced: only flavors & textures
+      const cat = WORD_CLOUD_CATEGORIES.find((c) => c.key === 'flavors');
+      if (!cat) return [];
+      const items = buildWordCloudItems(profile, cat.fields);
+      return items.length >= 2 ? [{...cat, items}] : [];
+    }
+    // Full / Refined: one big cloud with all fields merged.
+    // Per-field normalization is handled inside buildWordCloudItems.
+    const allFields = WORD_CLOUD_CATEGORIES.flatMap((c) => c.fields);
+    const items = buildWordCloudItems(profile, allFields);
+    return items.length >= 2
+      ? [{key: 'all', label: 'Flavor Map', fields: allFields, items}]
+      : [];
+  }, [showWordCloud, profile?.tag_counts, profile?.tag_scores, tier]);
+  const [cloudWidth, setCloudWidth] = useState(0);
+
+  // Progress bar
+  const progress = getProgressInfo(tier, mealCount);
+
+  // -----------------------------------------------------------------------
+  // Locked state
+  // -----------------------------------------------------------------------
   if (tier === 'locked') {
-    const meals = profile.meal_count || 0;
     return (
       <View style={[styles.container, styles.lockedContainer]}>
         <Text style={styles.lockedTitle}>Your taste profile</Text>
         <Text style={styles.lockedBody}>{oneLiner}</Text>
-        <View style={styles.progressPill}>
-          <Text style={styles.progressPillText}>{meals} / 5</Text>
-        </View>
+        {progress && <SegmentedProgressBar progress={progress} />}
       </View>
     );
   }
 
-  // --- Basic / Full state ---
+  // -----------------------------------------------------------------------
+  // Basic / Enhanced / Full / Refined
+  // -----------------------------------------------------------------------
   return (
     <View style={styles.container}>
       {unlockMessage && (
@@ -149,18 +281,18 @@ const TasteProfileStrip: React.FC<Props> = ({
       )}
 
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Your taste</Text>
+        <Text style={styles.title}>Taste Profile</Text>
         {subtitle && !archetype && (
           <Text style={styles.subtitle}>{subtitle}</Text>
         )}
       </View>
 
+      {/* Archetype — larger, descriptive header (full/refined only) */}
       {archetype ? (
-        <View style={styles.archetypePill}>
-          <Text style={styles.archetypePillText}>{archetype}</Text>
-        </View>
+        <Text style={styles.archetypeText}>{archetype}</Text>
       ) : null}
 
+      {/* AI insights with bold formatting (full: 1, refined: 3) */}
       {insights.length >= 1 ? (
         <View style={styles.insightsList}>
           {insights.map((ins, idx) => (
@@ -171,15 +303,58 @@ const TasteProfileStrip: React.FC<Props> = ({
                 idx < insights.length - 1 && styles.insightBlockDivider,
               ]}
             >
-              <Text style={styles.insightText}>{ins}</Text>
+              <Text style={styles.insightText}>{renderBoldText(ins)}</Text>
             </View>
           ))}
         </View>
-      ) : (
+      ) : tier !== 'full' && tier !== 'refined' ? (
         <Text style={styles.oneLiner}>{oneLiner}</Text>
-      )}
+      ) : null}
 
-      {topFlavors.length > 0 && (
+      {/* Flavor visualization — toggle via FLAVOR_VIZ constant */}
+      {showWordCloud && wordCloudSections.length > 0 ? (
+        <View
+          style={styles.wordCloudContainer}
+          onLayout={(e) => setCloudWidth(e.nativeEvent.layout.width)}
+        >
+          {wordCloudSections.map((sec) => (
+            <View key={sec.key} style={styles.wordCloudSection}>
+              <Text style={styles.wordCloudLabel}>{sec.label}</Text>
+              {FLAVOR_VIZ === 'tags' ? (
+                <FlavorMap
+                  items={sec.items}
+                  onWordPress={
+                    onFlavorChipPress
+                      ? (item) => onFlavorChipPress(item.label)
+                      : undefined
+                  }
+                />
+              ) : cloudWidth > 0 ? (
+                (() => {
+                  const isMerged = sec.key === 'all';
+                  const h = isMerged
+                    ? Math.max(140, Math.min(260, sec.items.length * 18))
+                    : Math.max(80, Math.min(160, sec.items.length * 22));
+                  return (
+                    <WordCloud
+                      items={sec.items}
+                      width={cloudWidth}
+                      height={h}
+                      minFontSize={sec.items.length <= 4 ? 13 : 10}
+                      maxFontSize={isMerged ? 26 : (sec.items.length <= 4 ? 22 : 28)}
+                      onWordPress={
+                        onFlavorChipPress
+                          ? (item) => onFlavorChipPress(item.label)
+                          : undefined
+                      }
+                    />
+                  );
+                })()
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : topFlavors.length > 0 ? (
         <View style={styles.flavorRow}>
           {topFlavors.map((f) => (
             <TouchableOpacity
@@ -192,41 +367,17 @@ const TasteProfileStrip: React.FC<Props> = ({
             </TouchableOpacity>
           ))}
         </View>
-      )}
+      ) : null}
 
-      {tier === 'full' && profile.signature_dish && (
-        <TouchableOpacity
-          style={styles.signatureCard}
-          activeOpacity={0.85}
-          onPress={() =>
-            profile.signature_dish?.mealId &&
-            onSignatureDishPress?.(profile.signature_dish.mealId)
-          }
-        >
-          {profile.signature_dish.photoUrl ? (
-            <Image
-              source={{ uri: profile.signature_dish.photoUrl }}
-              style={styles.signatureImage}
-            />
-          ) : (
-            <View style={[styles.signatureImage, styles.signatureImagePlaceholder]} />
-          )}
-          <View style={styles.signatureTextBlock}>
-            <Text style={styles.signatureLabel}>YOUR SIGNATURE DISH</Text>
-            <Text style={styles.signatureName} numberOfLines={1}>
-              {profile.signature_dish.mealName || 'Unnamed'}
-            </Text>
-            {profile.signature_dish.repeat_count > 1 && (
-              <Text style={styles.signatureMeta}>
-                Logged {profile.signature_dish.repeat_count}×
-              </Text>
-            )}
-          </View>
-        </TouchableOpacity>
-      )}
+      {/* Progress bar */}
+      {progress && <SegmentedProgressBar progress={progress} />}
     </View>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -266,18 +417,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     marginBottom: 8,
   },
-  progressPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: colors.lightTan,
-    borderRadius: 10,
-  },
-  progressPillText: {
-    fontSize: 12,
-    color: colors.warmTaupe,
-    fontFamily: 'Inter-Regular',
-    fontWeight: '600',
-  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -296,6 +435,15 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     fontFamily: 'Inter-Regular',
     fontStyle: 'italic',
+  },
+  archetypeText: {
+    fontSize: 17,
+    color: colors.warmTaupe,
+    fontFamily: 'Inter-Regular',
+    fontWeight: '700',
+    lineHeight: 22,
+    marginBottom: 10,
+    marginTop: 2,
   },
   oneLiner: {
     fontSize: 15,
@@ -321,21 +469,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 20,
   },
-  archetypePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: colors.warmTaupe,
-    borderRadius: 10,
-    marginBottom: 6,
+  wordCloudContainer: {
+    marginTop: 8,
+    marginBottom: 4,
   },
-  archetypePillText: {
+  wordCloudSection: {
+    marginBottom: 12,
+  },
+  wordCloudLabel: {
     fontSize: 11,
-    color: colors.white,
+    color: colors.textTertiary,
     fontFamily: 'Inter-Regular',
-    fontWeight: '700',
-    letterSpacing: 0.3,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   flavorRow: {
     flexDirection: 'row',
@@ -357,46 +504,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
-  signatureCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: colors.lightGray,
-    borderRadius: 8,
+  // Progress bar
+  progressContainer: {
+    marginTop: 12,
   },
-  signatureImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 6,
-    backgroundColor: colors.mediumGray,
+  progressTrack: {
+    height: 6,
+    backgroundColor: colors.lightTan,
+    borderRadius: 3,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  signatureImagePlaceholder: {
-    backgroundColor: colors.mediumGray,
+  progressFill: {
+    height: 6,
+    backgroundColor: colors.tasteGreen,
+    borderRadius: 3,
   },
-  signatureTextBlock: {
-    flex: 1,
-    marginLeft: 10,
+  progressDivot: {
+    position: 'absolute',
+    top: 0,
+    width: 2,
+    height: 6,
+    backgroundColor: colors.white,
+    marginLeft: -1, // center on the percentage mark
   },
-  signatureLabel: {
-    fontSize: 10,
-    color: colors.textTertiary,
-    fontFamily: 'Inter-Regular',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  signatureName: {
-    fontSize: 14,
-    color: colors.textPrimary,
-    fontFamily: 'Inter-Regular',
-    fontWeight: '600',
-  },
-  signatureMeta: {
+  progressLabel: {
     fontSize: 11,
     color: colors.textTertiary,
     fontFamily: 'Inter-Regular',
-    marginTop: 1,
+    marginTop: 4,
   },
+  // Unlock banner
   unlockBanner: {
     flexDirection: 'row',
     alignItems: 'center',

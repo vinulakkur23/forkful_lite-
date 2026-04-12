@@ -35,9 +35,7 @@ import { PixelArtChest, PixelArtShelfModal, ChestVisualKey } from '../components
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import { mealMatchesQuery } from '../utils/mealSearch';
 import TasteProfileStrip from '../components/TasteProfileStrip';
-import DiscoveryGrid from '../components/DiscoveryGrid';
 import { useTasteProfile } from '../utils/useTasteProfile';
-import { DISCOVERY_VALUES } from '../constants/canonicalVocab';
 import { buildDynamicChips, buildCityChips, DEFAULT_CHIPS } from '../utils/chipResolver';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
@@ -1936,86 +1934,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             )}
 
-            {/* Taste profile strip + discovery grids — own profile only */}
-            {tasteProfileOwnerUid && (
-                <>
-                    <TasteProfileStrip
-                        profile={tasteProfile}
-                        loading={tasteProfileLoading}
-                        error={tasteProfileError}
-                        onSignatureDishPress={(mealId) => {
-                            navigation.navigate('MealDetail', {
-                                mealId,
-                                previousScreen: 'FoodPassport',
-                                passportUserId: userId,
-                                passportUserName: userName,
-                                passportUserPhoto: userPhoto,
-                            });
-                        }}
-                        onFlavorChipPress={(flavor) => {
-                            if (onFilterChange) {
-                                const current = activeFilters || [];
-                                const already = current.some(f => f.type === 'flavor' && f.value === flavor);
-                                if (!already) {
-                                    onFilterChange([
-                                        ...current,
-                                        { type: 'flavor', value: flavor, label: flavor.charAt(0).toUpperCase() + flavor.slice(1).replace(/-/g, ' ') },
-                                    ]);
-                                }
-                            }
-                        }}
-                    />
-
-                    {/* Discovery grids — "fill it out" layer. First grid expanded by default. */}
-                    {(() => {
-                        const discovered = tasteProfile?.discovered || {};
-                        const applyFilter = (type: string, value: string) => {
-                            if (!onFilterChange) return;
-                            const current = activeFilters || [];
-                            const already = current.some(f => f.type === type && f.value === value);
-                            if (already) return;
-                            const label = value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ');
-                            onFilterChange([...current, { type, value, label }]);
-                        };
-                        return (
-                            <>
-                                <DiscoveryGrid
-                                    title="Flavors discovered"
-                                    allValues={DISCOVERY_VALUES.flavors}
-                                    discoveredValues={discovered.flavors || []}
-                                    onPillPress={(v) => applyFilter('flavor', v)}
-                                    showNudge
-                                    defaultExpanded
-                                />
-                                <DiscoveryGrid
-                                    title="Proteins tried"
-                                    allValues={DISCOVERY_VALUES.proteins}
-                                    discoveredValues={discovered.proteins || []}
-                                    onPillPress={(v) => applyFilter('protein', v)}
-                                />
-                                <DiscoveryGrid
-                                    title="Cooking methods"
-                                    allValues={DISCOVERY_VALUES.cooking_methods}
-                                    discoveredValues={discovered.cooking_methods || []}
-                                    onPillPress={(v) => applyFilter('cookingMethod', v)}
-                                />
-                                <DiscoveryGrid
-                                    title="Textures"
-                                    allValues={DISCOVERY_VALUES.textures}
-                                    discoveredValues={discovered.textures || []}
-                                    onPillPress={(v) => applyFilter('texture', v)}
-                                />
-                                <DiscoveryGrid
-                                    title="Dietary"
-                                    allValues={DISCOVERY_VALUES.dietary}
-                                    discoveredValues={discovered.dietary || []}
-                                    onPillPress={(v) => applyFilter('dietary', v)}
-                                />
-                            </>
-                        );
-                    })()}
-                </>
-            )}
+            {/* Taste profile strip removed from header — now renders in footer */}
 
             {/* Quick filter chips */}
             <ScrollView
@@ -2041,7 +1960,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 })}
             </ScrollView>
         </>
-    ), [userId, onThemePress, bgColor, activeFilters, onFilterChange, tasteProfile, tasteProfileLoading, tasteProfileError, tasteProfileOwnerUid, userName, userPhoto, navigation, QUICK_FILTER_CHIPS, tabIndex]);
+    ), [userId, onThemePress, bgColor, activeFilters, onFilterChange, userName, userPhoto, navigation, QUICK_FILTER_CHIPS, tabIndex]);
 
     // Handle chest visual change — save to Firestore
     const handleChestVisualChange = async (visual: ChestVisualKey) => {
@@ -2349,6 +2268,27 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
             </View>
 
+            {/* Taste profile strip — own profile only */}
+            {tasteProfileOwnerUid && (
+                <TasteProfileStrip
+                    profile={tasteProfile}
+                    loading={tasteProfileLoading}
+                    error={tasteProfileError}
+                    onFlavorChipPress={(flavor) => {
+                        if (onFilterChange) {
+                            const current = activeFilters || [];
+                            const already = current.some(f => f.type === 'flavor' && f.value === flavor);
+                            if (!already) {
+                                onFilterChange([
+                                    ...current,
+                                    { type: 'flavor', value: flavor, label: flavor.charAt(0).toUpperCase() + flavor.slice(1).replace(/-/g, ' ') },
+                                ]);
+                            }
+                        }
+                    }}
+                />
+            )}
+
             {/* Bottom row: chest icon + share button */}
             <View style={styles.shareContainer}>
                 {!emojisLoading && pixelArtEmojis.length > 0 && (
@@ -2376,7 +2316,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 )}
             </View>
         </View>
-    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters, chestVisual, mealsExpanded, citiesExpanded, cuisinesExpanded, restaurantsExpanded]);
+    ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters, chestVisual, mealsExpanded, citiesExpanded, cuisinesExpanded, restaurantsExpanded, tasteProfile, tasteProfileLoading, tasteProfileError, tasteProfileOwnerUid, onFilterChange]);
 
     // Function to render each meal item — memoized with useCallback
     const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {

@@ -1539,25 +1539,126 @@ exports.onMealWriteUpdateTasteProfile = onDocumentWritten(
         return null;
       }
 
-      // Skip recomputation if the only change was fields that don't affect
-      // the profile (e.g. view counts). Cheap check: re-run if rating,
-      // metadata_enriched, meal name, or photoUrl changed, OR on create/delete.
-      if (before && after) {
-        const affectsProfile =
-          before.rating !== after.rating ||
-          JSON.stringify(before.metadata_enriched || null) !==
-            JSON.stringify(after.metadata_enriched || null) ||
-          before.meal !== after.meal ||
-          before.photoUrl !== after.photoUrl ||
-          before.restaurant !== after.restaurant ||
-          JSON.stringify(before.location || null) !==
-            JSON.stringify(after.location || null);
-        if (!affectsProfile) {
+      // -----------------------------------------------------------
+      // GATE: only recompute on 5-meal milestones, not every write.
+      //
+      // The taste profile (word cloud, insights, archetype) updates
+      // every 5 meals. Running a full recompute on every single meal
+      // write is wasteful — it reads ALL meals, writes the profile,
+      // and triggers client-side snapshot listeners.
+      //
+      // We recompute when:
+      //   1. metadata_enriched is written (the enrichment job filled
+      //      it in) AND the new meal count crosses a 5-meal boundary
+      //   2. A meal is DELETED (keep counts accurate)
+      //   3. A rating changes on an existing meal (user re-rated)
+      //
+      // We skip when:
+      //   - Meal is first created (metadata_enriched is null)
+      //   - photoUrl, location, or other non-taste fields change
+      //   - metadata_enriched is written but no 5-meal milestone hit
+      // -----------------------------------------------------------
+
+      const isCreate = !before && after;
+      const isUpdate = before && after;
+
+      if (isCreate) {
+        // No full recompute — just bump meal_count so the progress bar moves.
+        const userId = after.userId;
+        if (userId) {
+          const db = getFirestore();
+          const countSnap = await db
+            .collection('mealEntries')
+            .where('userId', '==', userId)
+            .count()
+            .get();
+          const newCount = countSnap.data().count;
+          await db
+            .collection('users')
+            .doc(userId)
+            .collection('taste_profile')
+            .doc('summary')
+            .set({meal_count: newCount}, {merge: true});
+          console.log(`[tasteProfile] New meal created; updated meal_count to ${newCount}, skipping full recompute`);
+        }
+        return null;
+      }
+
+      if (isUpdate) {
+        // Only care about metadata_enriched arriving — that's
+        // the enrichment job filling in the meal's taste data.
+        const enrichmentJustArrived =
+          !before.metadata_enriched && !!after.metadata_enriched;
+
+        if (!enrichmentJustArrived) {
           console.log('[tasteProfile] Update does not affect profile; skipping');
           return null;
         }
+
+        // Enrichment arrived — check if we've hit a 5-meal milestone.
+        const db = getFirestore();
+        const userId = after.userId;
+        const summaryRef = db
+          .collection('users')
+          .doc(userId)
+          .collection('taste_profile')
+          .doc('summary');
+        const summarySnap = await summaryRef.get();
+        const oldMealCount = summarySnap.exists
+          ? (summarySnap.data().meal_count || 0)
+          : 0;
+
+        // Count current enriched meals (cheap aggregation query)
+        const enrichedSnap = await db
+          .collection('mealEntries')
+          .where('userId', '==', userId)
+          .where('metadata_enriched', '!=', null)
+          .count()
+          .get();
+        const newMealCount = enrichedSnap.data().count;
+
+        const crossedMilestone =
+          Math.floor(newMealCount / 5) > Math.floor(oldMealCount / 5);
+
+        if (!crossedMilestone) {
+          // Update just the meal_count so the progress bar stays fresh,
+          // but skip the expensive full recompute.
+          await summaryRef.set({meal_count: newMealCount}, {merge: true});
+          console.log(
+            `[tasteProfile] Meal count ${oldMealCount} → ${newMealCount}; ` +
+            `no milestone crossed, updated count only`
+          );
+          return null;
+        }
+
+        console.log(
+          `[tasteProfile] Milestone! Meal count ${oldMealCount} → ${newMealCount}; ` +
+          `running full recompute`
+        );
+      } else {
+        // DELETE — just update the count, full recompute happens at next milestone
+        const userId = before.userId;
+        if (userId) {
+          const db = getFirestore();
+          const enrichedSnap = await db
+            .collection('mealEntries')
+            .where('userId', '==', userId)
+            .where('metadata_enriched', '!=', null)
+            .count()
+            .get();
+          const newMealCount = enrichedSnap.data().count;
+          await db
+            .collection('users')
+            .doc(userId)
+            .collection('taste_profile')
+            .doc('summary')
+            .set({meal_count: newMealCount}, {merge: true});
+          console.log(`[tasteProfile] Meal deleted; updated count to ${newMealCount}, skipping full recompute`);
+        }
+        return null;
       }
 
+      // 5-meal milestone crossed — full recompute
       for (const userId of userIds) {
         const signal = await recomputeTasteProfile(userId);
         // Phase H: after the profile is recomputed, evaluate whether the

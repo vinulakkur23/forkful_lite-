@@ -406,32 +406,70 @@ const MealCalendar: React.FC<Props> = ({ meals, onMealPress, isOwnProfile = fals
             )}
 
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {selectedDayMeals?.map((meal, index) => (
-                <TouchableOpacity
-                  key={meal.id}
-                  style={[styles.modalMealRow, index < (selectedDayMeals?.length || 0) - 1 && styles.modalMealRowBorder]}
-                  onPress={() => {
-                    setSelectedDayMeals(null);
-                    onMealPress?.(meal);
-                  }}
-                >
-                  {/* Pixel art or photo thumbnail */}
-                  {getEmojiUrl(meal) ? (
-                    <Image source={{ uri: getEmojiUrl(meal)! }} style={styles.modalMealEmoji} resizeMode="contain" />
-                  ) : meal.photoUrl ? (
-                    <Image source={{ uri: meal.photoUrl }} style={styles.modalMealPhoto} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.modalMealPhoto, { backgroundColor: colors.lightGray }]} />
-                  )}
-                  <View style={styles.modalMealInfo}>
-                    <Text style={styles.modalMealName} numberOfLines={1}>{meal.meal || 'Untitled'}</Text>
-                    <Text style={styles.modalMealRestaurant} numberOfLines={1}>{meal.restaurant || ''}</Text>
+              {(() => {
+                // Group meals by time of day
+                const getHour = (meal: MealEntry): number => {
+                  const ts = meal.photoTakenAt || meal.createdAt;
+                  if (!ts) return 12; // default to mid-day
+                  const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+                  return d.getHours();
+                };
+                const morning: MealEntry[] = [];
+                const midday: MealEntry[] = [];
+                const evening: MealEntry[] = [];
+                const getTimestamp = (meal: MealEntry): number => {
+                  const ts = meal.photoTakenAt || meal.createdAt;
+                  if (!ts) return 0;
+                  const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+                  return d.getTime();
+                };
+                const sorted = [...(selectedDayMeals || [])].sort(
+                  (a, b) => getTimestamp(a) - getTimestamp(b),
+                );
+                sorted.forEach((meal) => {
+                  const h = getHour(meal);
+                  if (h < 12) morning.push(meal);
+                  else if (h < 18) midday.push(meal);
+                  else evening.push(meal);
+                });
+
+                const sections = [
+                  { label: 'Morning', meals: morning },
+                  { label: 'Afternoon', meals: midday },
+                  { label: 'Evening', meals: evening },
+                ].filter((s) => s.meals.length > 0);
+
+                return sections.map((section) => (
+                  <View key={section.label}>
+                    <Text style={styles.modalSectionLabel}>{section.label}</Text>
+                    {section.meals.map((meal, index) => (
+                      <TouchableOpacity
+                        key={meal.id}
+                        style={[styles.modalMealRow, index < section.meals.length - 1 && styles.modalMealRowBorder]}
+                        onPress={() => {
+                          setSelectedDayMeals(null);
+                          onMealPress?.(meal);
+                        }}
+                      >
+                        {getEmojiUrl(meal) ? (
+                          <Image source={{ uri: getEmojiUrl(meal)! }} style={styles.modalMealEmoji} resizeMode="contain" />
+                        ) : meal.photoUrl ? (
+                          <Image source={{ uri: meal.photoUrl }} style={styles.modalMealPhoto} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.modalMealPhoto, { backgroundColor: colors.lightGray }]} />
+                        )}
+                        <View style={styles.modalMealInfo}>
+                          <Text style={styles.modalMealName} numberOfLines={1}>{meal.meal || 'Untitled'}</Text>
+                          <Text style={styles.modalMealRestaurant} numberOfLines={1}>{meal.restaurant || ''}</Text>
+                        </View>
+                        {meal.rating > 0 && (
+                          <EmojiDisplay rating={meal.rating} size={22} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                  {meal.rating > 0 && (
-                    <EmojiDisplay rating={meal.rating} size={22} />
-                  )}
-                </TouchableOpacity>
-              ))}
+                ));
+              })()}
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -693,6 +731,16 @@ const styles = StyleSheet.create({
   modalScroll: {
     maxHeight: 300,
     marginTop: 10,
+  },
+  modalSectionLabel: {
+    fontFamily: 'Inter',
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
+    marginBottom: 4,
   },
   modalMealRow: {
     flexDirection: 'row',

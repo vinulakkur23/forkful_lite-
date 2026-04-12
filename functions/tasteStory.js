@@ -120,6 +120,21 @@ function shouldGenerate(signal) {
     }
   }
 
+  // G. Every-5-meals refresh. Once in full/refined tier, regenerate whenever
+  // the meal count crosses a multiple of 5 (15, 20, 25, 30, ...). This keeps
+  // insights fresh as the user's palate evolves.
+  if (
+    typeof signal.newMealCount === 'number' &&
+    typeof signal.mealCountDelta === 'number' &&
+    signal.mealCountDelta > 0
+  ) {
+    const oldCount = signal.newMealCount - signal.mealCountDelta;
+    // Did we cross a 5-meal boundary?
+    if (Math.floor(signal.newMealCount / 5) > Math.floor(oldCount / 5)) {
+      return {fire: true, reason: 'every-5-refresh'};
+    }
+  }
+
   return {fire: false, reason: 'no-change'};
 }
 

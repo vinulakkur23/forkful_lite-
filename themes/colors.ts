@@ -8,6 +8,7 @@ export const colors = {
   charcoal: '#1A1A1A',        // Main dark color for text and important elements
   warmTaupe: '#8B7355',       // Accent color - earthy, elegant, doesn't compete with food
   desertSand: '#C19A6B',      // Alternative accent - slightly lighter
+  tasteGreen: '#3A8F5C',      // Word cloud "loved it" end of color gradient
 
   // Background Colors
   white: '#FFFFFF',            // Primary background - clean, lets food photos shine

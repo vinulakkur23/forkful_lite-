@@ -474,12 +474,13 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
       case 'map':
         return (
           <ErrorBoundary navigation={navigation}>
-            <MapScreen 
+            <MapScreen
               navigation={navigation}
               activeFilters={activeFilters}
               activeRatingFilters={activeRatingFilters}
               isActive={tabIndex === 2} // Map is always at index 2 now
               userId={targetUserId}
+              onFilterChange={handleFilterChange}
             />
           </ErrorBoundary>
         );

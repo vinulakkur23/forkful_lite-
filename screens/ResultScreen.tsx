@@ -480,8 +480,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         });
       }
       
-      // 2. Start challenge generation in background - CHECK IF NOT ALREADY RUNNING
-      if (!(global as any).pendingChallengePromise) {
+      // 2. Next dish challenge generation — DISABLED (no longer used)
+      if (false && !(global as any).pendingChallengePromise) {
         const actualMealName = mealData?.meal || meal;
         const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
         
@@ -535,7 +535,7 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [routeMealId, loadingMealData, backgroundAPIsTriggered]); // Use meal ID instead of mealData to prevent loops
 
-  // NEW: Check challenge limit first, then listen for rating_statements_result to trigger challenge generation
+  // Challenge generation via rating_statements listener — DISABLED (no longer used)
   useEffect(() => {
     if (!routeMealId) {
       return;
@@ -566,12 +566,12 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
             
             console.log('🎯 Firestore listener - rating statements available:', !!hasRatingStatements);
             
-            if (hasRatingStatements && hasRatingStatements.length > 0) {
+            if (false && hasRatingStatements && hasRatingStatements.length > 0) {
               console.log('✅ Rating statements are now available! Triggering challenge generation...');
-              
+
               const actualMealName = data.meal || meal;
               const actualCriteria = hasRatingStatements;
-              
+
               // Only generate if we haven't already generated a challenge
               if (!(global as any).pendingChallengePromise && !(global as any).pendingChallenge) {
                 console.log('🍽️ Starting challenge generation after rating statements loaded');
@@ -1531,11 +1531,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
     if (savedMealId && mealData) {
       console.log("Navigating to EditMeal with meal ID:", savedMealId);
       
-      // Start challenge generation in background BEFORE navigating to EditMeal
-      // Use the actual meal name from user input and criteria from Firestore
-      const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
+      // Challenge generation — DISABLED (no longer used)
+      /*
+      const actualMealName = mealData?.meal || meal;
       const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
-      
+
       console.log("🍽️ Checking challenge generation data:", {
         mealName: actualMealName,
         criteriaLength: actualCriteria?.length,
@@ -1590,7 +1590,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
           });
         });
       }
-      
+      */
+
       navigation.navigate('EditMeal', {
         mealId: savedMealId,
         meal: {
@@ -1634,11 +1635,11 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const goToFoodPassport = (): void => {
-    // Start challenge generation in background BEFORE navigating to FoodPassport
-    // Use the actual meal name from user input and criteria from Firestore
-    const actualMealName = mealData?.meal || meal;  // Use meal name from mealData or state
+    // Challenge generation — DISABLED (no longer used)
+    /*
+    const actualMealName = mealData?.meal || meal;
     const actualCriteria = ratingStatementsResult?.rating_statements || mealData?.rating_statements_result?.rating_statements;
-    
+
     console.log("🍽️ Checking challenge generation data (FoodPassport):", {
       mealName: actualMealName,
       criteriaLength: actualCriteria?.length,
@@ -1693,7 +1694,8 @@ const ResultScreen: React.FC<Props> = ({ route, navigation }) => {
         });
       });
     }
-    
+    */
+
     // Navigate to the FoodPassport tab
     navigation.reset({
       index: 0,

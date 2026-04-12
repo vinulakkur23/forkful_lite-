@@ -179,6 +179,7 @@ type MapScreenProps = {
   activeRatingFilters?: number[] | null;
   isActive?: boolean; // Flag to indicate if this tab is currently active
   userId?: string; // Optional userId to view other users' maps
+  onFilterChange?: (filters: FilterItem[] | null) => void;
 };
 
 interface MealEntry {
@@ -190,9 +191,11 @@ interface MealEntry {
   userId?: string;
   userName?: string;
   userPhoto?: string;
+  city?: string;
   location: {
     latitude: number;
     longitude: number;
+    city?: string;
     source?: string;
   } | null;
   createdAt: number;
@@ -218,7 +221,7 @@ const calculateZoomLevel = (region: Region): number => {
   return Math.round(Math.log(360 / longitudeDelta) / Math.LN2);
 };
 
-const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, activeRatingFilters, isActive, userId }) => {
+const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, activeRatingFilters, isActive, userId, onFilterChange }) => {
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -428,6 +431,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
             rating: data.rating,
             restaurant: data.restaurant || '',
             meal: data.meal || '',
+            city: data.city || data.location?.city || '',
             userId: data.userId,
             location: data.location,
             createdAt: data.createdAt?.toDate?.() || Date.now(),
@@ -823,6 +827,37 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
     */
   };
 
+  // City chips — derived from all meals (must be above early returns)
+  const cityChips = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allMeals.forEach((m) => {
+      const city = m.city || m.location?.city || '';
+      if (city.trim()) {
+        const name = city.trim();
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([name]) => ({label: name, type: 'city', value: name.toLowerCase()}));
+  }, [allMeals]);
+
+  const isCityChipActive = (chip: {type: string; value: string}) =>
+    !!activeFilters?.some((f) => f.type === chip.type && f.value === chip.value);
+
+  const handleCityChipPress = (chip: {label: string; type: string; value: string}) => {
+    if (!onFilterChange) return;
+    const current = activeFilters || [];
+    const active = isCityChipActive(chip);
+    if (active) {
+      const next = current.filter((f) => !(f.type === chip.type && f.value === chip.value));
+      onFilterChange(next.length > 0 ? next : null);
+    } else {
+      onFilterChange([...current, chip]);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -831,7 +866,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
       </View>
     );
   }
-  
+
   if (filteredMeals.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -987,6 +1022,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
           );
         })}
       </MapView>
+
+      {/* City chips — rendered AFTER MapView so they sit on top of the native map */}
+      {cityChips.length > 1 && onFilterChange && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.cityChipsContainer}
+          contentContainerStyle={styles.cityChipsRow}
+        >
+          {cityChips.map((chip) => {
+            const active = isCityChipActive(chip);
+            return (
+              <TouchableOpacity
+                key={chip.value}
+                style={[styles.cityChip, active && styles.cityChipActive]}
+                onPress={() => handleCityChipPress(chip)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cityChipText, active && styles.cityChipTextActive]}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Wishlist Toggle Button - Only show in standalone map, not in passport context */}
       {!userId && (
@@ -1146,6 +1207,40 @@ const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
     position: 'relative',
+  },
+  cityChipsContainer: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    elevation: 10,
+  },
+  cityChipsRow: {
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  cityChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.mediumGray,
+  },
+  cityChipActive: {
+    backgroundColor: '#5B8A72',
+    borderColor: '#5B8A72',
+  },
+  cityChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  cityChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   map: {
     flex: 1,

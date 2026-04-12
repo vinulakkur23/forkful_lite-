@@ -75,9 +75,9 @@ export function getUnlockMessage(
     case 'enhanced':
       return 'Your profile is sharpening — your favorites are becoming clearer.';
     case 'full':
-      return 'Your taste story is ready — we\'ve unlocked your signature dish.';
+      return 'Your first taste insight is ready.';
     case 'refined':
-      return 'Your taste is refined. Full personalization unlocked.';
+      return null;
     default:
       return null;
   }

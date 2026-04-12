@@ -157,7 +157,7 @@ function deriveTier(mealCount) {
   if (mealCount < 5) return 'locked';
   if (mealCount < 10) return 'basic';
   if (mealCount < 15) return 'enhanced';
-  if (mealCount < 30) return 'full';
+  if (mealCount < 20) return 'full';
   return 'refined';
 }
 
