@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import MapView, { Marker, Callout, Region, PROVIDER_GOOGLE } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
@@ -18,149 +18,14 @@ import EmojiDisplay from './EmojiDisplay';
 import { getFollowing } from '../services/followService';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { mapStyle } from '../config/mapStyle';
 
 // Map button icons - same as MapScreen
 const MAP_ICONS = {
   myLocation: require('../assets/icons/map/my-location.png'),
 };
 
-// Custom map style to match app theme
-const mapStyle = [
-  {
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FAF9F6" // Cream background
-      }
-    ]
-  },
-  {
-    "elementType": "labels.icon",
-    "stylers": [
-      {
-        "visibility": "off"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49" // Navy text
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#FAF3E0" // Cream stroke
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.land_parcel",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49"
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#F5E6D3" // Lighter cream for POIs
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#666666"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#E8F5E8" // Soft green for parks
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFFFFF" // White roads
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#E0DDD8" // Light gray stroke
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFE4E4" // Very light red for highways
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#E63946" // Lobster red stroke for highways
-      },
-      {
-        "lightness": 50
-      }
-    ]
-  },
-  {
-    "featureType": "transit.line",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFE4B5" // Light gold for transit
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#D4E4F1" // Light blue for water
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49" // Navy for water labels
-      }
-    ]
-  }
-];
+// Map style imported from shared config (config/mapStyle.ts)
 
 // Calculate zoom level from region
 const calculateZoomLevel = (region: Region): number => {
@@ -651,6 +516,7 @@ const HomeMapComponent: React.FC<Props> = ({
   return (
     <View style={styles.mapContainer}>
       <MapView
+        provider={PROVIDER_GOOGLE}
         key={`homescreen-mapview-${filterMode}-${filteredMealsForMap.length}`}
         ref={mapRef}
         style={styles.map}
@@ -670,6 +536,7 @@ const HomeMapComponent: React.FC<Props> = ({
             <Marker
               key={`${locationKey}-${currentZoom < 14 ? 'pin' : 'photo'}`}
               coordinate={coordinate}
+              tracksViewChanges={false}
               onPress={() => handleMarkerPress(locationKey, meals)}
             >
               {/* Show simple pins when zoomed out, photos when zoomed in */}

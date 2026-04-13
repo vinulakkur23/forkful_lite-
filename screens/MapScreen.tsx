@@ -18,7 +18,7 @@ import {
   Modal,
 } from 'react-native';
 import { firebase, auth, firestore } from '../firebaseConfig';
-import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import MapView, { Marker, Callout, Region, PROVIDER_GOOGLE } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
@@ -27,6 +27,7 @@ import { FilterItem } from '../components/SimpleFilterComponent';
 import EmojiDisplay from '../components/EmojiDisplay';
 // Import theme
 import { colors, typography, spacing, shadows } from '../themes';
+import { mapStyle } from '../config/mapStyle';
 
 // Custom button icons - replace these with actual assets when available
 const MAP_ICONS = {
@@ -35,143 +36,7 @@ const MAP_ICONS = {
   checkmark: { uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAA8klEQVR4nO2VMU7DQBBF3xaUBpooJQ2hpPYFkhtwAtLQpM0dcgFEGuqUdDkFdLkDcAJS0FBkCyOtbCsKGstJSvKkkUYz+1/P7swG/o0JKlzwSI4FNV44IseZZB94HMbPVaRQ0OJU0PziMiixJ1h9sxkdwRRHWLMtXIJdwfKH7l2CE8F8DdeRGQyxF1M4L8d0xZUbQbvDZRKCDTWzKAIHM4zjXuMkgaDBbkzhuAZX1DngELeJXZQz6AmqFRCPRNDinncFFS7/4OpLJHbRfYcgBXV8+vQTcT9SbfVcx39uqSBf8Kn5rmDYWNgJsZygCZYf+HfeAe9jVYQkXxGBAAAAAElFTkSuQmCC' }
 };
 
-// Custom map style to match app theme
-const mapStyle = [
-  {
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FAF9F6" // Cream background
-      }
-    ]
-  },
-  {
-    "elementType": "labels.icon",
-    "stylers": [
-      {
-        "visibility": "off"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49" // Navy text
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#FAF3E0" // Cream stroke
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.land_parcel",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49"
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#F5E6D3" // Lighter cream for POIs
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#666666"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#E8F5E8" // Soft green for parks
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFFFFF" // White roads
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#E0DDD8" // Light gray stroke
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFE4E4" // Very light red for highways
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#E63946" // Lobster red stroke for highways
-      },
-      {
-        "lightness": 50
-      }
-    ]
-  },
-  {
-    "featureType": "transit.line",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#FFE4B5" // Light gold for transit
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#D4E4F1" // Light blue for water
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#1a2b49" // Navy for water labels
-      }
-    ]
-  }
-];
+// Map style imported from shared config (config/mapStyle.ts)
 
 type MapScreenProps = {
   navigation: StackNavigationProp<RootStackParamList, 'FoodPassport'>;
@@ -185,6 +50,7 @@ type MapScreenProps = {
 interface MealEntry {
   id: string;
   photoUrl: string;
+  pixel_art_url?: string;
   rating: number;
   restaurant: string;
   meal: string;
@@ -238,50 +104,67 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   const mapRef = useRef<MapView | null>(null);
   
   // Group meals by location for carousel display
+  // Zoom-aware clustering: at low zoom, nearby restaurants merge into dots.
+  // As you zoom in, clusters break apart into individual pixel art markers.
   const locationGroupedMarkers = useMemo(() => {
     const mealsWithLocation = filteredMeals.filter(meal => meal.location?.latitude && meal.location?.longitude);
-    
-    // Group meals by location (rounded to 4 decimal places to catch very close locations)
+
+    // Grid precision based on zoom level:
+    // Lower zoom → coarser grid → more merging
+    // Higher zoom → finer grid → individual markers
+    // Caps at 1 decimal (~11km) so cities/regions never merge into one blob
+    let decimals: number;
+    if (currentZoom >= 15) {
+      decimals = 4;      // ~11m — exact locations, no clustering
+    } else if (currentZoom >= 13) {
+      decimals = 3;      // ~110m — very close restaurants merge
+    } else if (currentZoom >= 11) {
+      decimals = 2;      // ~1.1km — neighborhood-level clusters
+    } else {
+      decimals = 1;      // ~11km — area-level clusters (cap here)
+    }
+
     const locationGroups: { [key: string]: MealEntry[] } = {};
-    
+
     mealsWithLocation.forEach(meal => {
       if (!meal.location) return;
-      
-      const lat = meal.location.latitude.toFixed(4);
-      const lng = meal.location.longitude.toFixed(4);
+
+      const lat = meal.location.latitude.toFixed(decimals);
+      const lng = meal.location.longitude.toFixed(decimals);
       const locationKey = `${lat},${lng}`;
-      
+
       if (!locationGroups[locationKey]) {
         locationGroups[locationKey] = [];
       }
       locationGroups[locationKey].push(meal);
     });
-    
-    // Create one marker per location with all meals
+
+    // Create one marker per cluster — coordinate is the average of all meals in the cluster
     const groupedMarkers: Array<{
       locationKey: string,
       coordinate: {latitude: number, longitude: number},
       meals: MealEntry[],
-      restaurant?: string
+      restaurant?: string,
+      uniqueRestaurants: number,
     }> = [];
-    
+
     Object.entries(locationGroups).forEach(([locationKey, meals]) => {
-      const firstMeal = meals[0];
-      const restaurant = firstMeal.restaurant || meals.find(m => m.restaurant)?.restaurant;
-      
+      const avgLat = meals.reduce((sum, m) => sum + m.location!.latitude, 0) / meals.length;
+      const avgLng = meals.reduce((sum, m) => sum + m.location!.longitude, 0) / meals.length;
+      const restaurant = meals[0].restaurant || meals.find(m => m.restaurant)?.restaurant;
+      const uniqueRestaurants = new Set(meals.map(m => m.restaurant || m.id)).size;
+
       groupedMarkers.push({
         locationKey,
-        coordinate: {
-          latitude: firstMeal.location!.latitude,
-          longitude: firstMeal.location!.longitude
-        },
-        meals: meals,
-        restaurant: restaurant
+        coordinate: { latitude: avgLat, longitude: avgLng },
+        meals,
+        restaurant,
+        uniqueRestaurants,
       });
     });
-    
+
     return groupedMarkers;
-  }, [filteredMeals]);
+  }, [filteredMeals, currentZoom]);
 
   // Force meals view (not wishlist) when in passport context
   useEffect(() => {
@@ -385,12 +268,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
       }
       
       setAllMeals(fetchedMeals);
-      applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
+      const result = applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
       setLoading(false);
-      
-      // Trigger map fitting after data is loaded
-      if (fetchedMeals.length > 0 && mapRef.current) {
-        setTimeout(() => fitMapToMarkers(), 500);
+
+      // Trigger map fitting with freshly computed meals
+      if (result && result.length > 0 && mapRef.current) {
+        setTimeout(() => fitMapToMarkers(result), 300);
       }
     } catch (err: any) {
       console.error('Error fetching saved meals:', err);
@@ -398,7 +281,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
       setLoading(false);
     }
   };
-  
+
   const fetchMealEntries = async () => {
     try {
       setLoading(true);
@@ -428,6 +311,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
           fetchedMeals.push({
             id: doc.id,
             photoUrl: data.photoUrl,
+            pixel_art_url: data.pixel_art_url || '',
             rating: data.rating,
             restaurant: data.restaurant || '',
             meal: data.meal || '',
@@ -451,12 +335,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
       });
 
       setAllMeals(fetchedMeals);
-      applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
+      const result = applyFilter(fetchedMeals, activeFilters, activeRatingFilters);
       setLoading(false);
-      
-      // Trigger map fitting after data is loaded
-      if (fetchedMeals.length > 0 && mapRef.current) {
-        setTimeout(() => fitMapToMarkers(), 500);
+
+      // Trigger map fitting with freshly computed meals
+      if (result && result.length > 0 && mapRef.current) {
+        setTimeout(() => fitMapToMarkers(result), 300);
       }
     } catch (err: any) {
       console.error('Error fetching meal entries:', err);
@@ -484,14 +368,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   };
   
   const handleMarkerPress = (locationKey: string, meals: MealEntry[]) => {
-    if (meals.length > 1) {
-      // Cycle through meals
-      const currentIndex = selectedMarkerIndex[locationKey] || 0;
-      const nextIndex = (currentIndex + 1) % meals.length;
-      setSelectedMarkerIndex(prev => ({ ...prev, [locationKey]: nextIndex }));
-    } else {
-      handleLocationPress(meals);
-    }
+    // Always open carousel — even for single meals
+    setSelectedLocationMeals(meals);
+    setShowMealsModal(true);
   };
 
   const handleImageError = (mealId: string) => {
@@ -575,16 +454,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
     }
     
     setFilteredMeals(result);
+    return result; // Return so callers can use the result immediately
   };
-  
+
   // Update the filter whenever activeFilters changes or when switching between modes
   useEffect(() => {
     console.log('MapScreen: activeFilters or activeRatingFilters changed or showWishlist toggled');
-    applyFilter(allMeals, activeFilters, activeRatingFilters);
-    
-    // When filter changes and we have meals, fit the map to show them
-    if (filteredMeals.length > 0 && mapRef.current && !loading) {
-      setTimeout(() => fitMapToMarkers(), 500); // Small delay to ensure filteredMeals is updated
+    const result = applyFilter(allMeals, activeFilters, activeRatingFilters);
+
+    // Fit map to the freshly computed meals (not stale state)
+    if (result && result.length > 0 && mapRef.current && !loading) {
+      setTimeout(() => fitMapToMarkers(result), 300);
     }
   }, [activeFilters, activeRatingFilters, allMeals, showWishlist]);
   
@@ -653,33 +533,36 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   }, [isActive, filteredMeals.length, showWishlist]);
   
   // Function to fit map to all markers
-  const fitMapToMarkers = () => {
-    if (!mapRef.current || filteredMeals.length === 0) return;
-    
-    // Create an array of coordinates from filtered meals
-    const points = filteredMeals
+  const fitMapToMarkers = (mealsOverride?: MealEntry[]) => {
+    if (!mapRef.current) return;
+
+    const meals = mealsOverride || filteredMeals;
+    if (meals.length === 0) return;
+
+    // Create an array of coordinates from meals
+    const points = meals
       .filter(meal => meal.location && meal.location.latitude && meal.location.longitude)
       .map(meal => ({
         latitude: meal.location!.latitude,
         longitude: meal.location!.longitude
       }));
-    
+
     if (points.length === 0) return;
-    
-    // If there's only one point, center on it with a closer zoom
+
+    // If there's only one point, center on it at street level
     if (points.length === 1) {
       mapRef.current.animateToRegion({
         latitude: points[0].latitude,
         longitude: points[0].longitude,
-        latitudeDelta: 0.01,  // Closer zoom for single point
-        longitudeDelta: 0.01,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
       }, 1000);
       return;
     }
-    
-    // For multiple points, fit all markers on screen with padding
+
+    // For multiple points, fit all markers on screen with tight padding
     mapRef.current.fitToCoordinates(points, {
-      edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+      edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
       animated: true
     });
   };
@@ -898,6 +781,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
   return (
     <View style={styles.mapContainer}>
       <MapView
+        provider={PROVIDER_GOOGLE}
         ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
@@ -909,114 +793,62 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
           setCurrentZoom(zoomLevel);
         }}
       >
-        {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant }) => {
-          const currentIndex = selectedMarkerIndex[locationKey] || 0;
-          const currentMeal = meals[currentIndex];
-          
+        {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant, uniqueRestaurants }) => {
+          // Pick the best meal to represent this cluster:
+          // highest rated, tiebreak by earliest photo (oldest first)
+          const bestMeal = [...meals].sort((a, b) => {
+            if (b.rating !== a.rating) return b.rating - a.rating;
+            return (a.createdAt || 0) - (b.createdAt || 0);
+          })[0];
+
+          // Show dot when cluster has 2+ unique restaurants, pixel art when just 1
+          const showDot = uniqueRestaurants >= 2;
+          const markerType = showDot ? 'dot' : 'emoji';
+
           return (
             <Marker
-              key={`${locationKey}-${currentZoom < 14 ? 'pin' : 'photo'}`}
+              key={`${locationKey}-${markerType}`}
               coordinate={coordinate}
+              tracksViewChanges={false}
               onPress={() => handleMarkerPress(locationKey, meals)}
             >
-              {/* Show simple pins when zoomed out, photos when zoomed in */}
-              {currentZoom < 14 ? (
-                // Simple pin marker for zoomed out view
-                <View style={styles.simplePinMarker}>
-                  <View style={styles.pinDot} />
-                  {meals.length > 1 && (
-                    <View style={styles.pinBadge}>
-                      <Text style={styles.pinBadgeText}>{meals.length}</Text>
+              {showDot ? (
+                // Scaled dot — sized by unique restaurant count
+                (() => {
+                  const baseSize = 14;
+                  const dotSize = Math.min(baseSize + Math.sqrt(uniqueRestaurants - 1) * 8, 36);
+                  return (
+                    <View style={[
+                      styles.scaledDot,
+                      {
+                        width: dotSize,
+                        height: dotSize,
+                        borderRadius: dotSize / 2,
+                      },
+                    ]} />
+                  );
+                })()
+              ) : (
+                // Single restaurant — show pixel art
+                <View style={styles.customPhotoMarker}>
+                  {bestMeal.pixel_art_url ? (
+                    <Image
+                      source={{ uri: bestMeal.pixel_art_url }}
+                      style={styles.markerPixelArt}
+                      resizeMode="contain"
+                    />
+                  ) : bestMeal.photoUrl && !imageErrors[bestMeal.id] ? (
+                    <Image
+                      source={{ uri: bestMeal.photoUrl }}
+                      style={styles.markerPhoto}
+                      onError={() => handleImageError(bestMeal.id)}
+                    />
+                  ) : (
+                    <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
+                      <Icon name="image" size={20} color="#ddd" />
                     </View>
                   )}
                 </View>
-              ) : (
-                // Photo marker for zoomed in view (existing behavior)
-                <View style={styles.customPhotoMarker}>
-                {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
-                  <Image
-                    source={{ uri: currentMeal.photoUrl }}
-                    style={styles.markerPhoto}
-                    onError={() => handleImageError(currentMeal.id)}
-                  />
-                ) : (
-                  <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
-                    <Icon name="image" size={20} color="#ddd" />
-                  </View>
-                )}
-                {/* Pager dots for multiple meals */}
-                {meals.length > 1 && (
-                  <View style={styles.pagerDots}>
-                    {meals.map((_, index) => (
-                      <View
-                        key={index}
-                        style={[
-                          styles.pagerDot,
-                          index === currentIndex && styles.pagerDotActive,
-                          { backgroundColor: index === currentIndex ? (showWishlist ? '#FFC008' : '#E63946') : '#ddd' }
-                        ]}
-                      />
-                    ))}
-                  </View>
-                )}
-              </View>
-              )}
-              {/* Only show callout when zoomed in for photo markers */}
-              {currentZoom >= 14 && (
-                <Callout
-                tooltip
-                onPress={() => {
-                  // Always navigate to details in the current view
-                  viewMealDetails(currentMeal);
-                }}
-                style={[styles.callout, styles.photoCallout]}
-              >
-                <View style={styles.calloutContent}>
-                  {/* Enhanced callout with bigger image preview */}
-                  <>
-                    {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
-                      <Image
-                        source={{ uri: currentMeal.photoUrl }}
-                        style={styles.calloutImageLarge}
-                        onError={() => handleImageError(currentMeal.id)}
-                      />
-                    ) : (
-                      <View style={styles.calloutImageLargePlaceholder}>
-                        <Icon name="image" size={30} color="#ddd" />
-                      </View>
-                    )}
-                    <View style={styles.calloutTitleRow}>
-                      <Text style={styles.calloutTitle} numberOfLines={1}>
-                        {currentMeal.meal || 'Untitled meal'}
-                      </Text>
-                      <EmojiDisplay rating={currentMeal.rating} size={16} />
-                    </View>
-                    {currentMeal.restaurant && (
-                      <Text style={styles.calloutSubtitle} numberOfLines={1}>{currentMeal.restaurant}</Text>
-                    )}
-                    {meals.length > 1 && (
-                      <>
-                        {/* Pager dots in callout */}
-                        <View style={styles.calloutPagerDots}>
-                          {meals.map((_, index) => (
-                            <View
-                              key={index}
-                              style={[
-                                styles.calloutPagerDot,
-                                index === currentIndex && styles.calloutPagerDotActive,
-                                { backgroundColor: index === currentIndex ? (showWishlist ? '#FFC008' : '#E63946') : '#ddd' }
-                              ]}
-                            />
-                          ))}
-                        </View>
-                        <Text style={styles.calloutInstruction}>
-                          Tap marker to cycle • Tap here for details
-                        </Text>
-                      </>
-                    )}
-                  </>
-                </View>
-              </Callout>
               )}
             </Marker>
           );
@@ -1133,33 +965,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
                   activeOpacity={0.9}
                   onPress={() => viewMealDetails(meal)}
                 >
-                  {meal.photoUrl && !imageErrors[meal.id] ? (
-                    <Image
-                      source={{ uri: meal.photoUrl }}
-                      style={styles.modalMealImage}
-                      onError={() => handleImageError(meal.id)}
-                    />
-                  ) : (
-                    <View style={styles.modalMealImagePlaceholder}>
-                      <Icon name="image" size={30} color="#ddd" />
-                    </View>
-                  )}
+                  {/* Photo with pixel art overlay */}
+                  <View style={styles.modalImageContainer}>
+                    {meal.photoUrl && !imageErrors[meal.id] ? (
+                      <Image
+                        source={{ uri: meal.photoUrl }}
+                        style={styles.modalMealImage}
+                        onError={() => handleImageError(meal.id)}
+                      />
+                    ) : (
+                      <View style={styles.modalMealImagePlaceholder}>
+                        <Icon name="image" size={30} color="#ddd" />
+                      </View>
+                    )}
+                    {meal.pixel_art_url ? (
+                      <Image
+                        source={{ uri: meal.pixel_art_url }}
+                        style={styles.modalPixelArtOverlay}
+                        resizeMode="contain"
+                      />
+                    ) : null}
+                  </View>
                   <View style={styles.modalMealInfo}>
                     <Text style={styles.modalMealName} numberOfLines={2}>
                       {meal.meal || 'Untitled meal'}
                     </Text>
-                    <View style={styles.modalRating}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Image
-                          key={star}
-                          source={star <= meal.rating 
-                            ? require('../assets/stars/star-filled.png')
-                            : require('../assets/stars/star-empty.png')
-                          }
-                          style={styles.modalStar}
-                        />
-                      ))}
-                    </View>
+                    <EmojiDisplay rating={meal.rating} size={22} />
                   </View>
                 </TouchableOpacity>
               ))}
@@ -1525,11 +1356,16 @@ const styles = StyleSheet.create({
     width: 150,
     marginRight: 15,
   },
+  modalImageContainer: {
+    position: 'relative',
+    width: 150,
+    height: 150,
+    marginBottom: 8,
+  },
   modalMealImage: {
     width: 150,
     height: 150,
     borderRadius: 12,
-    marginBottom: 8,
   },
   modalMealImagePlaceholder: {
     width: 150,
@@ -1538,7 +1374,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+  },
+  modalPixelArtOverlay: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 36,
+    height: 36,
   },
   modalMealInfo: {
     alignItems: 'center',
@@ -1549,10 +1391,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 5,
     fontWeight: '500',
-  },
-  modalRating: {
-    flexDirection: 'row',
-    justifyContent: 'center',
   },
   calloutStar: {
     width: 14,
@@ -1569,10 +1407,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  markerPixelArt: {
+    width: 30,
+    height: 30,
+  },
+  markerCountBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#E63946',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'white',
+  },
+  markerCountBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  // Multi-meal emoji cluster
+  emojiClusterMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 2,
+  },
+  emojiClusterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: 60,
+    justifyContent: 'center',
+  },
+  emojiClusterCell: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 1,
+  },
+  emojiClusterIcon: {
+    width: 26,
+    height: 26,
+  },
+  emojiClusterPhoto: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+  },
+  emojiClusterDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#E63946',
+  },
+  emojiClusterOverflow: {
+    backgroundColor: '#E63946',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginTop: 2,
+  },
+  emojiClusterOverflowText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: '700',
+  },
   markerPhoto: {
-    width: 60, // Increased for better visibility like HomeMapComponent
-    height: 60, // Increased for better visibility like HomeMapComponent
-    borderRadius: 8, // Square with slight rounding like HomeMapComponent
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     borderWidth: 3,
     borderColor: 'white',
     shadowColor: '#000',
@@ -1657,45 +1564,16 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  // Simple pin marker styles for zoomed out view
-  simplePinMarker: {
-    width: 22, // Width to accommodate pin (12) + badge extension (5+5)
-    height: 22, // Height to accommodate pin (12) + badge extension (5+5)
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pinDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#E63946', // Lobster red
-    borderWidth: 1.5,
+  // Zoomed-out marker — single dot that scales with meal count
+  scaledDot: {
+    backgroundColor: colors.success,
+    borderWidth: 2,
     borderColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 3,
-  },
-  pinBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#ffc008', // Gold
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'white',
-  },
-  pinBadgeText: {
-    color: '#1a2b49', // Navy
-    fontSize: 9,
-    fontWeight: 'bold',
-    fontFamily: 'NunitoSans-VariableFont_YTLC,opsz,wdth,wght',
   },
 });
 

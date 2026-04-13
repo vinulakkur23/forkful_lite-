@@ -34,7 +34,8 @@ import SimpleFilterComponent from '../components/SimpleFilterComponent';
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
-import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import MapView, { Marker, Callout, Region, PROVIDER_GOOGLE } from 'react-native-maps';
+import { mapStyle } from '../config/mapStyle';
 
 // Create a composite navigation prop that combines tab and stack navigation
 type FoodPassportScreenNavigationProp = CompositeNavigationProp<
@@ -966,15 +967,18 @@ const FoodPassportMapScreen: React.FC<Props> = ({ navigation }) => {
   return (
       <View style={styles.mapContainer}>
         <MapView
+          provider={PROVIDER_GOOGLE}
           ref={mapRef}
           style={styles.map}
           initialRegion={initialRegion}
           showsUserLocation={true}
+          customMapStyle={mapStyle}
         >
           {processedMealMarkers.map(({ meal, coordinate, isGrouped, groupSize }) => (
             <Marker
               key={meal.id}
               coordinate={coordinate}
+              tracksViewChanges={false}
             >
               {/* Custom photo marker with square shape */}
               <View style={styles.customPhotoMarker}>

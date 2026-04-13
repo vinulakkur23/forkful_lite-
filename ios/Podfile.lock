@@ -1290,6 +1290,8 @@ PODS:
     - GTMSessionFetcher/Core (< 5.0, >= 3.4)
   - fmt (11.0.2)
   - glog (0.3.5)
+  - Google-Maps-iOS-Utils (6.1.0):
+    - GoogleMaps (~> 9.0)
   - GoogleAppMeasurement (11.10.0):
     - GoogleAppMeasurement/AdIdSupport (= 11.10.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 8.0)
@@ -1310,9 +1312,9 @@ PODS:
     - GoogleUtilities/Network (~> 8.0)
     - "GoogleUtilities/NSData+zlib (~> 8.0)"
     - nanopb (~> 3.30910.0)
-  - GoogleMaps (9.4.0):
-    - GoogleMaps/Maps (= 9.4.0)
-  - GoogleMaps/Maps (9.4.0)
+  - GoogleMaps (9.3.0):
+    - GoogleMaps/Maps (= 9.3.0)
+  - GoogleMaps/Maps (9.3.0)
   - GoogleSignIn (7.1.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - GTMAppAuth (< 5.0, >= 4.1.1)
@@ -2791,6 +2793,31 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-maps/Google (1.23.7):
+    - DoubleConversion
+    - glog
+    - Google-Maps-iOS-Utils (= 6.1.0)
+    - GoogleMaps (= 9.3.0)
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - react-native-maps/Generated
+    - react-native-maps/Maps
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - react-native-maps/Maps (1.23.7):
     - DoubleConversion
     - glog
@@ -3605,7 +3632,7 @@ DEPENDENCIES:
   - Firebase/Storage
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
-  - GoogleMaps
+  - GoogleMaps (= 9.3.0)
   - GoogleSignIn
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -3647,6 +3674,7 @@ DEPENDENCIES:
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-image-resizer (from `../node_modules/react-native-image-resizer`)
   - react-native-maps (from `../node_modules/react-native-maps`)
+  - react-native-maps/Google (from `../node_modules/react-native-maps`)
   - react-native-pager-view (from `../node_modules/react-native-pager-view`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - "react-native-slider (from `../node_modules/@react-native-community/slider`)"
@@ -3718,6 +3746,7 @@ SPEC REPOS:
     - FirebaseInstallations
     - FirebaseSharedSwift
     - FirebaseStorage
+    - Google-Maps-iOS-Utils
     - GoogleAppMeasurement
     - GoogleMaps
     - GoogleSignIn
@@ -3951,8 +3980,9 @@ SPEC CHECKSUMS:
   FirebaseStorage: e83d1b9c8a5318d46ccfb2955f0d98095e0bf598
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: eb93e2f488219332457c3c4eafd2738ddc7e80b8
+  Google-Maps-iOS-Utils: 0a484b05ed21d88c9f9ebbacb007956edd508a96
   GoogleAppMeasurement: 36684bfb3ee034e2b42b4321eb19da3a1b81e65d
-  GoogleMaps: 0608099d4870cac8754bdba9b6953db543432438
+  GoogleMaps: b58e9627004f47043897eeae830c3ef023678f3b
   GoogleSignIn: d4281ab6cf21542b1cfaff85c191f230b399d2db
   GoogleUtilities: 26a3abef001b6533cf678d3eb38fd3f614b7872d
   "gRPC-C++": cc207623316fb041a7a3e774c252cf68a058b9e8
@@ -4056,6 +4086,6 @@ SPEC CHECKSUMS:
   VisionCamera: f56eaedde0d3fa095143b78374d29e89e71735f9
   Yoga: be02ca501b03c79d7027a6bbbd0a8db985034f11
 
-PODFILE CHECKSUM: 52c25120cc3e835f36f7dd47d7d01524d003a67e
+PODFILE CHECKSUM: 05f071e8ca6e7cc1a3db1da2390a65deb03ecce8
 
 COCOAPODS: 1.16.2

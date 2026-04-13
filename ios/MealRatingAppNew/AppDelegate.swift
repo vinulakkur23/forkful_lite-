@@ -8,11 +8,11 @@ import GoogleMaps
 @main
 class AppDelegate: RCTAppDelegate {
   override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+    // Initialize Google Maps FIRST (must be before other SDK inits)
+    GMSServices.provideAPIKey("AIzaSyAC3ibPKbYQFvv47fwTG9QqwUS5GYZhxFI")
+
     // Initialize Firebase
     FirebaseApp.configure()
-
-    // Initialize Google Maps - replace "YOUR_API_KEY" with your actual Google Maps API key
-    GMSServices.provideAPIKey("AIzaSyAC3ibPKbYQFvv47fwTG9QqwUS5GYZhxFI")
 
     self.moduleName = "ForkfulLite"
     self.dependencyProvider = RCTAppDependencyProvider()

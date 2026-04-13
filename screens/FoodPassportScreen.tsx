@@ -40,7 +40,7 @@ import { buildDynamicChips, buildCityChips, DEFAULT_CHIPS } from '../utils/chipR
 // Import components for tab view
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 // Import map component
-import MapView, { Marker, Callout } from 'react-native-maps';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 // Import achievement service - DISABLED
 // import { getUserAchievements } from '../services/achievementService';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
