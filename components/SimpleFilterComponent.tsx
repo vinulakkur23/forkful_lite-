@@ -265,7 +265,10 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
       
       // Create combined options array
       const options: FilterItem[] = [];
-      
+
+      // Add Iconic Eats static option (always at the top for discoverability)
+      options.push({ type: 'iconicEats', value: 'Iconic Eats' });
+
       // Add dish names
       Array.from(dishNamesSet).sort().forEach(dish => {
         options.push({ type: 'dishName', value: dish });
@@ -554,7 +557,8 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
                     </Text>
                   </View>
                   <Text style={styles.optionType}>
-                    {item.type === 'user' ? 'User' :
+                    {item.type === 'iconicEats' ? 'Iconic' :
+                     item.type === 'user' ? 'User' :
                      item.type === 'dishName' ? 'Dish' :
                      item.type === 'cuisineType' ? 'Cuisine' :
                      item.type === 'foodType' ? 'Food' :

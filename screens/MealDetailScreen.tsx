@@ -31,6 +31,9 @@ import { CombinedResponse } from '../services/combinedMetadataCriteriaService';
 import { refreshUserCounts } from '../services/countRefreshService';
 // Import theme
 import { colors, typography, spacing, shadows } from '../themes';
+import IconicBadge from '../components/IconicBadge';
+import IconicEatModal from '../components/IconicEatModal';
+import { fetchIconicEatById, IconicEat } from '../services/iconicEatsService';
 
 // Update the navigation prop type to use composite navigation
 type MealDetailScreenNavigationProp = CompositeNavigationProp<
@@ -74,6 +77,31 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [selectedPixelArtIndex, setSelectedPixelArtIndex] = useState(0);
   const [pressingIndex, setPressingIndex] = useState<number | null>(null);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Iconic eat detail state — only populated when meal.iconic_eat_id is set
+  const [iconicEat, setIconicEat] = useState<IconicEat | null>(null);
+  const [iconicModalVisible, setIconicModalVisible] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const iconicId = meal?.iconic_eat_id;
+    if (!iconicId) {
+      setIconicEat(null);
+      return;
+    }
+    fetchIconicEatById(iconicId)
+      .then(eat => {
+        if (!cancelled && eat) {
+          // This meal completed the challenge, so mark unlocked.
+          setIconicEat({ ...eat, unlocked: true });
+        }
+      })
+      .catch(err => {
+        console.warn('[MealDetail] fetchIconicEatById failed:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [meal?.iconic_eat_id]);
   const hapticIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const jiggleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -1057,6 +1085,18 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.restaurantName}>{meal.restaurant}</Text>
                 </TouchableOpacity>
               )}
+              {meal.iconic_eat_id && iconicEat && (
+                <TouchableOpacity
+                  style={styles.iconicRow}
+                  onPress={() => setIconicModalVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <IconicBadge size="small" />
+                  <Text style={styles.iconicRowText} numberOfLines={1}>
+                    Iconic Eat: {iconicEat.dish_name}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
           
@@ -1822,6 +1862,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         dishInsights={meal.dish_insights}
         enhancedFacts={meal.enhanced_facts}
       />
+      {/* Iconic Eat Modal — shown when user taps the iconic-eat link row */}
+      <IconicEatModal
+        visible={iconicModalVisible}
+        eat={iconicEat}
+        onClose={() => setIconicModalVisible(false)}
+        onShowOnMap={() => setIconicModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -2055,6 +2102,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8, // Consistent spacing
+  },
+  iconicRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  iconicRowText: {
+    fontSize: 14,
+    marginLeft: 8,
+    color: '#1a2b49',
+    fontWeight: '600',
+    flexShrink: 1,
   },
   externalLinkIcon: {
     marginLeft: 6,

@@ -1,13 +1,15 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   View,
   TouchableOpacity,
   Text,
+  Image,
   StyleSheet,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { mapStyle } from '../config/mapStyle';
 import { colors, spacing, shadows } from '../themes';
+import { IconicEat } from '../services/iconicEatsService';
 
 interface MealEntry {
   id: string;
@@ -26,6 +28,14 @@ interface MiniMapStripProps {
   focusedMealId: string | null;
   onMarkerPress: (mealId: string) => void;
   onExpandPress: () => void;
+  iconicEats?: IconicEat[];
+  focusedIconicEatId?: string | null;
+  onIconicEatMarkerPress?: (id: string) => void;
+  /**
+   * When true (filter chip active), hide regular meal markers and render only
+   * iconic shadow markers. Preserves the curated-acclaim framing on the map.
+   */
+  iconicOnlyMode?: boolean;
 }
 
 const MiniMapStrip: React.FC<MiniMapStripProps> = ({
@@ -34,11 +44,25 @@ const MiniMapStrip: React.FC<MiniMapStripProps> = ({
   focusedMealId,
   onMarkerPress,
   onExpandPress,
+  iconicEats = [],
+  focusedIconicEatId = null,
+  onIconicEatMarkerPress,
+  iconicOnlyMode = false,
 }) => {
   const mapRef = useRef<MapView>(null);
 
+  // Track which iconic emoji images have loaded, to safely drop tracksViewChanges.
+  const [loadedIconicIds, setLoadedIconicIds] = useState<Set<string>>(new Set());
+  const markLoaded = (id: string) =>
+    setLoadedIconicIds(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+
   const markers = useMemo(() => {
-    if (!meals) return [];
+    if (!meals || iconicOnlyMode) return [];
     return meals
       .filter(m => m.location?.latitude && m.location?.longitude)
       .map(m => ({
@@ -46,7 +70,19 @@ const MiniMapStrip: React.FC<MiniMapStripProps> = ({
         latitude: m.location!.latitude,
         longitude: m.location!.longitude,
       }));
-  }, [meals]);
+  }, [meals, iconicOnlyMode]);
+
+  const iconicMarkers = useMemo(() => {
+    return iconicEats
+      .filter(e => typeof e.latitude === 'number' && typeof e.longitude === 'number')
+      .map(e => ({
+        id: e.id,
+        latitude: e.latitude,
+        longitude: e.longitude,
+        uri: e.unlocked ? e.emoji_url : e.shadow_emoji_url,
+        unlocked: e.unlocked,
+      }));
+  }, [iconicEats]);
 
   const initialRegion = useMemo(() => {
     if (userLocation) {
@@ -65,29 +101,55 @@ const MiniMapStrip: React.FC<MiniMapStripProps> = ({
         longitudeDelta: 0.04,
       };
     }
+    if (iconicMarkers.length > 0) {
+      return {
+        latitude: iconicMarkers[0].latitude,
+        longitude: iconicMarkers[0].longitude,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      };
+    }
     return {
       latitude: 34.0522,
       longitude: -118.2437,
       latitudeDelta: 0.04,
       longitudeDelta: 0.04,
     };
-  }, [userLocation, markers]);
+  }, [userLocation, markers, iconicMarkers]);
 
+  // Focus pan: prefer focused iconic eat when set, else focused meal.
   useEffect(() => {
-    if (!focusedMealId || !mapRef.current) return;
-    const marker = markers.find(m => m.id === focusedMealId);
-    if (marker) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: marker.latitude,
-          longitude: marker.longitude,
-          latitudeDelta: 0.025,
-          longitudeDelta: 0.025,
-        },
-        300,
-      );
+    if (!mapRef.current) return;
+    if (focusedIconicEatId) {
+      const m = iconicMarkers.find(x => x.id === focusedIconicEatId);
+      if (m) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: m.latitude,
+            longitude: m.longitude,
+            latitudeDelta: 0.025,
+            longitudeDelta: 0.025,
+          },
+          300,
+        );
+        return;
+      }
     }
-  }, [focusedMealId, markers]);
+    if (focusedMealId) {
+      const m = markers.find(x => x.id === focusedMealId);
+      if (m) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: m.latitude,
+            longitude: m.longitude,
+            latitudeDelta: 0.025,
+            longitudeDelta: 0.025,
+          },
+          300,
+        );
+      }
+    }
+  }, [focusedMealId, focusedIconicEatId, markers, iconicMarkers]);
 
   return (
     <View style={styles.container}>
@@ -118,6 +180,40 @@ const MiniMapStrip: React.FC<MiniMapStripProps> = ({
             <View style={marker.id === focusedMealId ? styles.dotFocused : styles.dot} />
           </Marker>
         ))}
+
+        {iconicMarkers.map(marker => {
+          const isFocused = marker.id === focusedIconicEatId;
+          // Match the carousel's locked-shadow treatment: stack 0.55 opacity on
+          // the PNG's baked-in alpha so the map silhouette reads mid-grey, not near-black.
+          const imageStyle = [
+            isFocused ? styles.iconicImageFocused : styles.iconicImage,
+            !marker.unlocked && styles.iconicImageShadow,
+          ];
+          return (
+            <Marker
+              key={`iconic-${marker.id}`}
+              coordinate={{ latitude: marker.latitude, longitude: marker.longitude }}
+              tracksViewChanges={!loadedIconicIds.has(marker.id)}
+              onPress={() => onIconicEatMarkerPress?.(marker.id)}
+              zIndex={isFocused ? 20 : 5}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.iconicMarkerWrapper}>
+                {marker.uri ? (
+                  <Image
+                    source={{ uri: marker.uri }}
+                    style={imageStyle}
+                    resizeMode="contain"
+                    onLoad={() => markLoaded(marker.id)}
+                    onError={() => markLoaded(marker.id)}
+                  />
+                ) : (
+                  <View style={styles.dot} />
+                )}
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
       <TouchableOpacity
@@ -172,6 +268,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a2b49',
     borderWidth: 2.5,
     borderColor: colors.white,
+  },
+  iconicMarkerWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconicImage: {
+    width: 22,
+    height: 22,
+  },
+  iconicImageFocused: {
+    width: 32,
+    height: 32,
+  },
+  iconicImageShadow: {
+    // Match IconicEatsRow — stacks with the PNG's baked-in 60% alpha so the
+    // silhouette reads as mid-grey on the map, matching the carousel.
+    opacity: 0.55,
   },
 });
 

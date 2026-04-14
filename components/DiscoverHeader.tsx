@@ -1,7 +1,9 @@
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import NearYouCarousel, { NearYouCarouselRef } from './NearYouCarousel';
+import IconicEatsRow, { IconicEatsRowRef } from './IconicEatsRow';
 import { spacing } from '../themes';
+import { IconicEat } from '../services/iconicEatsService';
 
 interface MealEntry {
   id: string;
@@ -20,16 +22,24 @@ interface MealEntry {
 
 interface DiscoverHeaderProps {
   nearYouMeals: MealEntry[];
+  iconicEats: IconicEat[];
   onMealPress: (meal: MealEntry) => void;
+  onIconicEatPress: (eat: IconicEat) => void;
   onFocusChange: (mealId: string | null) => void;
+  onIconicEatFocusChange?: (eatId: string | null) => void;
   carouselRef: React.RefObject<NearYouCarouselRef>;
+  iconicRowRef?: React.RefObject<IconicEatsRowRef>;
 }
 
 const DiscoverHeader: React.FC<DiscoverHeaderProps> = ({
   nearYouMeals,
+  iconicEats,
   onMealPress,
+  onIconicEatPress,
   onFocusChange,
+  onIconicEatFocusChange,
   carouselRef,
+  iconicRowRef,
 }) => {
   return (
     <View style={styles.container}>
@@ -38,6 +48,12 @@ const DiscoverHeader: React.FC<DiscoverHeaderProps> = ({
         meals={nearYouMeals}
         onMealPress={onMealPress}
         onFocusChange={onFocusChange}
+      />
+      <IconicEatsRow
+        ref={iconicRowRef}
+        iconicEats={iconicEats}
+        onPress={onIconicEatPress}
+        onFocusChange={onIconicEatFocusChange}
       />
     </View>
   );

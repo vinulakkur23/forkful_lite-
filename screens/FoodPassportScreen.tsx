@@ -67,6 +67,11 @@ import {
   reconcileRestaurants,
 } from '../services/restaurantSectionsService';
 // Monument service removed — no longer used
+import IconicBadge from '../components/IconicBadge';
+import IconicPlaceholderCard from '../components/IconicPlaceholderCard';
+import IconicEatModal from '../components/IconicEatModal';
+import { useIconicEats } from '../utils/useIconicEats';
+import { IconicEat } from '../services/iconicEatsService';
 
 type FoodPassportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'FoodPassport'>;
 
@@ -182,6 +187,26 @@ type TabRoutes = {
 const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange, onThemePress, bgColor, onRefreshReady }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
+    // Iconic Eats state — used when the "Iconic Eats" filter chip is active
+    const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+    const iconicEatsFilterActive = useMemo(
+      () => !!activeFilters?.some(f => f.type === 'iconicEats'),
+      [activeFilters],
+    );
+    const { iconicEats } = useIconicEats(userLocation, { expanded: iconicEatsFilterActive });
+    const [activeIconicEat, setActiveIconicEat] = useState<IconicEat | null>(null);
+
+    useEffect(() => {
+      Geolocation.getCurrentPosition(
+        pos => setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => {},
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+      );
+    }, []);
+
+    const handleIconicPlaceholderPress = useCallback((eat: IconicEat) => {
+      setActiveIconicEat(eat);
+    }, []);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [userInfo, setUserInfo] = useState<any>(null);
@@ -649,9 +674,16 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         // Start with all meals
         let result = [...meals];
         
+        // "Iconic Eats" chip is handled as a post-filter below.
+        const iconicChipActive = !!activeFilters?.some(f => f.type === 'iconicEats');
+
         // Apply each filter sequentially
         if (activeFilters && activeFilters.length > 0) {
             activeFilters.forEach(filter => {
+            // Iconic Eats is a post-filter — no per-meal predicate here.
+            if (filter.type === 'iconicEats') {
+                return;
+            }
             const countBefore = result.length;
             console.log(`Applying filter: ${filter.type} = ${filter.value}`);
             
@@ -891,6 +923,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             const beforeRatingFilter = result.length;
             result = result.filter(meal => activeRatingFilters.includes(meal.rating));
             console.log(`FoodPassportScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
+        }
+
+        // Iconic Eats post-filter: show only meals that completed a challenge.
+        if (iconicChipActive) {
+            const beforeIconic = result.length;
+            result = result.filter(meal => !!meal.iconic_eat_id);
+            console.log(`FoodPassportScreen: After iconic eats filter: ${beforeIconic} -> ${result.length} completion meals`);
         }
 
         // Apply sorting
@@ -2319,7 +2358,34 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
     ), [emojisLoading, pixelArtEmojis, challengesLoading, allChallenges, citiesLoading, cities, cuisinesLoading, cuisines, restaurantsLoading, restaurants, restaurantSections, unsectionedOrder, isOwnProfile, filteredMeals.length, meals, userId, activeFilters, chestVisual, mealsExpanded, citiesExpanded, cuisinesExpanded, restaurantsExpanded, tasteProfile, tasteProfileLoading, tasteProfileError, tasteProfileOwnerUid, onFilterChange]);
 
     // Function to render each meal item — memoized with useCallback
-    const renderMealItem = useCallback(({ item }: { item: MealEntry }) => {
+    const renderMealItem = useCallback(({ item }: { item: any }) => {
+        // Iconic-eat challenge placeholder (injected when chip is active)
+        if (item && item.__type === 'iconic_placeholder') {
+            const eat: IconicEat = item.eat;
+            const uri = eat.unlocked ? eat.emoji_url : eat.shadow_emoji_url;
+            return (
+                <TouchableOpacity
+                    style={styles.mealCard}
+                    activeOpacity={0.85}
+                    onPress={() => handleIconicPlaceholderPress(eat)}
+                >
+                    <View style={[styles.imageContainer, styles.iconicPlaceholderTile]}>
+                        {uri ? (
+                            <Image source={{ uri }} style={styles.iconicPlaceholderEmoji} resizeMode="contain" />
+                        ) : (
+                            <View style={styles.iconicPlaceholderEmoji} />
+                        )}
+                        <View style={styles.iconicBadgeOverlay} pointerEvents="none">
+                            <IconicBadge size="small" />
+                        </View>
+                    </View>
+                    <View style={styles.mealCardContent}>
+                        <Text style={styles.mealName} numberOfLines={1}>{eat.dish_name}</Text>
+                        <Text style={styles.restaurantName} numberOfLines={1}>{eat.restaurant_name}</Text>
+                    </View>
+                </TouchableOpacity>
+            );
+        }
         const isUnrated = item.rating === 0 || item.isUnrated === true;
         const isUnratedCameraCapture = item.isUnrated === true && item.photoSource === 'camera';
 
@@ -2391,6 +2457,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             )}
                         </>
                     )}
+
+                    {/* Iconic badge — top-left overlay when this meal completed an iconic eat */}
+                    {item.iconic_eat_id ? (
+                        <View style={styles.iconicBadgeOverlay} pointerEvents="none">
+                            <IconicBadge size="small" />
+                        </View>
+                    ) : null}
                 </View>
 
                 <View style={styles.mealCardContent}>
@@ -2408,7 +2481,24 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             </TouchableOpacity>
         );
-    }, [imageErrors, tabIndex, userId, userName, userPhoto]);
+    }, [imageErrors, tabIndex, userId, userName, userPhoto, handleIconicPlaceholderPress]);
+
+    // Grid data — when iconic chip is active, inject shadow placeholder tiles
+    // for any un-completed iconic eats so the profile grid feels alive even
+    // if the user hasn't completed any iconic eats yet.
+    const gridData = useMemo(() => {
+        const base: any[] = mealsExpanded ? filteredMeals : filteredMeals.slice(0, 20);
+        if (!iconicEatsFilterActive) return base;
+        const unlockedIds = new Set(
+            (filteredMeals as any[])
+                .map(m => m.iconic_eat_id)
+                .filter((id): id is string => !!id),
+        );
+        const placeholders = iconicEats
+            .filter(e => !e.unlocked && !unlockedIds.has(e.id))
+            .map(e => ({ __type: 'iconic_placeholder', id: `iconic-${e.id}`, eat: e }));
+        return [...base, ...placeholders];
+    }, [filteredMeals, mealsExpanded, iconicEatsFilterActive, iconicEats]);
 
     // Render the main screen
     return (
@@ -2421,9 +2511,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 </View>
             ) : (
                     <FlatList
-                        data={mealsExpanded ? filteredMeals : filteredMeals.slice(0, 20)}
+                        data={gridData}
                         renderItem={renderMealItem}
-                        keyExtractor={(item) => item.id}
+                        keyExtractor={(item: any) => item.__type === 'iconic_placeholder' ? item.id : item.id}
                         numColumns={2}
                         columnWrapperStyle={styles.row}
                         contentContainerStyle={styles.list}
@@ -2769,6 +2859,13 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
+            {/* Iconic Eat Modal — opens from grid placeholder tiles */}
+            <IconicEatModal
+                visible={!!activeIconicEat}
+                eat={activeIconicEat}
+                onClose={() => setActiveIconicEat(null)}
+                onShowOnMap={() => setActiveIconicEat(null)}
+            />
         </SafeAreaView>
     );
 };
@@ -2909,6 +3006,23 @@ const styles = StyleSheet.create({
         bottom: spacing.sm,
         right: spacing.sm,
         backgroundColor: 'transparent',
+    },
+    iconicBadgeOverlay: {
+        position: 'absolute',
+        top: 6,
+        left: 6,
+        zIndex: 2,
+    },
+    iconicPlaceholderTile: {
+        width: '100%',
+        height: itemWidth,
+        backgroundColor: colors.lightTan,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconicPlaceholderEmoji: {
+        width: itemWidth * 0.6,
+        height: itemWidth * 0.6,
     },
     imageWashOverlay: {
         position: 'absolute',

@@ -31,6 +31,12 @@ import NearbyUsersCarousel from '../components/NearbyUsersCarousel';
 import MiniMapStrip from '../components/MiniMapStrip';
 import DiscoverHeader from '../components/DiscoverHeader';
 import { NearYouCarouselRef } from '../components/NearYouCarousel';
+import { IconicEatsRowRef } from '../components/IconicEatsRow';
+import IconicEatModal from '../components/IconicEatModal';
+import IconicPlaceholderCard from '../components/IconicPlaceholderCard';
+import IconicBadge from '../components/IconicBadge';
+import { useIconicEats } from '../utils/useIconicEats';
+import { IconicEat } from '../services/iconicEatsService';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { getFollowing } from '../services/followService';
@@ -111,6 +117,22 @@ interface MealEntry {
   enhanced_facts?: any;
   quick_criteria_result?: any;
   pixel_art_url?: string;
+  place_id?: string;
+  iconic_eat_id?: string | null;
+}
+
+// Injected into the feed when "Iconic Eats" filter is active — distinguishes
+// a challenge placeholder from a real user meal via the __type discriminator.
+type IconicPlaceholderItem = {
+  __type: 'iconic_placeholder';
+  id: string;
+  eat: IconicEat;
+};
+
+type FeedItem = MealEntry | IconicPlaceholderItem;
+
+function isIconicPlaceholder(item: FeedItem): item is IconicPlaceholderItem {
+  return (item as IconicPlaceholderItem).__type === 'iconic_placeholder';
 }
 
 const { width } = Dimensions.get('window');
@@ -634,7 +656,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     
     console.log(`HomeScreen: After filtering out homemade: ${allNearbyMeals.length} meals -> ${result.length} meals remain`);
     
-    // If no other filters are active, show the non-homemade meals (but still need to check for rating filters)
+    // "Iconic Eats" chip is handled separately below (post-filter to completions).
+    // If it's the ONLY filter, we still need to apply the completion filter.
+    const iconicChipActive = !!activeFilters?.some(f => f.type === 'iconicEats');
+
+    // If no filters AT ALL are active, show the non-homemade meals
     if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
       console.log('HomeScreen: No active filters, showing all non-homemade meals');
       setNearbyMeals(result);
@@ -646,6 +672,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     // Apply each filter sequentially
     if (activeFilters && activeFilters.length > 0) {
       activeFilters.forEach(filter => {
+      // Iconic Eats is handled as a post-filter step below — no per-meal predicate here.
+      if (filter.type === 'iconicEats') {
+        return;
+      }
       const countBefore = result.length;
       console.log(`HomeScreen: Applying filter: ${filter.type} = ${filter.value}`);
       console.log(`HomeScreen: Starting with ${countBefore} meals to filter`);
@@ -876,7 +906,16 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       result = result.filter(meal => activeRatingFilters.includes(meal.rating));
       console.log(`HomeScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
     }
-    
+
+    // Iconic Eats post-filter: feed shows only meals that completed an iconic-eat
+    // challenge (iconic_eat_id set by Cloud Function). Challenge placeholders
+    // are injected separately in feedData.
+    if (iconicChipActive) {
+      const beforeIconic = result.length;
+      result = result.filter(meal => !!meal.iconic_eat_id);
+      console.log(`HomeScreen: After iconic eats filter: ${beforeIconic} meals -> ${result.length} completion meals`);
+    }
+
     // Set filtered meals
     setNearbyMeals(result);
   };
@@ -959,6 +998,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   const [mapVisible, setMapVisible] = useState(true);
   const [focusedMealId, setFocusedMealId] = useState<string | null>(null);
   const carouselRef = useRef<NearYouCarouselRef>(null);
+  const iconicRowRef = useRef<IconicEatsRowRef>(null);
   const mapTranslateY = useRef(new Animated.Value(0)).current;
 
   const nearYouMeals = useMemo(() => {
@@ -1008,9 +1048,48 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     carouselRef.current?.scrollToMeal(mealId);
   }, []);
 
-  // Carousel scroll → update focused meal on map
+  // Carousel scroll → update focused meal on map. Clear any iconic focus so
+  // the map's "prefer iconic" effect doesn't keep panning to a stale iconic eat.
   const handleFocusChange = useCallback((mealId: string | null) => {
     setFocusedMealId(mealId);
+    if (mealId) setFocusedIconicEatId(null);
+  }, []);
+
+  // ─── Iconic Eats state + hook ────────────────────────────────────────
+  const iconicEatsFilterActive = useMemo(
+    () => !!activeFilters?.some(f => f.type === 'iconicEats'),
+    [activeFilters],
+  );
+  const { iconicEats } = useIconicEats(userLocation, { expanded: iconicEatsFilterActive });
+  const [activeIconicEat, setActiveIconicEat] = useState<IconicEat | null>(null);
+  const [focusedIconicEatId, setFocusedIconicEatId] = useState<string | null>(null);
+
+  // Tap on a tile → open modal (don't auto-focus map; focus happens on scroll).
+  const handleIconicEatPress = useCallback((eat: IconicEat) => {
+    setActiveIconicEat(eat);
+  }, []);
+
+  // Carousel scroll → update focused iconic eat on the map.
+  const handleIconicEatFocusChange = useCallback((id: string | null) => {
+    setFocusedIconicEatId(id);
+    // Clear regular-meal focus so the map only pans to one or the other.
+    if (id) setFocusedMealId(null);
+  }, []);
+
+  // Map marker tapped → scroll iconic row to that eat + focus it.
+  const handleIconicEatMarkerPress = useCallback((id: string) => {
+    setFocusedIconicEatId(id);
+    iconicRowRef.current?.scrollToEat(id);
+  }, []);
+
+  const handleIconicEatModalShowOnMap = useCallback((eat: IconicEat) => {
+    setFocusedIconicEatId(eat.id);
+    setActiveIconicEat(null);
+    iconicRowRef.current?.scrollToEat(eat.id);
+  }, []);
+
+  const handleIconicEatModalClose = useCallback(() => {
+    setActiveIconicEat(null);
   }, []);
 
   // Navigation function for user profiles from carousel
@@ -1246,12 +1325,20 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
               >
                 {/* Saved indicator with heart icon */}
                 {showHeart && (
-                  <Image 
+                  <Image
                     source={require('../assets/icons/wishlist-active.png')}
                     style={styles.heartIcon}
                     resizeMode="contain"
                   />
                 )}
+
+                {/* Iconic completion badge — top-right corner when this meal
+                    completed an Iconic Eats challenge */}
+                {item.iconic_eat_id ? (
+                  <View style={styles.iconicBadgeOverlay} pointerEvents="none">
+                    <IconicBadge size="small" />
+                  </View>
+                ) : null}
                 
                 {/* Multi-photo support */}
                 <View 
@@ -1351,9 +1438,9 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   });
 
   // Render a meal item in the feed - memoized to prevent recreation
-  const renderMealItem = React.useCallback(({ item }: { item: MealEntry | { type: 'carousel' } }) => {
+  const renderMealItem = React.useCallback(({ item }: { item: any }) => {
     // Check if this is the carousel item
-    if ('type' in item && item.type === 'carousel') {
+    if (item && item.type === 'carousel') {
       return (
         <NearbyUsersCarousel
           userLocation={userLocation}
@@ -1362,9 +1449,18 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       );
     }
+    // Iconic-eat challenge placeholder (injected when the chip is active)
+    if (item && item.__type === 'iconic_placeholder') {
+      return (
+        <IconicPlaceholderCard
+          eat={item.eat}
+          onPress={handleIconicEatPress}
+        />
+      );
+    }
     // Otherwise render the meal card
     return <DoubleTapMealCard item={item as MealEntry} />;
-  }, [userLocation, handleUserPress, carouselRefreshTrigger]);
+  }, [userLocation, handleUserPress, carouselRefreshTrigger, handleIconicEatPress]);
   
 
 
@@ -1372,29 +1468,57 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
 
 
-  // Feed data with carousel inserted at position 5
+  // Feed data with carousel inserted at position 5.
+  // When "Iconic Eats" chip is active, inject shadow placeholder cards for
+  // un-completed iconic eats nearby so the feed has content to show.
   const feedData = useMemo(() => {
-    if (!nearbyMeals || nearbyMeals.length === 0) {
-      return nearbyMeals;
+    const base: any[] = nearbyMeals ? [...nearbyMeals] : [];
+
+    if (iconicEatsFilterActive) {
+      // Add placeholder cards for any iconic eats the user hasn't unlocked yet.
+      const unlockedIds = new Set(
+        base
+          .map(m => m.iconic_eat_id)
+          .filter((id): id is string => !!id),
+      );
+      const placeholders: IconicPlaceholderItem[] = iconicEats
+        .filter(e => !e.unlocked && !unlockedIds.has(e.id))
+        .map(e => ({ __type: 'iconic_placeholder', id: `iconic-${e.id}`, eat: e }));
+      // Interleave: completions first (already in base), then placeholders.
+      return [...base, ...placeholders];
     }
-    const dataWithCarousel = [...nearbyMeals];
-    if (dataWithCarousel.length >= 4) {
-      dataWithCarousel.splice(4, 0, { type: 'carousel' } as any);
+
+    if (base.length === 0) {
+      return base;
+    }
+    if (base.length >= 4) {
+      base.splice(4, 0, { type: 'carousel' } as any);
     } else {
-      dataWithCarousel.push({ type: 'carousel' } as any);
+      base.push({ type: 'carousel' } as any);
     }
-    return dataWithCarousel;
-  }, [nearbyMeals]);
+    return base;
+  }, [nearbyMeals, iconicEatsFilterActive, iconicEats]);
 
   // Stable header element — memoized so carousel scroll position is preserved
   const listHeaderElement = useMemo(() => (
     <DiscoverHeader
       nearYouMeals={nearYouMeals}
+      iconicEats={iconicEats}
       onMealPress={viewMealDetails}
+      onIconicEatPress={handleIconicEatPress}
       onFocusChange={handleFocusChange}
+      onIconicEatFocusChange={handleIconicEatFocusChange}
       carouselRef={carouselRef}
+      iconicRowRef={iconicRowRef}
     />
-  ), [nearYouMeals, viewMealDetails, handleFocusChange]);
+  ), [
+    nearYouMeals,
+    iconicEats,
+    viewMealDetails,
+    handleIconicEatPress,
+    handleFocusChange,
+    handleIconicEatFocusChange,
+  ]);
 
   const handleFeedScroll = useCallback((event: any) => {
     scrollPosition.current = event.nativeEvent.contentOffset.y;
@@ -1434,7 +1558,11 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       <FlatList
         ref={flatListRef}
         data={feedData}
-        keyExtractor={(item) => ('type' in item && item.type === 'carousel') ? 'carousel' : item.id}
+        keyExtractor={(item: any) => {
+          if (item && item.type === 'carousel') return 'carousel';
+          if (item && item.__type === 'iconic_placeholder') return item.id;
+          return item.id;
+        }}
         renderItem={renderMealItem}
         contentContainerStyle={styles.feedContainer}
         ListHeaderComponent={listHeaderElement}
@@ -1518,7 +1646,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       {/* Sticky map strip — stays pinned above feed, swipe up to dismiss */}
-      {mapVisible && nearYouMeals.length > 0 && (
+      {mapVisible && (nearYouMeals.length > 0 || iconicEats.length > 0) && (
         <Animated.View
           style={{ transform: [{ translateY: mapTranslateY }] }}
           {...mapPanResponder.panHandlers}
@@ -1529,6 +1657,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             focusedMealId={focusedMealId}
             onMarkerPress={handleMarkerPress}
             onExpandPress={handleExpandMap}
+            iconicEats={iconicEats}
+            focusedIconicEatId={focusedIconicEatId}
+            onIconicEatMarkerPress={handleIconicEatMarkerPress}
+            iconicOnlyMode={iconicEatsFilterActive}
           />
         </Animated.View>
       )}
@@ -1584,6 +1716,14 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       )}
       */}
+
+      {/* Iconic Eats modal — dish detail + "show on map" CTA */}
+      <IconicEatModal
+        visible={!!activeIconicEat}
+        eat={activeIconicEat}
+        onClose={handleIconicEatModalClose}
+        onShowOnMap={handleIconicEatModalShowOnMap}
+      />
     </SafeAreaView>
   );
 };
@@ -1791,6 +1931,12 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
+  },
+  iconicBadgeOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 2,
   },
   heartIcon: {
     position: 'absolute',

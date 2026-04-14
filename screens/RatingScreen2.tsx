@@ -1112,7 +1112,9 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         await firestore().collection('mealEntries').doc(mealId).update({
           meal: mealName || '',
           restaurant: restaurant || '',
-          city: cityInfo,
+          city: (cityInfo || '').toLowerCase().trim(),
+          place_id: selectedRestaurantId || null,
+          iconic_eat_id: null,
           isUnrated: false, // Mark as no longer unrated
           updatedAt: firestore.FieldValue.serverTimestamp(),
           sessionId: sessionId,
@@ -1132,13 +1134,15 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           restaurant: restaurant || '',
           meal: mealName || '',
           mealType: mealType || 'Restaurant',
-          city: cityInfo,
+          city: (cityInfo || '').toLowerCase().trim(),
+          place_id: selectedRestaurantId || null,
+          iconic_eat_id: null,
           comments: thoughts ? { thoughts: thoughts } : {},
           location: location ? {
             latitude: location.latitude,
             longitude: location.longitude,
             source: location.source || 'unknown',
-            city: cityInfo
+            city: (cityInfo || '').toLowerCase().trim()
           } : null,
           createdAt: firestore.FieldValue.serverTimestamp(),
           photoTakenAt: photo?.timestamp ? new Date(photo.timestamp * 1000) : null,

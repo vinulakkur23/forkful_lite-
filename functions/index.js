@@ -12,6 +12,9 @@ const {
   maybeGenerateTasteStory,
   forceGenerateTasteStory,
 } = require('./tasteStory');
+const {
+  onMealCreateCheckIconicUnlock,
+} = require('./iconicEatsUnlock');
 
 // Initialize Firebase Admin
 initializeApp();
@@ -1831,3 +1834,7 @@ exports.regenerateAllTasteStories = onRequest(
     }
   }
 );
+
+// Phase M: on new meal creation, check if it matches a curated iconic eat
+// and unlock it for the user (see functions/iconicEatsUnlock.js).
+exports.onMealCreateCheckIconicUnlock = onMealCreateCheckIconicUnlock;
