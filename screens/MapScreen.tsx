@@ -621,93 +621,128 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
     };
   }, [filteredMeals]);
 
-  // Function to share map locations - currently showing a coming soon message
+  // Generate a shareable HTML map page, upload to Firebase Storage, share the link
   const shareMapToGoogleMaps = async () => {
-    // Show an overlay message about the upcoming share feature
-    Alert.alert(
-      "Coming Soon",
-      "Once the app is released, you will be able to share a Google Map with saved pins and meal cards with friends, so they can see your favorite meals in Paris, or your favorite burritos in Santa Fe. It will also prompt them to download the app via the App Store so they can explore your passport on their own.",
-      [
-        {
-          text: "OK",
-          style: "default"
-        }
-      ]
-    );
-
-    /* Original implementation commented out for future reference
     try {
-      // Use filtered meals for sharing
-      const mealsToShare = filteredMeals;
-      
+      const mealsToShare = filteredMeals.filter(
+        m => m.location?.latitude && m.location?.longitude
+      );
+
       if (mealsToShare.length === 0) {
-        Alert.alert("Nothing to Share", "Add meals with location to share your food map.");
+        Alert.alert('Nothing to Share', 'Add meals with location to share your food map.');
         return;
       }
 
-      // Build a Google Maps URL with multiple markers
-      // Format: https://www.google.com/maps/dir/?api=1&destination=lat,lng&waypoints=lat,lng|lat,lng
+      const userName = auth().currentUser?.displayName || 'A Forkful User';
 
-      // Use first meal as destination
-      const firstMeal = mealsToShare[0];
-      let mapUrl = `https://www.google.com/maps/search/?api=1&query=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
+      // Build markers JSON for the embedded map
+      const markersJson = mealsToShare.map(meal => ({
+        lat: meal.location!.latitude,
+        lng: meal.location!.longitude,
+        name: meal.meal || 'Untitled meal',
+        restaurant: meal.restaurant || '',
+        rating: meal.rating || 0,
+      }));
 
-      // If there are multiple meals, create a custom map link instead
-      if (mealsToShare.length > 1) {
-        // Start a custom map link
-        mapUrl = 'https://www.google.com/maps/dir/?api=1';
+      // Calculate map center
+      const avgLat = markersJson.reduce((s, m) => s + m.lat, 0) / markersJson.length;
+      const avgLng = markersJson.reduce((s, m) => s + m.lng, 0) / markersJson.length;
 
-        // Add destination (first meal)
-        mapUrl += `&destination=${firstMeal.location?.latitude},${firstMeal.location?.longitude}`;
+      // Generate a self-contained HTML page with Google Maps embed
+      const html = `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${userName}'s Food Passport</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,sans-serif;background:#FAF9F6}
+  #map{width:100%;height:70vh;min-height:400px}
+  .header{padding:16px 20px;background:#1A1A1A;color:white}
+  .header h1{font-size:18px;font-weight:600}
+  .header p{font-size:13px;color:#aaa;margin-top:4px}
+  .list{padding:12px 20px}
+  .meal{padding:10px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+  .meal-name{font-size:14px;font-weight:600;color:#1A1A1A}
+  .meal-restaurant{font-size:12px;color:#858585;margin-top:2px}
+  .meal-rating{font-size:13px;color:#8B7355;font-weight:600}
+  .footer{padding:16px 20px;text-align:center;font-size:12px;color:#aaa}
+  .footer a{color:#2D7A3E;text-decoration:none;font-weight:600}
+</style>
+</head><body>
+<div class="header">
+  <h1>🍽️ ${userName}'s Food Passport</h1>
+  <p>${mealsToShare.length} dining experiences</p>
+</div>
+<div id="map"></div>
+<div class="list">
+${markersJson.map(m => `  <div class="meal">
+    <div><div class="meal-name">${m.name}</div><div class="meal-restaurant">${m.restaurant}</div></div>
+    ${m.rating > 0 ? `<div class="meal-rating">${m.rating}/6</div>` : ''}
+  </div>`).join('\n')}
+</div>
+<div class="footer">Shared via <a href="https://apps.apple.com/app/forkful">Forkful</a></div>
+<script>
+const markers=${JSON.stringify(markersJson)};
+function initMap(){
+  const map=new google.maps.Map(document.getElementById('map'),{
+    center:{lat:${avgLat},lng:${avgLng}},zoom:12,
+    styles:[{featureType:"poi",stylers:[{visibility:"off"}]}]
+  });
+  const bounds=new google.maps.LatLngBounds();
+  markers.forEach(m=>{
+    const marker=new google.maps.Marker({
+      position:{lat:m.lat,lng:m.lng},map,
+      title:m.name
+    });
+    const info=new google.maps.InfoWindow({
+      content:'<div style="font-family:sans-serif"><strong>'+m.name+'</strong><br><span style="color:#666">'+m.restaurant+'</span>'+(m.rating>0?'<br><span style="color:#8B7355">'+m.rating+'/6</span>':'')+'</div>'
+    });
+    marker.addListener('click',()=>info.open(map,marker));
+    bounds.extend({lat:m.lat,lng:m.lng});
+  });
+  if(markers.length>1)map.fitBounds(bounds,{padding:50});
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAC3ibPKbYQFvv47fwTG9QqwUS5GYZhxFI&callback=initMap" async defer></script>
+</body></html>`;
 
-        // Add waypoints (other meals) - limited to 10 due to URL length limits
-        const waypoints = mealsToShare.slice(1, 10).map(meal =>
-          `${meal.location?.latitude},${meal.location?.longitude}`
-        ).join('|');
+      // Write HTML to temp file
+      const RNFS = require('react-native-fs');
+      const fileName = `food-passport-${Date.now()}.html`;
+      const filePath = `${RNFS.TemporaryDirectoryPath}${fileName}`;
+      await RNFS.writeFile(filePath, html, 'utf8');
 
-        if (waypoints) {
-          mapUrl += `&waypoints=${waypoints}`;
-        }
-      }
+      // Upload to Firebase Storage with HTML content type
+      const storageRef = firebase.storage().ref(`shared_maps/${auth().currentUser?.uid}/${fileName}`);
+      await storageRef.putFile(filePath, { contentType: 'text/html' });
+      const downloadUrl = await storageRef.getDownloadURL();
 
-      // Create a shareable text
-      const shareText = `Check out my Food Passport with ${mealsToShare.length} dining experiences! 🍽️\n\n`;
-      const locationNames = mealsToShare.slice(0, 5).map(meal =>
-        meal.restaurant || meal.meal || 'Untitled meal'
-      ).join(', ');
+      // Clean up temp file
+      await RNFS.unlink(filePath).catch(() => {});
 
-      const shareMessage = `${shareText}Featuring: ${locationNames}${mealsToShare.length > 5 ? ' and more...' : ''}`;
+      // Share the link
+      const shareText = `Check out my Food Passport with ${mealsToShare.length} dining experiences! 🍽️\n\nFeaturing: ${mealsToShare.slice(0, 5).map(m => m.restaurant || m.meal || 'Untitled').join(', ')}${mealsToShare.length > 5 ? ' and more...' : ''}`;
 
       try {
-        // Use React Native's Share API
         await Share.share({
-          message: shareMessage + '\n\n' + mapUrl,
-          url: mapUrl // Note: this may only work on iOS
+          message: `${shareText}\n\n${downloadUrl}`,
         });
-      } catch (error) {
-        console.log('Error sharing:', error);
-        // Fallback - copy to clipboard
-        Clipboard.setString(shareMessage + '\n\n' + mapUrl);
+      } catch (shareError) {
+        Clipboard.setString(downloadUrl);
         Alert.alert(
           'Link Copied',
-          'Map link copied to clipboard. Would you like to open the map?',
+          'Your Food Passport map link has been copied to clipboard.',
           [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Open Map',
-              onPress: () => Linking.openURL(mapUrl)
-            }
+            { text: 'OK', style: 'default' },
+            { text: 'Open', onPress: () => Linking.openURL(downloadUrl) },
           ]
         );
       }
     } catch (error) {
       console.error('Error creating share link:', error);
-      Alert.alert('Error', 'Could not create share link');
+      Alert.alert('Error', 'Could not create share link. Please try again.');
     }
-    */
   };
 
   // City chips — derived from all meals (must be above early returns)
