@@ -37,13 +37,15 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import FoodPassportWrapper from './screens/FoodPassportWrapper';
 import NotificationsScreen from './screens/NotificationsScreen';
 import MealTipsScreen from './screens/MealTipsScreen';
+import FullMapScreen from './screens/FullMapScreen';
+import type { FullMapParams } from './screens/FullMapScreen';
 
 // Define the types for our navigation parameters
 export type RootStackParamList = {
   Login: undefined;
   Onboarding: undefined;
   MainTabs: { screen?: string; params?: any }; // Added params for deep linking to tabs
-  Home: { tabIndex?: number } | undefined; // Kept for potential direct stack navigation, though usually via MainTabs
+  Home: { tabIndex?: number; initialTab?: string; centerOnLocation?: { latitude: number; longitude: number; mealId?: string } } | undefined;
   Camera: undefined; // Kept for potential direct stack navigation
   Crop: {
     photo: {
@@ -167,7 +169,7 @@ export type RootStackParamList = {
 
 // Define separate types for tab navigation (screens directly in Tab.Navigator)
 export type TabParamList = {
-  Home: undefined;
+  Home: { tabIndex?: number; initialTab?: string; centerOnLocation?: { latitude: number; longitude: number; mealId?: string } } | undefined;
   Camera: undefined; // This is a tab that navigates to CameraScreen
   FoodPassport: RootStackParamList['FoodPassport']; // This is a tab that navigates to FoodPassportWrapper
   
@@ -181,6 +183,7 @@ export type TabParamList = {
   EditMeal: RootStackParamList['EditMeal'];
   Notifications: RootStackParamList['Notifications'];
   EnjoyMeal: RootStackParamList['EnjoyMeal'];
+  FullMap: FullMapParams;
 };
 
 // ResourceManager to track and clean temporary files and resources
@@ -523,6 +526,14 @@ function TabNavigator() {
       <Tab.Screen
         name="EnjoyMeal"
         component={EnjoyMealScreen}
+        options={{
+          headerShown: false,
+          tabBarButton: () => null, // Hide from tab bar
+        }}
+      />
+      <Tab.Screen
+        name="FullMap"
+        component={FullMapScreen}
         options={{
           headerShown: false,
           tabBarButton: () => null, // Hide from tab bar

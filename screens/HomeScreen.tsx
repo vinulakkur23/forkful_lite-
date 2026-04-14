@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,20 +20,23 @@ import {
   Animated,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp, useFocusEffect } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { CompositeNavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom EmojiDisplay component
 import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
-import HomeMapComponent from '../components/HomeMapComponent';
 import NearbyUsersCarousel from '../components/NearbyUsersCarousel';
+import MiniMapStrip from '../components/MiniMapStrip';
+import DiscoverHeader from '../components/DiscoverHeader';
+import { NearYouCarouselRef } from '../components/NearYouCarousel';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { getFollowing } from '../services/followService';
 import Geolocation from '@react-native-community/geolocation';
 import { fonts } from '../src/theme/fonts';
-import { RootStackParamList } from '../App';
+import { RootStackParamList, TabParamList } from '../App';
 // import TooltipOnboarding from '../components/TooltipOnboarding'; // Commented out for custom onboarding
 // Import theme
 import { colors, typography, spacing, shadows } from '../themes';
@@ -46,8 +49,11 @@ const MAP_HOME_ICONS = {
   mapInactive: require('../assets/icons/maphome-inactive.png'),
 };
 
-type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
-type HomeScreenRouteProp = RouteProp<RootStackParamList, 'Home'>;
+type HomeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabParamList, 'Home'>,
+  StackNavigationProp<RootStackParamList>
+>;
+type HomeScreenRouteProp = RouteProp<TabParamList, 'Home'>;
 
 type Props = {
   navigation: HomeScreenNavigationProp;
@@ -104,6 +110,7 @@ interface MealEntry {
   } | null;
   enhanced_facts?: any;
   quick_criteria_result?: any;
+  pixel_art_url?: string;
 }
 
 const { width } = Dimensions.get('window');
@@ -206,43 +213,32 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     };
   }, []);
   
-  // Tab view state - initialize with route param if provided
-  const initialTabIndex = route.params?.tabIndex || 0;
-  
   // Wishlist/saved meals state using ref to prevent re-renders
   const savedMealsRef = useRef<Set<string>>(new Set());
   const cardRefs = useRef<{ [key: string]: any }>({});
-  
+
   // FlatList ref to maintain scroll position
   const flatListRef = useRef<FlatList>(null);
   const scrollPosition = useRef(0);
-  const [index, setIndex] = useState(initialTabIndex);
-  const [routes] = useState([
-    { key: 'list', title: 'Feed' },
-    { key: 'map', title: 'Map' },
-  ]);
 
-  // Handle route parameter changes (like returning from meal detail with tab index)
+  // Handle "show on map" navigation from meal detail — redirect to FullMap
   useEffect(() => {
-    if (route.params?.tabIndex !== undefined && route.params.tabIndex !== index) {
-      console.log('HomeScreen: Setting tab index from route params:', route.params.tabIndex);
-      setIndex(route.params.tabIndex);
-    }
-    
-    // Handle navigation from meal detail to show on map
-    if (route.params?.initialTab === 'map') {
-      console.log('HomeScreen: Switching to map tab from meal detail');
-      setIndex(1); // Map tab is index 1
-      
-      // Clear the navigation parameters after processing them to prevent reuse
+    if (route.params?.initialTab === 'map' && route.params?.centerOnLocation) {
+      navigation.navigate('FullMap', {
+        nearbyMeals,
+        userLocation,
+        activeFilters,
+        centerOnLocation: route.params.centerOnLocation,
+      });
+      // Clear the navigation parameters after processing
       setTimeout(() => {
         navigation.setParams({
           initialTab: undefined,
-          centerOnLocation: undefined
+          centerOnLocation: undefined,
         });
-      }, 1000); // Clear after the map animation completes
+      }, 500);
     }
-  }, [route.params?.tabIndex, route.params?.initialTab, navigation]);
+  }, [route.params?.initialTab, route.params?.centerOnLocation]);
 
   // Get user's current location
   useEffect(() => {
@@ -540,9 +536,10 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
             platingStyle: aiMetadata.platingStyle || 'Unknown',
             beverageType: aiMetadata.beverageType || 'Unknown'
           },
-          metadata_enriched: rawMeal.metadata_enriched || null, // Include metadata_enriched field
-          enhanced_facts: rawMeal.enhanced_facts || null, // Include enhanced_facts field
-          quick_criteria_result: rawMeal.quick_criteria_result || null // Include quick_criteria_result field
+          metadata_enriched: rawMeal.metadata_enriched || null,
+          enhanced_facts: rawMeal.enhanced_facts || null,
+          quick_criteria_result: rawMeal.quick_criteria_result || null,
+          pixel_art_url: rawMeal.pixel_art_url || undefined,
         });
       }
       
@@ -941,17 +938,80 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   // Navigation function for meal details
-  const viewMealDetails = (meal: MealEntry) => {
+  const viewMealDetails = useCallback((meal: MealEntry) => {
     console.log("Navigating to meal detail with ID:", meal.id);
-    console.log("Current scroll position:", scrollPosition.current);
-    
-    // Navigate to meal detail (scroll position is already tracked by onScroll)
-    navigation.navigate('MealDetail', { 
-      mealId: meal.id, 
+    navigation.navigate('MealDetail', {
+      mealId: meal.id,
       previousScreen: 'Home',
-      previousTabIndex: index // Pass current tab index
     });
-  };
+  }, [navigation]);
+
+  // Navigate to full-screen map
+  const handleExpandMap = useCallback(() => {
+    navigation.navigate('FullMap', {
+      nearbyMeals,
+      userLocation,
+      activeFilters,
+    });
+  }, [nearbyMeals, userLocation, activeFilters, navigation]);
+
+  // ─── Sticky map strip + Near You carousel state ──────────────────────
+  const [mapVisible, setMapVisible] = useState(true);
+  const [focusedMealId, setFocusedMealId] = useState<string | null>(null);
+  const carouselRef = useRef<NearYouCarouselRef>(null);
+  const mapTranslateY = useRef(new Animated.Value(0)).current;
+
+  const nearYouMeals = useMemo(() => {
+    if (!nearbyMeals) return [];
+    return nearbyMeals
+      .filter(m => m.distance !== undefined && m.distance !== null && m.location)
+      .sort((a, b) => (a.distance || 0) - (b.distance || 0))
+      .slice(0, 10);
+  }, [nearbyMeals]);
+
+  // Swipe-up-to-dismiss gesture for the map strip
+  const mapPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to upward swipes
+        return gestureState.dy < -10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy < 0) {
+          mapTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy < -50) {
+          // Dismiss map strip
+          Animated.timing(mapTranslateY, {
+            toValue: -170,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => setMapVisible(false));
+        } else {
+          // Snap back
+          Animated.spring(mapTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  // Map dot tapped → scroll carousel to that meal
+  const handleMarkerPress = useCallback((mealId: string) => {
+    setFocusedMealId(mealId);
+    carouselRef.current?.scrollToMeal(mealId);
+  }, []);
+
+  // Carousel scroll → update focused meal on map
+  const handleFocusChange = useCallback((mealId: string | null) => {
+    setFocusedMealId(mealId);
+  }, []);
 
   // Navigation function for user profiles from carousel
   const handleUserPress = (userId: string, userName: string, userPhoto: string) => {
@@ -1312,90 +1372,93 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 
 
 
-  // Feed view component (current content)
-  const FeedViewComponent = () => {
-    // Create feed data with carousel inserted at position 5
-    const feedData = React.useMemo(() => {
-      if (!nearbyMeals || nearbyMeals.length === 0) {
-        return nearbyMeals;
-      }
-      
-      // Create a copy of the meals array
-      const dataWithCarousel = [...nearbyMeals];
-      
-      // Insert carousel after 4 posts (at index 4, which is the 5th position)
-      if (dataWithCarousel.length >= 4) {
-        dataWithCarousel.splice(4, 0, { type: 'carousel' } as any);
-      } else {
-        // If less than 4 posts, add carousel at the end
-        dataWithCarousel.push({ type: 'carousel' } as any);
-      }
-      
-      return dataWithCarousel;
-    }, [nearbyMeals]);
-    
+  // Feed data with carousel inserted at position 5
+  const feedData = useMemo(() => {
+    if (!nearbyMeals || nearbyMeals.length === 0) {
+      return nearbyMeals;
+    }
+    const dataWithCarousel = [...nearbyMeals];
+    if (dataWithCarousel.length >= 4) {
+      dataWithCarousel.splice(4, 0, { type: 'carousel' } as any);
+    } else {
+      dataWithCarousel.push({ type: 'carousel' } as any);
+    }
+    return dataWithCarousel;
+  }, [nearbyMeals]);
+
+  // Stable header element — memoized so carousel scroll position is preserved
+  const listHeaderElement = useMemo(() => (
+    <DiscoverHeader
+      nearYouMeals={nearYouMeals}
+      onMealPress={viewMealDetails}
+      onFocusChange={handleFocusChange}
+      carouselRef={carouselRef}
+    />
+  ), [nearYouMeals, viewMealDetails, handleFocusChange]);
+
+  const handleFeedScroll = useCallback((event: any) => {
+    scrollPosition.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  const emptyComponent = useMemo(() => {
+    if (loading || refreshing || allNearbyMeals.length > 0) return null;
     return (
-      <>
-        {loading && !refreshing ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#1a2b49" />
-            <Text style={styles.loadingText}>Finding meals nearby...</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={feedData}
-            keyExtractor={(item) => ('type' in item && item.type === 'carousel') ? 'carousel' : item.id}
-            renderItem={renderMealItem}
-            contentContainerStyle={styles.feedContainer}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            updateCellsBatchingPeriod={50}
-            initialNumToRender={10}
-            windowSize={10}
-            getItemLayout={(data, index) => ({
-              length: 400, // Approximate height of meal card (square image + content)
-              offset: 400 * index,
-              index,
-            })}
-            onScroll={(event) => {
-              scrollPosition.current = event.nativeEvent.contentOffset.y;
-            }}
-            scrollEventThrottle={16}
-            // Additional performance optimizations
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0,
-            }}
-            legacyImplementation={false}
-            disableVirtualization={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                colors={['#1a2b49']}
-              />
-            }
-            ListEmptyComponent={
-            !loading && !refreshing && allNearbyMeals.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  {locationError
-                    ? "Couldn't access your location. Please check your settings."
-                    : activeFilters && activeFilters.length > 0
-                      ? "No meals match your current filters"
-                      : "No meals found nearby"}
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  {activeFilters && activeFilters.length > 0
-                    ? "Try adjusting your filters or exploring a new area"
-                    : "Start rating meals to populate your feed!"}
-                </Text>
-              </View>
-            ) : null
-          }
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>
+          {locationError
+            ? "Couldn't access your location. Please check your settings."
+            : activeFilters && activeFilters.length > 0
+              ? "No meals match your current filters"
+              : "No meals found nearby"}
+        </Text>
+        <Text style={styles.emptySubtext}>
+          {activeFilters && activeFilters.length > 0
+            ? "Try adjusting your filters or exploring a new area"
+            : "Start rating meals to populate your feed!"}
+        </Text>
+      </View>
+    );
+  }, [loading, refreshing, allNearbyMeals.length, locationError, activeFilters]);
+
+  // Feed view — inline render (not a component to avoid remount)
+  const renderFeed = () => {
+    if (loading && !refreshing) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1a2b49" />
+          <Text style={styles.loadingText}>Finding meals nearby...</Text>
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        ref={flatListRef}
+        data={feedData}
+        keyExtractor={(item) => ('type' in item && item.type === 'carousel') ? 'carousel' : item.id}
+        renderItem={renderMealItem}
+        contentContainerStyle={styles.feedContainer}
+        ListHeaderComponent={listHeaderElement}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
+        onScroll={handleFeedScroll}
+        scrollEventThrottle={16}
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+        }}
+        legacyImplementation={false}
+        disableVirtualization={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#1a2b49']}
           />
-        )}
-      </>
+        }
+        ListEmptyComponent={emptyComponent}
+      />
     );
   };
 
@@ -1410,14 +1473,18 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         />
         <TouchableOpacity
           style={styles.mapToggleButton}
-          onPress={() => setIndex(index === 0 ? 1 : 0)}
-          // onLayout commented out for custom onboarding
-          // onLayout={(event) => {
-          //   setMapButtonLayout(event.nativeEvent.layout);
-          // }}
+          onPress={() => {
+            if (!mapVisible) {
+              // Re-show the map strip
+              mapTranslateY.setValue(0);
+              setMapVisible(true);
+            } else {
+              handleExpandMap();
+            }
+          }}
         >
-          <Image 
-            source={index === 1 ? MAP_HOME_ICONS.mapActive : MAP_HOME_ICONS.mapInactive} 
+          <Image
+            source={mapVisible ? MAP_HOME_ICONS.mapActive : MAP_HOME_ICONS.mapInactive}
             style={styles.mapToggleIcon}
             resizeMode="contain"
           />
@@ -1450,36 +1517,25 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       </View>
 
-      {/* Tab View - Render both components but show/hide based on index */}
-      <View style={styles.tabView}>
-        <View 
-          style={[styles.tabContent, index !== 0 && styles.hiddenTab]}
-          // onLayout commented out for custom onboarding
-          // onLayout={(event) => {
-          //   if (index === 0) { // Only set layout when feed is visible
-          //     setFeedLayout(event.nativeEvent.layout);
-          //   }
-          // }}
+      {/* Sticky map strip — stays pinned above feed, swipe up to dismiss */}
+      {mapVisible && nearYouMeals.length > 0 && (
+        <Animated.View
+          style={{ transform: [{ translateY: mapTranslateY }] }}
+          {...mapPanResponder.panHandlers}
         >
-          <FeedViewComponent />
-        </View>
-        <View style={[styles.tabContent, index !== 1 && styles.hiddenTab]}>
-          <HomeMapComponent
-            navigation={navigation}
-            nearbyMeals={nearbyMeals}
-            loading={loading}
-            refreshing={refreshing}
-            activeFilters={activeFilters}
-            showingLimitedResults={showingLimitedResults}
+          <MiniMapStrip
+            meals={nearYouMeals}
             userLocation={userLocation}
-            imageErrors={imageErrors}
-            onImageError={handleImageError}
-            onViewMealDetails={viewMealDetails}
-            centerOnLocation={route.params?.centerOnLocation}
-            tabIndex={index}
-            MAX_MEALS_TO_DISPLAY={MAX_MEALS_TO_DISPLAY}
+            focusedMealId={focusedMealId}
+            onMarkerPress={handleMarkerPress}
+            onExpandPress={handleExpandMap}
           />
-        </View>
+        </Animated.View>
+      )}
+
+      {/* Feed with Near You carousel in header */}
+      <View style={{ flex: 1 }}>
+        {renderFeed()}
       </View>
       
       {/* Tooltip Onboarding - COMMENTED OUT FOR CUSTOM ONBOARDING */}
@@ -1729,18 +1785,6 @@ const styles = StyleSheet.create({
   mapToggleIcon: {
     width: 24,
     height: 24,
-  },
-  // Tab view style
-  tabView: {
-    flex: 1,
-  },
-  tabContent: {
-    flex: 1,
-  },
-  hiddenTab: {
-    position: 'absolute',
-    left: -10000,
-    opacity: 0,
   },
   // Meal card container
   mealCardContainer: {

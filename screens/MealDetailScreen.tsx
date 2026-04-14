@@ -551,17 +551,13 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
-    // Navigate to Home screen with map tab active and center on this meal's location
-    navigation.navigate('MainTabs', {
-      screen: 'Home',
-      params: {
-        initialTab: 'map', // Tell HomeScreen to show map tab
-        centerOnLocation: {
-          latitude: meal.location.latitude,
-          longitude: meal.location.longitude,
-          mealId: mealId // Pass meal ID to potentially highlight it
-        }
-      }
+    // Navigate to full-screen map centered on this meal's location
+    navigation.navigate('FullMap', {
+      centerOnLocation: {
+        latitude: meal.location.latitude,
+        longitude: meal.location.longitude,
+        mealId: mealId,
+      },
     });
   };
 
