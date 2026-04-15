@@ -7,6 +7,10 @@ export interface IconicEat {
   dish_name: string;
   restaurant_name: string;
   why_selected: string;
+  // Editorial label shown above the dish name in the modal, e.g.
+  // "Hidden Gem", "Classic", "Newcomer". When absent we fall back to
+  // "Iconic Eat" so older docs still render.
+  category?: string;
   place_id?: string;
   formatted_address?: string;
   photo_references?: string[];
@@ -84,6 +88,7 @@ export async function fetchNearbyIconicEats(
       website: data.website,
       emoji_url: data.emoji_url,
       shadow_emoji_url: data.shadow_emoji_url,
+      category: data.category,
       city: data.city,
       active: data.active,
       latitude: eatLat,

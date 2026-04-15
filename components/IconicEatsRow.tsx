@@ -101,7 +101,10 @@ const IconicEatsRow = forwardRef<IconicEatsRowRef, Props>(
 
     const renderTile = useCallback(
       ({ item }: { item: IconicEat }) => {
-        const uri = item.unlocked ? item.emoji_url : item.shadow_emoji_url;
+        // Always show the full-color pixel art, whether or not the user
+        // has unlocked the eat. shadow_emoji_url is no longer used as a
+        // fallback — it was the silhouette/greyed-out variant.
+        const uri = item.emoji_url || item.shadow_emoji_url;
         return (
           <TouchableOpacity
             style={styles.tile}
@@ -112,7 +115,7 @@ const IconicEatsRow = forwardRef<IconicEatsRowRef, Props>(
               {uri ? (
                 <Image
                   source={{ uri }}
-                  style={[styles.emoji, !item.unlocked && styles.emojiShadow]}
+                  style={styles.emoji}
                   resizeMode="contain"
                 />
               ) : (
@@ -196,10 +199,6 @@ const styles = StyleSheet.create({
   emoji: {
     width: EMOJI_SIZE,
     height: EMOJI_SIZE,
-  },
-  emojiShadow: {
-    // Stacked with PNG's baked-in alpha → soft mid-grey silhouette.
-    opacity: 0.55,
   },
   emojiPlaceholder: {
     backgroundColor: colors.lightTan,

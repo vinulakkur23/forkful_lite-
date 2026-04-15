@@ -37,6 +37,8 @@ const calculateZoomLevel = (region: Region): number => {
 interface MealEntry {
   id: string;
   photoUrl: string;
+  pixel_art_url?: string;
+  pixel_art_data?: string; // base64 fallback for older meals
   rating: number;
   restaurant: string;
   meal: string;
@@ -93,6 +95,23 @@ type Props = {
     longitude: number;
     mealId?: string;
   };
+  // ─── FullMap-specific extensions ─────────────────────────────────────
+  // When `dotsOnly` is true, every cluster renders as a dot regardless of
+  // unique-restaurant count, markers do not respond to taps, and callouts
+  // are suppressed. The companion bottom carousel on FullMapScreen owns
+  // navigation/highlight UX, so the map itself is glanceable + non-tappy.
+  dotsOnly?: boolean;
+  // Meal id currently focused by the carousel — that cluster's dot renders
+  // dark/navy instead of sage so users can see "this card = that dot".
+  focusedMealId?: string | null;
+  // Fired after the user finishes panning/zooming. Parent uses this to
+  // trim its meal list down to the meals currently inside the visible
+  // map bounds and feed them to the carousel.
+  onRegionChange?: (region: Region) => void;
+  // When true, the top-left "Showing: All/Following/Wishlist" filter-mode
+  // pill is not rendered. FullMap replaces that control with its own
+  // quick-chip row, so it passes true; HomeScreen leaves it false.
+  hideFilterModeToggle?: boolean;
 };
 
 const HomeMapComponent: React.FC<Props> = ({
@@ -108,7 +127,11 @@ const HomeMapComponent: React.FC<Props> = ({
   onViewMealDetails,
   tabIndex,
   MAX_MEALS_TO_DISPLAY,
-  centerOnLocation
+  centerOnLocation,
+  dotsOnly = false,
+  focusedMealId = null,
+  onRegionChange,
+  hideFilterModeToggle = false,
 }) => {
   // Map-specific state - isolated from parent component
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<{ [key: string]: number }>({});
@@ -225,148 +248,81 @@ const HomeMapComponent: React.FC<Props> = ({
   }, [nearbyMeals, filterMode, followingUserIds, savedMealIds]);
 
   // Group meals by location for carousel display
+  // Zoom-aware grid clustering — mirrors FoodPassport map (screens/MapScreen.tsx).
+  // At low zoom, restaurants in the same neighborhood collapse to a single
+  // dot scaled by count. As you zoom in, the grid gets finer and clusters
+  // break apart. At max zoom every restaurant is its own marker.
   const locationGroupedMarkers = React.useMemo(() => {
-    console.log(`HomeMapComponent: locationGroupedMarkers memo recalculating with ${filteredMealsForMap.length} filtered meals`);
-    
-    const mealsWithLocation = filteredMealsForMap.filter(meal => meal.location?.latitude && meal.location?.longitude);
-    
+    const mealsWithLocation = filteredMealsForMap.filter(
+      meal => meal.location?.latitude && meal.location?.longitude
+    );
+
+    let decimals: number;
+    if (currentZoom >= 15) decimals = 4;       // ~11m  — exact locations
+    else if (currentZoom >= 13) decimals = 3;  // ~110m — very close merge
+    else if (currentZoom >= 11) decimals = 2;  // ~1.1km — neighborhood
+    else decimals = 1;                         // ~11km — area-level
+
     const locationGroups: { [key: string]: MealEntry[] } = {};
-    
     mealsWithLocation.forEach(meal => {
       if (!meal.location) return;
-      
-      const lat = meal.location.latitude.toFixed(4);
-      const lng = meal.location.longitude.toFixed(4);
-      const locationKey = `${lat},${lng}`;
-      
-      if (!locationGroups[locationKey]) {
-        locationGroups[locationKey] = [];
-      }
-      locationGroups[locationKey].push(meal);
+      const lat = meal.location.latitude.toFixed(decimals);
+      const lng = meal.location.longitude.toFixed(decimals);
+      const key = `${lat},${lng}`;
+      if (!locationGroups[key]) locationGroups[key] = [];
+      locationGroups[key].push(meal);
     });
-    
+
     const groupedMarkers: Array<{
-      locationKey: string,
-      coordinate: {latitude: number, longitude: number},
-      meals: MealEntry[],
-      restaurant?: string
+      locationKey: string;
+      coordinate: { latitude: number; longitude: number };
+      meals: MealEntry[];
+      restaurant?: string;
+      uniqueRestaurants: number;
     }> = [];
-    
+
     Object.entries(locationGroups).forEach(([locationKey, meals]) => {
-      const firstMeal = meals[0];
-      const restaurant = firstMeal.restaurant || meals.find(m => m.restaurant)?.restaurant;
-      
+      const avgLat = meals.reduce((s, m) => s + m.location!.latitude, 0) / meals.length;
+      const avgLng = meals.reduce((s, m) => s + m.location!.longitude, 0) / meals.length;
+      const restaurant = meals[0].restaurant || meals.find(m => m.restaurant)?.restaurant;
+      const uniqueRestaurants = new Set(meals.map(m => m.restaurant || m.id)).size;
+
       groupedMarkers.push({
         locationKey,
-        coordinate: {
-          latitude: firstMeal.location!.latitude,
-          longitude: firstMeal.location!.longitude
-        },
-        meals: meals,
-        restaurant: restaurant
+        coordinate: { latitude: avgLat, longitude: avgLng },
+        meals,
+        restaurant,
+        uniqueRestaurants,
       });
     });
-    
-    console.log(`HomeMapComponent: Created ${groupedMarkers.length} marker groups from ${mealsWithLocation.length} meals with location`);
+
     return groupedMarkers;
-  }, [filteredMealsForMap]);
+  }, [filteredMealsForMap, currentZoom]);
 
-  // Calculate initial region based on filtered meals
+  // Initial region — always default to the user's current location so the map
+  // opens "where I am" rather than zoomed-out to fit every nearby meal.
+  // Falls back to SF only if location is unavailable (permission denied,
+  // first launch before geo resolves, etc.).
   const initialRegion = React.useMemo<Region>(() => {
-    const mealsToUse = filteredMealsForMap;
-    
-    // If no filtered meals, fall back to user location or default
-    if (mealsToUse.length === 0) {
-      if (userLocation) {
-        return {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        };
-      }
-      // Default to San Francisco as fallback
+    if (userLocation) {
       return {
-        latitude: 37.78825,
-        longitude: -122.4324,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
       };
     }
-    
-    let minLat = Number.MAX_VALUE;
-    let maxLat = Number.MIN_VALUE;
-    let minLng = Number.MAX_VALUE;
-    let maxLng = Number.MIN_VALUE;
-    
-    mealsToUse.forEach(meal => {
-      if (meal.location) {
-        minLat = Math.min(minLat, meal.location.latitude);
-        maxLat = Math.max(maxLat, meal.location.latitude);
-        minLng = Math.min(minLng, meal.location.longitude);
-        maxLng = Math.max(maxLng, meal.location.longitude);
-      }
-    });
-    
-    if (minLat === Number.MAX_VALUE) {
-      if (userLocation) {
-        return {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        };
-      }
-      return {
-        latitude: 37.78825,
-        longitude: -122.4324,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      };
-    }
-    
-    const centerLat = (minLat + maxLat) / 2;
-    const centerLng = (minLng + maxLng) / 2;
-    
-    const latDelta = (maxLat - minLat) * 1.2; 
-    const lngDelta = (maxLng - minLng) * 1.2;
-    
     return {
-      latitude: centerLat,
-      longitude: centerLng,
-      latitudeDelta: Math.max(0.01, latDelta),
-      longitudeDelta: Math.max(0.01, lngDelta),
+      latitude: 37.78825,
+      longitude: -122.4324,
+      latitudeDelta: 0.0922,
+      longitudeDelta: 0.0421,
     };
-  }, [nearbyMeals, userLocation]);
+  }, [userLocation]);
   
-  // Effect to handle tab activation
-  useEffect(() => {
-    if (tabIndex === 1 && mapRef.current) {
-      // Always try to fit the map, even with 0 meals
-      setTimeout(() => fitMapToMarkers(), 500);
-    }
-  }, [tabIndex, filteredMealsForMap.length]);
-
-  // Effect to handle filter mode changes - refit the map when switching modes
-  useEffect(() => {
-    if (tabIndex === 1 && mapRef.current) {
-      console.log(`HomeMapComponent: Filter mode changed to ${filterMode}, refitting map with ${filteredMealsForMap.length} meals`);
-      
-      // If no meals after filter change, center on user location
-      if (filteredMealsForMap.length === 0 && userLocation) {
-        setTimeout(() => {
-          mapRef.current?.animateToRegion({
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
-          }, 1000);
-        }, 300);
-      } else {
-        setTimeout(() => fitMapToMarkers(), 300);
-      }
-    }
-  }, [filterMode, tabIndex, filteredMealsForMap.length, userLocation]);
+  // Auto-fit-to-markers behavior removed: the map now opens centered on the
+  // user (see initialRegion) and stays where the user pans it. Filter changes
+  // no longer reposition the camera. Use the my-location FAB to recenter.
   
   // When user location becomes available, center the map
   useEffect(() => {
@@ -526,63 +482,86 @@ const HomeMapComponent: React.FC<Props> = ({
         onRegionChangeComplete={(region) => {
           const zoomLevel = calculateZoomLevel(region);
           setCurrentZoom(zoomLevel);
+          onRegionChange?.(region);
         }}
       >
-        {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant }) => {
+        {locationGroupedMarkers.map(({ locationKey, coordinate, meals, restaurant, uniqueRestaurants }) => {
           const currentIndex = selectedMarkerIndex[locationKey] || 0;
+          // Pick the "best" meal to represent the cluster: highest rating,
+          // tiebreak by oldest (so the marker is stable across rerenders).
+          const bestMeal = [...meals].sort((a, b) => {
+            if ((b.rating || 0) !== (a.rating || 0)) return (b.rating || 0) - (a.rating || 0);
+            const at = typeof a.createdAt === 'number' ? a.createdAt : 0;
+            const bt = typeof b.createdAt === 'number' ? b.createdAt : 0;
+            return at - bt;
+          })[0];
           const currentMeal = meals[currentIndex];
-          
+
+          // FullMap mode collapses every cluster to a dot (no pixel art);
+          // HomeScreen map keeps the FoodPassport-style pixel art for
+          // single-restaurant clusters.
+          const showDot = dotsOnly || uniqueRestaurants >= 2;
+          const markerType = showDot ? 'dot' : 'art';
+
+          // Focus highlight for dotsOnly: if the carousel-focused meal
+          // lives in this cluster, draw the dot dark/navy instead of sage.
+          const clusterHasFocus =
+            dotsOnly && !!focusedMealId && meals.some(m => m.id === focusedMealId);
+
           return (
             <Marker
-              key={`${locationKey}-${currentZoom < 14 ? 'pin' : 'photo'}`}
+              key={`${locationKey}-${markerType}`}
               coordinate={coordinate}
-              tracksViewChanges={false}
-              onPress={() => handleMarkerPress(locationKey, meals)}
+              // Dots are cheap to redraw, so we let RN re-track view changes
+              // in dotsOnly mode — that's what makes the focus highlight
+              // actually update. Photo-art markers stay pinned for perf.
+              tracksViewChanges={dotsOnly}
+              onPress={dotsOnly ? undefined : () => handleMarkerPress(locationKey, meals)}
             >
-              {/* Show simple pins when zoomed out, photos when zoomed in */}
-              {currentZoom < 14 ? (
-                // Simple pin marker for zoomed out view
-                <View style={styles.simplePinMarker}>
-                  <View style={styles.pinDot} />
-                  {meals.length > 1 && (
-                    <View style={styles.pinBadge}>
-                      <Text style={styles.pinBadgeText}>{meals.length}</Text>
-                    </View>
-                  )}
+              {showDot ? (
+                // Cluster dot — sized by unique restaurant count. In
+                // dotsOnly mode single-restaurant clusters collapse to the
+                // minimum 14px size (uniqueRestaurants === 1 → size 14).
+                (() => {
+                  const baseSize = 14;
+                  const dotSize = uniqueRestaurants >= 2
+                    ? Math.min(baseSize + Math.sqrt(uniqueRestaurants - 1) * 8, 36)
+                    : baseSize;
+                  return (
+                    <View style={[
+                      styles.scaledDot,
+                      clusterHasFocus && styles.scaledDotFocused,
+                      { width: dotSize, height: dotSize, borderRadius: dotSize / 2 },
+                    ]} />
+                  );
+                })()
+              ) : bestMeal.pixel_art_url ? (
+                <View style={styles.customPhotoMarker}>
+                  <Image
+                    source={{ uri: bestMeal.pixel_art_url }}
+                    style={styles.markerPixelArt}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : bestMeal.pixel_art_data ? (
+                <View style={styles.customPhotoMarker}>
+                  <Image
+                    source={{ uri: `data:image/png;base64,${bestMeal.pixel_art_data}` }}
+                    style={styles.markerPixelArt}
+                    resizeMode="contain"
+                  />
                 </View>
               ) : (
-                // Photo marker for zoomed in view (existing behavior)
-                <View style={styles.customPhotoMarker}>
-                {currentMeal.photoUrl && !imageErrors[currentMeal.id] ? (
-                  <Image
-                    source={{ uri: currentMeal.photoUrl }}
-                    style={styles.markerPhoto}
-                    onError={() => onImageError(currentMeal.id)}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
-                    <Icon name="image" size={20} color="#ddd" />
-                  </View>
-                )}
-                {meals.length > 1 && (
-                  <View style={styles.pagerDots}>
-                    {meals.map((_, index) => (
-                      <View
-                        key={index}
-                        style={[
-                          styles.pagerDot,
-                          index === currentIndex && styles.pagerDotActive,
-                          { backgroundColor: index === currentIndex ? '#E63946' : '#ddd' }
-                        ]}
-                      />
-                    ))}
-                  </View>
-                )}
-              </View>
+                // No pixel art — show a small dot (matches FoodPassport fallback)
+                <View style={[
+                  styles.scaledDot,
+                  { width: 14, height: 14, borderRadius: 7 },
+                ]} />
               )}
-              {/* Only show callout when zoomed in for photo markers */}
-              {currentZoom >= 14 && (
+              {/* Callout shown only for single-restaurant pixel-art
+                  markers on HomeScreen. FullMap (dotsOnly) opts out —
+                  carousel below owns the "see this meal" UX. */}
+              {!showDot && !dotsOnly && (
                 <Callout
                 tooltip
                 onPress={() => onViewMealDetails(currentMeal)}
@@ -638,36 +617,39 @@ const HomeMapComponent: React.FC<Props> = ({
       </MapView>
       
       
-      {/* Filter toggle - positioned at top left */}
-      <View style={styles.followingToggleContainer}>
-        <TouchableOpacity
-          style={[
-            styles.followingToggleButton, 
-            filterMode === 'following' && styles.followingToggleButtonActive,
-            filterMode === 'saved' && styles.savedToggleButtonActive
-          ]}
-          onPress={() => {
-            const nextMode = filterMode === 'all' ? 'following' : filterMode === 'following' ? 'saved' : 'all';
-            console.log(`HomeMapComponent: Toggle pressed - current mode: ${filterMode}, new mode: ${nextMode}`);
-            setFilterMode(nextMode);
-          }}
-          disabled={loadingFollowing || loadingSaved}
-        >
-          {(loadingFollowing || loadingSaved) ? (
-            <ActivityIndicator size="small" color="#1a2b49" />
-          ) : (
-            <Text style={[
-              styles.followingToggleText, 
-              filterMode === 'following' && styles.followingToggleTextActive,
-              filterMode === 'saved' && styles.followingToggleTextActive
-            ]}>
-              {filterMode === 'all' ? 'Showing: All' : 
-               filterMode === 'following' ? 'Showing: Following' : 
-               'Showing: Wishlist'}
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      {/* Filter toggle - positioned at top left. Hidden on FullMap where
+          the quick-chip row replaces it. */}
+      {!hideFilterModeToggle && (
+        <View style={styles.followingToggleContainer}>
+          <TouchableOpacity
+            style={[
+              styles.followingToggleButton,
+              filterMode === 'following' && styles.followingToggleButtonActive,
+              filterMode === 'saved' && styles.savedToggleButtonActive
+            ]}
+            onPress={() => {
+              const nextMode = filterMode === 'all' ? 'following' : filterMode === 'following' ? 'saved' : 'all';
+              console.log(`HomeMapComponent: Toggle pressed - current mode: ${filterMode}, new mode: ${nextMode}`);
+              setFilterMode(nextMode);
+            }}
+            disabled={loadingFollowing || loadingSaved}
+          >
+            {(loadingFollowing || loadingSaved) ? (
+              <ActivityIndicator size="small" color="#1a2b49" />
+            ) : (
+              <Text style={[
+                styles.followingToggleText,
+                filterMode === 'following' && styles.followingToggleTextActive,
+                filterMode === 'saved' && styles.followingToggleTextActive
+              ]}>
+                {filterMode === 'all' ? 'Showing: All' :
+                 filterMode === 'following' ? 'Showing: Following' :
+                 'Showing: Wishlist'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
       
       <View style={styles.mapButtonContainer}>
         <TouchableOpacity
@@ -926,6 +908,28 @@ const styles = StyleSheet.create({
     tintColor: '#1a2b49', // Navy tint for the icon on cream background
   },
   // Simple pin marker styles for zoomed out view
+  // Cluster dot — drawn at varying sizes based on uniqueRestaurants count.
+  // Mirrors screens/MapScreen.tsx (FoodPassport map) so both surfaces match.
+  scaledDot: {
+    backgroundColor: '#5B8A72', // sage green — matches map style accents
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  // Used in dotsOnly mode (FullMap) when the carousel below has this
+  // cluster's meal focused — navy takes over sage so the "which dot =
+  // which card" mapping pops visually.
+  scaledDotFocused: {
+    backgroundColor: '#1a2b49', // navy — app accent
+  },
+  markerPixelArt: {
+    width: 30,
+    height: 30,
+  },
   simplePinMarker: {
     width: 22, // Width to accommodate pin (12) + badge extension (5+5)
     height: 22, // Height to accommodate pin (12) + badge extension (5+5)

@@ -1,8 +1,9 @@
 /**
  * IconicEatModal
- * Centered modal displaying an iconic eat's details:
- * dish name, restaurant, why_selected, photo (Places photo or emoji fallback),
- * and a "Show on map" CTA. Used from the Discover IconicEatsRow and map markers.
+ * Centered modal displaying an iconic eat's details: category label, dish
+ * name, restaurant, why_selected, and photo (Places photo or emoji
+ * fallback). Dismisses by tapping the dark overlay. Used from the Discover
+ * IconicEatsRow and map markers.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,6 +15,8 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  Linking,
+  Alert,
 } from 'react-native';
 import { colors, spacing } from '../themes';
 import {
@@ -25,10 +28,13 @@ interface Props {
   visible: boolean;
   eat: IconicEat | null;
   onClose: () => void;
-  onShowOnMap: (eat: IconicEat) => void;
+  // Accepted for backwards compatibility with existing callers, but no
+  // longer invoked — the "Show on map" button has been removed. The
+  // modal dismisses on overlay tap instead.
+  onShowOnMap?: (eat: IconicEat) => void;
 }
 
-const IconicEatModal: React.FC<Props> = ({ visible, eat, onClose, onShowOnMap }) => {
+const IconicEatModal: React.FC<Props> = ({ visible, eat, onClose }) => {
   const [photoFailed, setPhotoFailed] = useState(false);
 
   useEffect(() => {
@@ -36,6 +42,35 @@ const IconicEatModal: React.FC<Props> = ({ visible, eat, onClose, onShowOnMap })
   }, [eat?.id]);
 
   if (!eat) return null;
+
+  // Open the restaurant in Google Maps — mirrors the pattern used on
+  // MealDetailScreen (`handleRestaurantPress`) so taps here feel the
+  // same as tapping any other restaurant link in the app.
+  const openInGoogleMaps = async () => {
+    if (!eat.restaurant_name) return;
+    try {
+      let searchQuery = eat.restaurant_name;
+      if (eat.city) searchQuery += `, ${eat.city}`;
+      const query = encodeURIComponent(searchQuery);
+
+      const googleMapsUrl = `comgooglemaps://?q=${query}`;
+      const canOpenGoogleMaps = await Linking.canOpenURL(googleMapsUrl);
+      if (canOpenGoogleMaps) {
+        await Linking.openURL(googleMapsUrl);
+        return;
+      }
+      const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
+      const canOpenWeb = await Linking.canOpenURL(webUrl);
+      if (canOpenWeb) {
+        await Linking.openURL(webUrl);
+      } else {
+        Alert.alert('Error', 'Unable to open maps application');
+      }
+    } catch (error) {
+      console.error('Error opening maps:', error);
+      Alert.alert('Error', 'Failed to open maps application');
+    }
+  };
 
   const placesPhoto = buildPlacesPhotoUrl(eat.photo_references?.[0], 800);
   const showPlacesPhoto = !!placesPhoto && !photoFailed;
@@ -77,28 +112,17 @@ const IconicEatModal: React.FC<Props> = ({ visible, eat, onClose, onShowOnMap })
             </View>
 
             <View style={styles.content}>
-              <Text style={styles.iconicLabel}>ICONIC EAT</Text>
+              <Text style={styles.iconicLabel}>
+                {(eat.category || 'Iconic Eat').toUpperCase()}
+              </Text>
               <Text style={styles.dishName}>{eat.dish_name}</Text>
-              <Text style={styles.restaurant}>{eat.restaurant_name}</Text>
-              {eat.formatted_address ? (
-                <Text style={styles.address}>{eat.formatted_address}</Text>
-              ) : null}
+              <TouchableOpacity onPress={openInGoogleMaps} activeOpacity={0.7}>
+                <Text style={styles.restaurant}>{eat.restaurant_name}</Text>
+              </TouchableOpacity>
 
               <View style={styles.divider} />
 
               <Text style={styles.whySelected}>{eat.why_selected}</Text>
-
-              <View style={styles.buttons}>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => onShowOnMap(eat)}
-                >
-                  <Text style={styles.primaryText}>Show on map</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
-                  <Text style={styles.secondaryText}>Close</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </ScrollView>
         </TouchableOpacity>
@@ -180,11 +204,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 2,
   },
-  address: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
   divider: {
     height: 1,
     backgroundColor: colors.lightTan,
@@ -194,36 +213,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textPrimary,
     lineHeight: 20,
-  },
-  buttons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 18,
-  },
-  primaryButton: {
-    backgroundColor: '#1a2b49',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-  },
-  primaryText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.mediumGray,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-  },
-  secondaryText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
 

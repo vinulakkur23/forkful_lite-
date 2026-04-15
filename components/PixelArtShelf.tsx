@@ -45,6 +45,72 @@ const HORIZONTAL_PADDING = 16;
 const TABLE_GAP = 12;
 const DEFAULT_COLUMNS = 6;
 
+// Re-exported so DraggableEmojiGrid can render the wooden-tile background
+// directly (the modal's read-only view drives its layout from DraggableEmojiGrid
+// now, but still wants the TableGrid aesthetic).
+export { TILE_SETS, HORIZONTAL_PADDING, TABLE_GAP };
+
+// Standalone backdrop (tiles + legs, no emojis) for use as a render prop into
+// DraggableEmojiGrid. Kept here (rather than in DraggableEmojiGrid) so the
+// tile-asset imports live in one place, and to avoid a circular import with
+// this file.
+export const TableBackdrop: React.FC<{
+  columns: number;
+  rows: number;           // rows of content; backdrop enforces min 2 internally
+  cellSize: number;
+  gridWidth: number;
+  furniture?: FurnitureType;
+  showLegs?: boolean;
+}> = ({ columns, rows, cellSize, gridWidth, furniture = 'wooden_table', showLegs = true }) => {
+  const tileSet = TILE_SETS[furniture];
+  const totalRows = Math.max(2, rows);
+  const legHeight = cellSize;
+  const height = totalRows * cellSize + (showLegs ? legHeight : 0);
+
+  const cells: Array<{ row: number; col: number; key: TileKey }> = [];
+  for (let r = 0; r < totalRows; r++) {
+    for (let c = 0; c < columns; c++) {
+      cells.push({ row: r, col: c, key: getTileKey(r, c, totalRows, columns) });
+    }
+  }
+
+  return (
+    <View style={[styles.tableContainer, { width: gridWidth, height }]} pointerEvents="none">
+      {cells.map(({ row, col, key }) => (
+        <Image
+          key={`tile_${row}_${col}`}
+          source={tileSet[key]}
+          style={[
+            styles.tile,
+            { left: col * cellSize, top: row * cellSize, width: cellSize, height: cellSize },
+          ]}
+          resizeMode="stretch"
+        />
+      ))}
+      {showLegs && (
+        <>
+          <Image
+            source={tileSet.leg_l}
+            style={[
+              styles.tile,
+              { left: 0, top: totalRows * cellSize, width: cellSize, height: legHeight },
+            ]}
+            resizeMode="stretch"
+          />
+          <Image
+            source={tileSet.leg_r}
+            style={[
+              styles.tile,
+              { left: (columns - 1) * cellSize, top: totalRows * cellSize, width: cellSize, height: legHeight },
+            ]}
+            resizeMode="stretch"
+          />
+        </>
+      )}
+    </View>
+  );
+};
+
 const getTileKey = (
   row: number,
   col: number,
@@ -283,6 +349,9 @@ export const PixelArtShelfModal: React.FC<{
   tableConfigs?: TableConfig[];
   isOwnProfile?: boolean;
   onReorder?: (tables: string[][], configs: TableConfig[]) => void;
+  // Tapping an emoji fires this with its URI (Food Passport uses it to navigate
+  // to the matching meal detail). Drag-to-reorder is a separate gesture.
+  onEmojiPress?: (uri: string) => void;
 }> = ({
   visible,
   onClose,
@@ -291,6 +360,7 @@ export const PixelArtShelfModal: React.FC<{
   tableConfigs: savedConfigs,
   isOwnProfile = false,
   onReorder,
+  onEmojiPress,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTables, setEditTables] = useState<string[][]>([]);
@@ -435,6 +505,20 @@ export const PixelArtShelfModal: React.FC<{
     setEditConfigs(newConfigs);
   };
 
+  // Inline reorder (not edit mode): every drop auto-persists. Strip any
+  // accidentally-emptied tables before saving, same as handleDoneEdit.
+  const handleInlineReorder = (newTables: string[][], newConfigs: TableConfig[]) => {
+    const finalTables: string[][] = [];
+    const finalConfigs: TableConfig[] = [];
+    for (let i = 0; i < newTables.length; i++) {
+      if (newTables[i].length > 0) {
+        finalTables.push(newTables[i]);
+        finalConfigs.push(newConfigs[i]);
+      }
+    }
+    onReorder?.(finalTables, finalConfigs);
+  };
+
   if (!visible) return null;
 
   return (
@@ -485,26 +569,26 @@ export const PixelArtShelfModal: React.FC<{
             onAddTable={handleAddTable}
           />
         ) : (
-          <ScrollView
-            style={styles.modalScrollView}
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {tables.map((tableEmojis, tableIndex) => {
-              const config = configs[tableIndex] || DEFAULT_CONFIG;
-              const tableGridWidth = config.columns * cellSize;
-              return (
-                <TableGrid
-                  key={`table_${tableIndex}`}
-                  emojis={tableEmojis}
-                  columns={config.columns}
-                  cellSize={cellSize}
-                  gridWidth={tableGridWidth}
-                  furniture={config.furniture}
-                />
-              );
-            })}
-          </ScrollView>
+          // Non-edit view: still draggable (if own profile) + tappable (tap
+          // emoji → navigate to meal detail). Wooden-tile backdrop matches the
+          // previous TableGrid look.
+          <DraggableEmojiGrid
+            tables={tables}
+            tableConfigs={configs}
+            onTablesChange={handleInlineReorder}
+            onTilePress={onEmojiPress}
+            dragEnabled={isOwnProfile}
+            reserveLegRoom
+            renderTableBackdrop={({ columns, rows, cellSize: cs, gridWidth, furniture }) => (
+              <TableBackdrop
+                columns={columns}
+                rows={rows}
+                cellSize={cs}
+                gridWidth={gridWidth}
+                furniture={furniture}
+              />
+            )}
+          />
         )}
       </SafeAreaView>
     </Modal>

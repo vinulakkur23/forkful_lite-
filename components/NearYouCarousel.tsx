@@ -35,6 +35,10 @@ interface NearYouCarouselProps {
   meals: MealEntry[];
   onMealPress: (meal: MealEntry) => void;
   onFocusChange: (mealId: string | null) => void;
+  // Optional section title override. Discover home uses the default
+  // "Near You"; FullMap passes e.g. "In view" so the copy matches the
+  // different selection model (region-bounded instead of proximity-based).
+  title?: string;
 }
 
 export interface NearYouCarouselRef {
@@ -75,7 +79,7 @@ function getMealPhoto(meal: MealEntry): string | null {
 }
 
 const NearYouCarousel = forwardRef<NearYouCarouselRef, NearYouCarouselProps>(
-  ({ meals, onMealPress, onFocusChange }, ref) => {
+  ({ meals, onMealPress, onFocusChange, title = 'Near You' }, ref) => {
     const flatListRef = useRef<FlatList>(null);
     const lastCenteredIndex = useRef<number>(0);
 
@@ -163,7 +167,7 @@ const NearYouCarousel = forwardRef<NearYouCarouselRef, NearYouCarouselProps>(
 
     return (
       <View style={styles.container}>
-        <Text style={styles.sectionTitle}>Near You</Text>
+        <Text style={styles.sectionTitle}>{title}</Text>
         <FlatList
           ref={flatListRef}
           data={meals}

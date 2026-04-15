@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Image, Alert, ScrollView, Modal, RefreshControl } from 'react-native';
+import { View, Text, SafeAreaView, StyleSheet, ActivityIndicator, TouchableOpacity, Dimensions, Alert, ScrollView, Modal, RefreshControl } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, TabParamList } from '../App';
 import FoodPassportScreen from './FoodPassportScreen';
 import MapScreen from './MapScreen';
-import StampsScreen from './StampsScreen';
-import SavedMealsScreen from './SavedMealsScreen';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { firebase, auth, firestore } from '../firebaseConfig';
@@ -80,8 +78,6 @@ class ErrorBoundary extends React.Component<
 type Route = {
   key: string;
   title: string;
-  activeIcon: any;
-  inactiveIcon: any;
 };
 
 const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
@@ -106,37 +102,22 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
     followersCount: 0,
     totalCheers: 0
   });
+  // Populated asynchronously by FoodPassportScreen.loadAllAccolades once the
+  // user's mealEntries have been aggregated into cuisine/city lists.
+  const [accoladeCounts, setAccoladeCounts] = useState({ cuisines: 0, cities: 0 });
   
   // Follow state
   const [isUserFollowing, setIsUserFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   
-  // Always show all 4 tabs for consistency
+  // Two tabs: List view (Meals) and Map view. Wishlist and Accolades were
+  // removed — Wishlist is now a filter chip, Accolades render inline on the
+  // Meals tab. Keeping Map as a peer tab (not a CTA) because it's a genuine
+  // second view of the same data (feed vs geography), and the discovery use
+  // case on other users' profiles depends on it being prominent.
   const routes = React.useMemo<Route[]>(() => [
-    { 
-      key: 'passport', 
-      title: 'Meals', 
-      activeIcon: require('../assets/icons/passport_tabs/meals-active.png'), 
-      inactiveIcon: require('../assets/icons/passport_tabs/meals-inactive.png')
-    },
-    { 
-      key: 'saved', 
-      title: 'Wishlist', 
-      activeIcon: require('../assets/icons/passport_tabs/wishlist-active.png'),
-      inactiveIcon: require('../assets/icons/passport_tabs/wishlist-inactive.png')
-    },
-    { 
-      key: 'map', 
-      title: 'Map', 
-      activeIcon: require('../assets/icons/passport_tabs/map-active.png'), 
-      inactiveIcon: require('../assets/icons/passport_tabs/map-inactive.png')
-    },
-    { 
-      key: 'stamps', 
-      title: 'Accolades', 
-      activeIcon: require('../assets/icons/passport_tabs/stamps-active.png'), 
-      inactiveIcon: require('../assets/icons/passport_tabs/stamps-inactive.png')
-    },
+    { key: 'passport', title: 'Meals' },
+    { key: 'map', title: 'Map' },
   ], []);
   
   // Shared filter state for both tabs - now an array of filters
@@ -449,6 +430,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               userName={userName}
               userPhoto={userPhoto}
               onStatsUpdate={(stats) => setProfileStats(stats)}
+              onAccoladeCountsChange={setAccoladeCounts}
               onFilterChange={handleFilterChange}
               onTabChange={setTabIndex}
               onThemePress={isOwnProfile ? () => setShowColorPicker(true) : undefined}
@@ -459,18 +441,6 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
             />
           </ErrorBoundary>
         );
-      case 'saved':
-        return (
-          <ErrorBoundary navigation={navigation}>
-            <SavedMealsScreen 
-              navigation={navigation}
-              activeFilters={activeFilters}
-              activeRatingFilters={activeRatingFilters}
-              userId={targetUserId}
-              isOwnProfile={isOwnProfile}
-            />
-          </ErrorBoundary>
-        );
       case 'map':
         return (
           <ErrorBoundary navigation={navigation}>
@@ -478,21 +448,9 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
               navigation={navigation}
               activeFilters={activeFilters}
               activeRatingFilters={activeRatingFilters}
-              isActive={tabIndex === 2} // Map is always at index 2 now
+              isActive={tabIndex === 1} // Map is now index 1 (2nd of 2 tabs)
               userId={targetUserId}
               onFilterChange={handleFilterChange}
-            />
-          </ErrorBoundary>
-        );
-      case 'stamps':
-        return (
-          <ErrorBoundary navigation={navigation}>
-            <StampsScreen 
-              userId={targetUserId}
-              navigation={navigation}
-              onFilterChange={handleFilterChange}
-              onTabChange={setTabIndex}
-              route={{ params: { openChallengeModal: openChallengeModal } }}
             />
           </ErrorBoundary>
         );
@@ -518,7 +476,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         ref={scrollViewRef}
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={tabIndex !== 2}
+        scrollEnabled={tabIndex !== 1}
         refreshControl={
           tabIndex === 0 ? (
             <RefreshControl
@@ -543,39 +501,45 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
           onNotificationPress={isOwnProfile ? handleNotificationPress : undefined}
         />
 
-        {/* Tab navigation */}
-        <View
-          style={styles.tabBarContainer}
-          // onLayout commented out for custom onboarding
-          // onLayout={(event) => {
-          //   const layout = event.nativeEvent.layout;
-          //   console.log('📐 FoodPassport: Tab bar layout detected:', layout);
-          //   setTabBarLayout(layout);
-          // }}
-        >
-          {routes.map((route, i) => (
-            <TouchableOpacity
-              key={route.key}
-              style={[
-                styles.tabButton,
-                { borderBottomWidth: tabIndex === i ? 3 : 0 }
-              ]}
-              onPress={() => setTabIndex(i)}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={tabIndex === i ? route.activeIcon : route.inactiveIcon}
-                style={[styles.tabIcon, { tintColor: tabIndex === i ? '#5B8A72' : '#858585' }]}
-                resizeMode="contain"
-              />
-              <Text style={[
-                styles.tabLabel,
-                { color: tabIndex === i ? '#5B8A72' : '#858585' }
-              ]}>
-                {route.title}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Tab navigation — text-only underline tabs, left-aligned.
+            Two tabs wouldn't fill a flex:1 row elegantly, so we switched to
+            the Twitter/Instagram profile pattern: tight text labels with a
+            short underline on the active one. The freed right-hand space
+            shows the user's total meal count — both fills the row
+            purposefully and gives an at-a-glance "passport depth" read
+            (especially on other users' profiles). */}
+        <View style={styles.tabBarContainer}>
+          {routes.map((route, i) => {
+            const active = tabIndex === i;
+            return (
+              <TouchableOpacity
+                key={route.key}
+                style={styles.tabButton}
+                onPress={() => setTabIndex(i)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                  {route.title}
+                </Text>
+                {active && <View style={styles.tabUnderline} />}
+              </TouchableOpacity>
+            );
+          })}
+          <View style={{ flex: 1 }} />
+          {profileStats && profileStats.totalMeals > 0 && (() => {
+            // Build "47 meals, 12 cuisines, 8 cities" — drop any segment that
+            // hasn't been counted yet (accoladeCounts loads a tick after
+            // profileStats) or is zero, so we never show "0 cuisines".
+            const parts: string[] = [];
+            parts.push(`${profileStats.totalMeals} ${profileStats.totalMeals === 1 ? 'meal' : 'meals'}`);
+            if (accoladeCounts.cuisines > 0) {
+              parts.push(`${accoladeCounts.cuisines} ${accoladeCounts.cuisines === 1 ? 'cuisine' : 'cuisines'}`);
+            }
+            if (accoladeCounts.cities > 0) {
+              parts.push(`${accoladeCounts.cities} ${accoladeCounts.cities === 1 ? 'city' : 'cities'}`);
+            }
+            return <Text style={styles.tabBarCount}>{parts.join(', ')}</Text>;
+          })()}
         </View>
         
         {/* Shared filter component */}
@@ -622,7 +586,7 @@ const FoodPassportWrapper: React.FC<FoodPassportWrapperProps> = (props) => {
         {/* Content area */}
         <View style={[
           styles.contentContainer,
-          tabIndex === 2 && styles.mapContentContainer // Special styling for map tab
+          tabIndex === 1 && styles.mapContentContainer // Special styling for map tab
         ]}>
           {renderScene({ route: routes[tabIndex] })}
         </View>
@@ -768,8 +732,10 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'transparent',
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -783,22 +749,36 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   tabButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomColor: '#5B8A72', // Sage green
-    backgroundColor: 'transparent', // Explicitly set transparent background
-  },
-  tabIcon: {
-    width: 24,
-    height: 24,
+    paddingBottom: 10,
+    marginRight: 24,
+    alignItems: 'flex-start',
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 1,
-    textAlign: 'center',
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    color: '#858585',
+    fontFamily: 'Inter-Regular',
+  },
+  tabLabelActive: {
+    color: '#5B8A72',
+    fontFamily: 'Inter-Medium',
+  },
+  // Underline sits at the bottom of the active tab, positioned to cross the
+  // container's 1px grey baseline so it reads as a selection indicator, not
+  // an extra stripe.
+  tabUnderline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -1,
+    height: 2.5,
+    backgroundColor: '#5B8A72',
+    borderRadius: 1.5,
+  },
+  tabBarCount: {
+    fontSize: 12,
+    color: '#999',
+    fontFamily: 'Inter-Regular',
+    paddingBottom: 10,
   },
   contentContainer: {
     flex: 1,

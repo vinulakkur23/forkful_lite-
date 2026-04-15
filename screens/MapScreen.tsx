@@ -51,6 +51,7 @@ interface MealEntry {
   id: string;
   photoUrl: string;
   pixel_art_url?: string;
+  pixel_art_data?: string; // base64 — older meals stored pixel art inline
   rating: number;
   restaurant: string;
   meal: string;
@@ -88,6 +89,11 @@ const calculateZoomLevel = (region: Region): number => {
 };
 
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, activeRatingFilters, isActive, userId, onFilterChange }) => {
+  // Note: `userId` is always passed from FoodPassportWrapper (it falls back to the
+  // current user's uid). So `!userId` is NOT a reliable "own profile" check here —
+  // we have to compare against the auth uid explicitly.
+  const currentUid = auth().currentUser?.uid;
+  const isOwnProfile = !userId || userId === currentUid;
   const [allMeals, setAllMeals] = useState<MealEntry[]>([]);
   const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,20 +172,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
     return groupedMarkers;
   }, [filteredMeals, currentZoom]);
 
-  // Force meals view (not wishlist) when in passport context
+  // Force meals view (not wishlist) when viewing someone else's profile
   useEffect(() => {
-    if (userId && showWishlist) {
+    if (!isOwnProfile && showWishlist) {
       setShowWishlist(false);
     }
-  }, [userId]);
+  }, [isOwnProfile]);
 
   useEffect(() => {
-    if (showWishlist && !userId) { // Only allow wishlist when not in passport context
+    if (showWishlist && isOwnProfile) {
       fetchSavedMeals();
     } else {
       fetchMealEntries();
     }
-  }, [showWishlist, userId]); // Re-fetch when toggling between modes or userId changes
+  }, [showWishlist, isOwnProfile]); // Re-fetch when toggling between modes or profile changes
 
   const fetchSavedMeals = async () => {
     try {
@@ -241,6 +247,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
                 fetchedMeals.push({
                   id: mealDoc.id,
                   photoUrl: data.photoUrl,
+                  pixel_art_url: data.pixel_art_url,
+                  pixel_art_data: data.pixel_art_data,
                   rating: data.rating,
                   restaurant: data.restaurant || '',
                   meal: data.meal || '',
@@ -312,6 +320,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, activeFilters, active
             id: doc.id,
             photoUrl: data.photoUrl,
             pixel_art_url: data.pixel_art_url || '',
+            pixel_art_data: data.pixel_art_data,
             rating: data.rating,
             restaurant: data.restaurant || '',
             meal: data.meal || '',
@@ -745,20 +754,29 @@ function initMap(){
     }
   };
 
-  // City chips — derived from all meals (must be above early returns)
+  // City chips — derived from all meals (must be above early returns).
+  // Dedupe case-insensitively so "Venice" and "venice" collapse into one
+  // chip, and always display Title Case (matches the Cities section on the
+  // List tab, which already normalizes this way).
   const cityChips = useMemo(() => {
     const counts: Record<string, number> = {};
+    const display: Record<string, string> = {};
     allMeals.forEach((m) => {
-      const city = m.city || m.location?.city || '';
-      if (city.trim()) {
-        const name = city.trim();
-        counts[name] = (counts[name] || 0) + 1;
+      const raw = (m.city || m.location?.city || '').trim();
+      const key = raw.toLowerCase();
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+      if (!display[key]) {
+        display[key] = raw
+          .split(/\s+/)
+          .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ''))
+          .join(' ');
       }
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 12)
-      .map(([name]) => ({label: name, type: 'city', value: name.toLowerCase()}));
+      .map(([key]) => ({ label: display[key], type: 'city', value: display[key] }));
   }, [allMeals]);
 
   const isCityChipActive = (chip: {type: string; value: string}) =>
@@ -864,41 +882,66 @@ function initMap(){
                   );
                 })()
               ) : (
-                // Single restaurant — show pixel art
-                <View style={styles.customPhotoMarker}>
-                  {bestMeal.pixel_art_url ? (
+                // Single restaurant — show pixel art if we have it.
+                // Older meals stored pixel art as base64 in pixel_art_data;
+                // newer meals use a Storage URL in pixel_art_url. If neither
+                // exists (older / wishlist meals without pixel art), fall back
+                // to a small dot rather than the raw photo — keeps the map
+                // looking consistent with the artistic style.
+                bestMeal.pixel_art_url ? (
+                  <View style={styles.customPhotoMarker}>
                     <Image
                       source={{ uri: bestMeal.pixel_art_url }}
                       style={styles.markerPixelArt}
                       resizeMode="contain"
                     />
-                  ) : bestMeal.photoUrl && !imageErrors[bestMeal.id] ? (
+                  </View>
+                ) : bestMeal.pixel_art_data ? (
+                  <View style={styles.customPhotoMarker}>
                     <Image
-                      source={{ uri: bestMeal.photoUrl }}
-                      style={styles.markerPhoto}
-                      onError={() => handleImageError(bestMeal.id)}
+                      source={{ uri: `data:image/png;base64,${bestMeal.pixel_art_data}` }}
+                      style={styles.markerPixelArt}
+                      resizeMode="contain"
                     />
-                  ) : (
-                    <View style={[styles.markerPhoto, styles.markerPhotoPlaceholder]}>
-                      <Icon name="image" size={20} color="#ddd" />
-                    </View>
-                  )}
-                </View>
+                  </View>
+                ) : (
+                  <View style={[
+                    styles.scaledDot,
+                    { width: 14, height: 14, borderRadius: 7 },
+                  ]} />
+                )
               )}
             </Marker>
           );
         })}
       </MapView>
 
-      {/* City chips — rendered AFTER MapView so they sit on top of the native map */}
-      {cityChips.length > 1 && onFilterChange && (
+      {/* Chip strip — rendered AFTER MapView so it sits on top of the native
+          map. Wishlist is pinned as the first chip (own-profile only, since
+          savedMeals are private); its tap swaps the map's data source via
+          showWishlist rather than pushing a filter onto activeFilters. City
+          chips follow. Replaces the older "Showing: Wishlist / Meals" toggle
+          button that used to live in the bottom-right corner. */}
+      {(cityChips.length > 0 || (isOwnProfile && onFilterChange)) && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.cityChipsContainer}
           contentContainerStyle={styles.cityChipsRow}
         >
-          {cityChips.map((chip) => {
+          {isOwnProfile && (
+            <TouchableOpacity
+              key="wishlist-chip"
+              style={[styles.cityChip, showWishlist && styles.cityChipActive]}
+              onPress={() => setShowWishlist(!showWishlist)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cityChipText, showWishlist && styles.cityChipTextActive]}>
+                Wishlist
+              </Text>
+            </TouchableOpacity>
+          )}
+          {onFilterChange && cityChips.map((chip) => {
             const active = isCityChipActive(chip);
             return (
               <TouchableOpacity
@@ -914,27 +957,6 @@ function initMap(){
             );
           })}
         </ScrollView>
-      )}
-
-      {/* Wishlist Toggle Button - Only show in standalone map, not in passport context */}
-      {!userId && (
-        <View style={styles.wishlistToggleContainer}>
-          <TouchableOpacity
-            style={[styles.wishlistToggleButton, showWishlist && styles.wishlistActive]}
-            onPress={() => setShowWishlist(!showWishlist)}
-          >
-            {showWishlist && (
-              <Image
-                source={require('../assets/icons/wishlist-active.png')}
-                style={styles.wishlistButtonIcon}
-                resizeMode="contain"
-              />
-            )}
-            <Text style={styles.wishlistToggleText}>
-              {showWishlist ? `Showing: Wishlist (${filteredMeals.length})` : `Showing: Meals (${filteredMeals.length})`}
-            </Text>
-          </TouchableOpacity>
-        </View>
       )}
       
       {/* Floating buttons */}

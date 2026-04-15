@@ -26,7 +26,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 // Import our custom EmojiDisplay component
 import EmojiDisplay from '../components/EmojiDisplay';
 import SimpleFilterComponent, { FilterItem } from '../components/SimpleFilterComponent';
+import { applyHomeFilters } from '../utils/applyHomeFilters';
 import CompositeFilterComponent from '../components/CompositeFilterComponent';
+import FullMapQuickChips from '../components/FullMapQuickChips';
 import NearbyUsersCarousel from '../components/NearbyUsersCarousel';
 import MiniMapStrip from '../components/MiniMapStrip';
 import DiscoverHeader from '../components/DiscoverHeader';
@@ -616,309 +618,15 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     fetchNearbyMeals();
   };
   
-  // Apply multiple filters to all nearby meals
+  // Apply multiple filters to all nearby meals.
+  // Delegates to applyHomeFilters (utils/applyHomeFilters.ts) so FullMapScreen
+  // can apply identical semantics without duplicating the predicate ladder.
   const applyFilter = () => {
-    if (!allNearbyMeals.length) {
-      console.log('HomeScreen: No meals to filter');
-      setNearbyMeals([]);
-      return;
-    }
-    
-    // Check if we have meals with metadata for debugging
-    const mealsWithMetadata = allNearbyMeals.filter(meal => meal.aiMetadata);
-    const mealsWithEnrichedMetadata = allNearbyMeals.filter(meal => meal.metadata_enriched);
-    console.log(`HomeScreen: Found ${mealsWithMetadata.length} meals with aiMetadata, ${mealsWithEnrichedMetadata.length} with metadata_enriched out of ${allNearbyMeals.length} total`);
-    
-    // Print some sample data to understand the structure
-    if (allNearbyMeals.length > 0) {
-      console.log('HomeScreen: Sample meal data (first meal):', {
-        id: allNearbyMeals[0].id,
-        meal: allNearbyMeals[0].meal,
-        restaurant: allNearbyMeals[0].restaurant,
-        city: allNearbyMeals[0].city,
-        locationCity: allNearbyMeals[0].location?.city,
-        aiMetadata: allNearbyMeals[0].aiMetadata,
-        metadata_enriched: allNearbyMeals[0].metadata_enriched
-      });
-    }
-    
-    // Start by filtering out homemade food (regardless of active filters)
-    let result = allNearbyMeals.filter(meal => {
-      // Check if meal is marked as homemade using the mealType field
-      const isHomemade = meal.mealType === "Homemade";
-      
-      if (isHomemade) {
-        console.log(`HomeScreen: Filtering out homemade meal: "${meal.meal}" (mealType: ${meal.mealType})`);
-      }
-      
-      return !isHomemade; // Exclude homemade meals
-    });
-    
-    console.log(`HomeScreen: After filtering out homemade: ${allNearbyMeals.length} meals -> ${result.length} meals remain`);
-    
-    // "Iconic Eats" chip is handled separately below (post-filter to completions).
-    // If it's the ONLY filter, we still need to apply the completion filter.
-    const iconicChipActive = !!activeFilters?.some(f => f.type === 'iconicEats');
-
-    // If no filters AT ALL are active, show the non-homemade meals
-    if ((!activeFilters || activeFilters.length === 0) && (!activeRatingFilters || activeRatingFilters.length === 0)) {
-      console.log('HomeScreen: No active filters, showing all non-homemade meals');
-      setNearbyMeals(result);
-      return;
-    }
-    
-    console.log(`HomeScreen: Applying ${activeFilters?.length || 0} additional filters and ${activeRatingFilters?.length || 0} rating filters:`, JSON.stringify(activeFilters), activeRatingFilters);
-    
-    // Apply each filter sequentially
-    if (activeFilters && activeFilters.length > 0) {
-      activeFilters.forEach(filter => {
-      // Iconic Eats is handled as a post-filter step below — no per-meal predicate here.
-      if (filter.type === 'iconicEats') {
-        return;
-      }
-      const countBefore = result.length;
-      console.log(`HomeScreen: Applying filter: ${filter.type} = ${filter.value}`);
-      console.log(`HomeScreen: Starting with ${countBefore} meals to filter`);
-      
-      // Debug: Show first few meals' data for this filter type
-      if (result.length > 0) {
-        console.log(`HomeScreen: Sample meal data for ${filter.type} filtering:`, {
-          meal: result[0].meal,
-          metadata_enriched: result[0].metadata_enriched,
-          enhanced_facts: result[0].enhanced_facts,
-          quick_criteria_result: result[0].quick_criteria_result
-        });
-      }
-      
-      if (filter.type === 'cuisineType') {
-        result = result.filter(meal => {
-          // Check old aiMetadata format
-          if (meal.aiMetadata?.cuisineType && meal.aiMetadata.cuisineType === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (aiMetadata): ${filter.value}`);
-            return true;
-          }
-          
-          // Check metadata_enriched format
-          if (meal.metadata_enriched?.cuisine_type && meal.metadata_enriched.cuisine_type === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (metadata_enriched): ${filter.value}`);
-            return true;
-          }
-          
-          // Check enhanced_facts format
-          if (meal.enhanced_facts?.food_facts?.cuisine_type && meal.enhanced_facts.food_facts.cuisine_type === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (enhanced_facts): ${filter.value}`);
-            return true;
-          }
-          
-          // Check quick_criteria_result format
-          if (meal.quick_criteria_result?.cuisine_type && meal.quick_criteria_result.cuisine_type === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches cuisineType (quick_criteria_result): ${filter.value}`);
-            return true;
-          }
-          
-          return false;
-        });
-      } else if (filter.type === 'foodType') {
-        result = result.filter(meal => {
-          // Check old aiMetadata format
-          if (meal.aiMetadata?.foodType) {
-            let matches = false;
-            if (Array.isArray(meal.aiMetadata.foodType)) {
-              matches = meal.aiMetadata.foodType.includes(filter.value);
-            } else {
-              matches = meal.aiMetadata.foodType === filter.value;
-            }
-            if (matches) {
-              console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (aiMetadata): ${filter.value}`);
-              return true;
-            }
-          }
-          
-          // Check metadata_enriched format
-          if (meal.metadata_enriched?.dish_general && meal.metadata_enriched.dish_general === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (metadata_enriched): ${filter.value}`);
-            return true;
-          }
-          
-          // Check enhanced_facts format
-          if (meal.enhanced_facts?.food_facts?.dish_general && meal.enhanced_facts.food_facts.dish_general === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (enhanced_facts): ${filter.value}`);
-            return true;
-          }
-          
-          // Check quick_criteria_result format
-          if (meal.quick_criteria_result?.dish_general && meal.quick_criteria_result.dish_general === filter.value) {
-            console.log(`HomeScreen: Meal "${meal.meal}" matches foodType (quick_criteria_result): ${filter.value}`);
-            return true;
-          }
-          
-          return false;
-        });
-      } else if (filter.type === 'city') {
-        result = result.filter(meal => {
-          // First check if city is stored as top-level city property
-          if (meal.city) {
-            const matches = meal.city.toLowerCase() === filter.value.toLowerCase();
-            if (matches) {
-              console.log(`HomeScreen: Meal "${meal.meal}" matches city (top-level): ${filter.value}`);
-            }
-            return matches;
-          }
-          
-          // Next check if city is stored in location.city
-          if (meal.location && meal.location.city) {
-            const matches = meal.location.city.toLowerCase() === filter.value.toLowerCase();
-            if (matches) {
-              console.log(`HomeScreen: Meal "${meal.meal}" matches city (location): ${filter.value}`);
-            }
-            return matches;
-          }
-          
-          // Fallback: Try to match city in restaurant field
-          if (meal.restaurant && meal.restaurant.includes(',')) {
-            const restaurantParts = meal.restaurant.split(',');
-            if (restaurantParts.length > 1) {
-              // Handle cases where city might be "Portland OR" format
-              const secondPart = restaurantParts[1].trim();
-              const cityPart = secondPart.includes(' ') ? secondPart.split(' ')[0] : secondPart;
-              
-              const matches = cityPart.toLowerCase() === filter.value.toLowerCase();
-              if (matches) {
-                console.log(`HomeScreen: Meal "${meal.meal}" matches city (restaurant): ${filter.value}`);
-              }
-              return matches;
-            }
-          }
-          return false;
-        });
-      } else if (filter.type === 'dishName') {
-        result = result.filter(meal => {
-          // Debug each meal for dishName filter
-          console.log(`HomeScreen: Checking meal "${meal.meal}" against dishName filter "${filter.value}"`);
-          console.log(`HomeScreen: Meal data - basic meal: "${meal.meal}", metadata_enriched.dish_specific: "${meal.metadata_enriched?.dish_specific}"`);
-          
-          // Check basic meal name
-          if (meal.meal && meal.meal.toLowerCase().includes(filter.value.toLowerCase())) {
-            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (basic): ${filter.value}`);
-            return true;
-          }
-          
-          // Check metadata_enriched.dish_specific
-          if (meal.metadata_enriched?.dish_specific && 
-              meal.metadata_enriched.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
-            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (metadata_enriched): ${filter.value}`);
-            return true;
-          }
-          
-          // Check enhanced_facts.food_facts.dish_specific
-          if (meal.enhanced_facts?.food_facts?.dish_specific && 
-              meal.enhanced_facts.food_facts.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
-            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (enhanced_facts): ${filter.value}`);
-            return true;
-          }
-          
-          // Check quick_criteria_result.dish_specific
-          if (meal.quick_criteria_result?.dish_specific && 
-              meal.quick_criteria_result.dish_specific.toLowerCase().includes(filter.value.toLowerCase())) {
-            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches dishName (quick_criteria_result): ${filter.value}`);
-            return true;
-          }
-          
-          console.log(`HomeScreen: ❌ Meal "${meal.meal}" does NOT match dishName filter "${filter.value}"`);
-          return false;
-        });
-      } else if (filter.type === 'ingredient') {
-        result = result.filter(meal => {
-          // Debug each meal for ingredient filter
-          console.log(`HomeScreen: Checking meal "${meal.meal}" against ingredient filter "${filter.value}"`);
-          console.log(`HomeScreen: Meal ingredients - key_ingredients: ${JSON.stringify(meal.metadata_enriched?.key_ingredients)}, interesting_ingredient: "${meal.metadata_enriched?.interesting_ingredient}"`);
-          
-          // Check metadata_enriched.key_ingredients
-          if (meal.metadata_enriched?.key_ingredients && Array.isArray(meal.metadata_enriched.key_ingredients)) {
-            const matches = meal.metadata_enriched.key_ingredients.some(ingredient => 
-              ingredient.toLowerCase().includes(filter.value.toLowerCase())
-            );
-            if (matches) {
-              console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (metadata_enriched): ${filter.value}`);
-              return true;
-            }
-          }
-          
-          // Check metadata_enriched.interesting_ingredient
-          if (meal.metadata_enriched?.interesting_ingredient && 
-              meal.metadata_enriched.interesting_ingredient.toLowerCase().includes(filter.value.toLowerCase())) {
-            console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (interesting_ingredient): ${filter.value}`);
-            return true;
-          }
-          
-          // Check enhanced_facts.food_facts.key_ingredients
-          if (meal.enhanced_facts?.food_facts?.key_ingredients && Array.isArray(meal.enhanced_facts.food_facts.key_ingredients)) {
-            const matches = meal.enhanced_facts.food_facts.key_ingredients.some(ingredient => 
-              ingredient.toLowerCase().includes(filter.value.toLowerCase())
-            );
-            if (matches) {
-              console.log(`HomeScreen: ✅ Meal "${meal.meal}" matches ingredient (enhanced_facts): ${filter.value}`);
-              return true;
-            }
-          }
-          
-          console.log(`HomeScreen: ❌ Meal "${meal.meal}" does NOT match ingredient filter "${filter.value}"`);
-          return false;
-        });
-      }
-      console.log(`HomeScreen: After applying filter ${filter.type}=${filter.value}: ${countBefore} meals -> ${result.length} meals remain`);
-      });
-    }
-    
-    console.log(`HomeScreen: Final filter results: ${result.length} meals match all filter criteria`);
-    
-    // Comprehensive debugging summary
-    if (activeFilters && activeFilters.length > 0) {
-      console.log('HomeScreen: 🔍 FILTERING SUMMARY:');
-      console.log(`- Started with ${allNearbyMeals.length} total meals`);
-      console.log(`- Applied ${activeFilters.length} filters: ${JSON.stringify(activeFilters)}`);
-      console.log(`- Ended with ${result.length} filtered meals`);
-      
-      if (result.length === 0) {
-        console.log('HomeScreen: ⚠️ NO MEALS MATCH - checking why...');
-        // Sample some meals to see their structure
-        if (allNearbyMeals.length > 0) {
-          console.log('HomeScreen: Sample meal structures:');
-          allNearbyMeals.slice(0, 3).forEach((meal, i) => {
-            console.log(`Meal ${i + 1}:`, {
-              meal: meal.meal,
-              hasMetadataEnriched: !!meal.metadata_enriched,
-              metadataEnriched: meal.metadata_enriched,
-              hasEnhancedFacts: !!meal.enhanced_facts,
-              hasQuickCriteria: !!meal.quick_criteria_result
-            });
-          });
-        }
-      } else if (result.length === allNearbyMeals.length) {
-        console.log('HomeScreen: ⚠️ ALL MEALS MATCH - filter may not be working correctly');
-      }
-    }
-    
-    // Apply rating filters if any are active
-    if (activeRatingFilters && activeRatingFilters.length > 0) {
-      console.log(`HomeScreen: Applying rating filters:`, activeRatingFilters);
-      const beforeRatingFilter = result.length;
-      result = result.filter(meal => activeRatingFilters.includes(meal.rating));
-      console.log(`HomeScreen: After rating filter: ${beforeRatingFilter} meals -> ${result.length} meals remain`);
-    }
-
-    // Iconic Eats post-filter: feed shows only meals that completed an iconic-eat
-    // challenge (iconic_eat_id set by Cloud Function). Challenge placeholders
-    // are injected separately in feedData.
-    if (iconicChipActive) {
-      const beforeIconic = result.length;
-      result = result.filter(meal => !!meal.iconic_eat_id);
-      console.log(`HomeScreen: After iconic eats filter: ${beforeIconic} meals -> ${result.length} completion meals`);
-    }
-
-    // Set filtered meals
+    const result = applyHomeFilters(allNearbyMeals, activeFilters, activeRatingFilters);
+    console.log(`HomeScreen: applyHomeFilters ${allNearbyMeals.length} -> ${result.length}`);
     setNearbyMeals(result);
   };
+
   
   // Handle filter changes from SimpleFilterComponent
   const handleFilterChange = (filters: FilterItem[] | null) => {
@@ -926,6 +634,23 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     setActiveFilters(filters);
     // applyFilter will be called via useEffect
   };
+
+  // Toggle a single filter chip on/off. Used by the personalized
+  // taste-profile chip strip below the search bar. Mirrors FullMap's
+  // handleQuickChipToggle: add the FilterItem if missing, remove it if
+  // present. Deliberately separate from handleFilterChange so the chip
+  // strip doesn't clobber the search bar's pill state (and vice versa).
+  const handleQuickChipToggle = useCallback(
+    (filter: FilterItem) => {
+      const current = activeFilters || [];
+      const isOn = current.some(f => f.type === filter.type && f.value === filter.value);
+      const next = isOn
+        ? current.filter(f => !(f.type === filter.type && f.value === filter.value))
+        : [...current, filter];
+      setActiveFilters(next.length > 0 ? next : null);
+    },
+    [activeFilters]
+  );
 
   // Handle rating filter changes
   const handleRatingFilterChange = useCallback((ratings: number[] | null) => {
@@ -985,14 +710,23 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   }, [navigation]);
 
-  // Navigate to full-screen map
+  // Navigate to full-screen map.
+  // Pass `allNearbyMeals` (unfiltered, just homemade-stripped by applyHomeFilters)
+  // so the FullMap can re-filter live as the user changes chips/ratings there.
+  // Also pass current filters + a sync callback so changes inside FullMap
+  // propagate back to HomeScreen state when the user returns.
   const handleExpandMap = useCallback(() => {
     navigation.navigate('FullMap', {
-      nearbyMeals,
+      nearbyMeals: allNearbyMeals,
       userLocation,
       activeFilters,
+      activeRatingFilters,
+      onFiltersSync: (filters: FilterItem[] | null, ratings: number[] | null) => {
+        setActiveFilters(filters);
+        setActiveRatingFilters(ratings);
+      },
     });
-  }, [nearbyMeals, userLocation, activeFilters, navigation]);
+  }, [allNearbyMeals, userLocation, activeFilters, activeRatingFilters, navigation]);
 
   // ─── Sticky map strip + Near You carousel state ──────────────────────
   const [mapVisible, setMapVisible] = useState(true);
@@ -1627,7 +1361,7 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
         //   setSearchLayout(event.nativeEvent.layout);
         // }}
       >
-        <CompositeFilterComponent 
+        <CompositeFilterComponent
           key="home-filter"
           onFilterChange={handleFilterChange}
           onRatingFilterChange={handleRatingFilterChange}
@@ -1635,13 +1369,22 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           initialRatings={activeRatingFilters}
           onUserSelect={(userId, userName, userPhoto) => {
             console.log('Navigating to user profile:', userName, userId, 'Photo:', userPhoto);
-            navigation.navigate('FoodPassport', { 
-              userId, 
+            navigation.navigate('FoodPassport', {
+              userId,
               userName,
               userPhoto,
               tabIndex: 0 // Always start on meals tab
             });
           }}
+        />
+        {/* Personalized taste-profile chips. Same component FullMap uses,
+            but with showSocialChips=false so "Following" / "Food Critics"
+            are hidden here — those are map-only filters. */}
+        <FullMapQuickChips
+          activeFilters={activeFilters}
+          onToggleFilter={handleQuickChipToggle}
+          tasteProfile={tasteProfile}
+          showSocialChips={false}
         />
       </View>
 

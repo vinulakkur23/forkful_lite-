@@ -44,11 +44,13 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
     fetchFilterOptions();
   }, []);
 
-  // Set initial filters if provided
+  // Sync internal state with parent's filter prop. We mirror whatever the
+  // parent passes — including `null`/empty — so that external chip toggles
+  // (Meals tab quick-chips, Map tab city chips) can REMOVE filters too, not
+  // just add them. Previously this only synced on non-empty arrays, which
+  // meant unclicking a chip never cleared the corresponding pill here.
   useEffect(() => {
-    if (initialFilters && initialFilters.length > 0) {
-      setActiveFilters(initialFilters);
-    }
+    setActiveFilters(initialFilters || []);
   }, [initialFilters]);
 
   // Update dropdown options when search text changes
@@ -595,15 +597,20 @@ const SimpleFilterComponent: React.FC<SimpleFilterComponentProps> = ({
             contentContainerStyle={styles.filtersScrollContent}
           >
             {activeFilters.map((filter, index) => (
-              <View key={`${filter.type}-${filter.value}-${index}`} style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>{filter.value}</Text>
-                <TouchableOpacity
-                  style={styles.filterBadgeCloseButton}
-                  onPress={() => handleRemoveFilter(filter)}
-                >
-                  <Text style={styles.closeButtonX}>×</Text>
-                </TouchableOpacity>
-              </View>
+              <React.Fragment key={`${filter.type}-${filter.value}-${index}`}>
+                {index > 0 && (
+                  <Text style={styles.filterAndText}>and</Text>
+                )}
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{filter.value}</Text>
+                  <TouchableOpacity
+                    style={styles.filterBadgeCloseButton}
+                    onPress={() => handleRemoveFilter(filter)}
+                  >
+                    <Text style={styles.closeButtonX}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              </React.Fragment>
             ))}
             
             {activeFilters.length > 1 && (
@@ -745,6 +752,14 @@ const styles = StyleSheet.create({
   },
   filterBadgeCloseButton: {
     padding: 2,
+  },
+  filterAndText: {
+    color: '#888',
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    marginRight: 8,
+    marginBottom: 6,
+    alignSelf: 'center',
   },
   clearAllButton: {
     backgroundColor: '#666',

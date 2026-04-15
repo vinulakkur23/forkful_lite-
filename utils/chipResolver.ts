@@ -161,7 +161,7 @@ export function buildDynamicChips(
   for (let i = 0; i < maxRounds; i++) {
     if (topFlavors[i]) ordered.push({ field: 'flavor', value: topFlavors[i] });
     if (topProteins[i]) ordered.push({ field: 'protein', value: topProteins[i] });
-    if (topCuisines[i]) ordered.push({ field: 'cuisine', value: topCuisines[i] });
+    if (topCuisines[i]) ordered.push({ field: 'cuisineType', value: topCuisines[i] });
     if (topCooking[i]) ordered.push({ field: 'cookingMethod', value: topCooking[i] });
     if (topDietary[i]) ordered.push({ field: 'dietary', value: topDietary[i] });
   }
@@ -190,18 +190,35 @@ export function buildDynamicChips(
  * Build a city-chip strip from the existing `users/{uid}.uniqueCities` array.
  * This is standalone from the taste profile — it works for any user with
  * uniqueCities populated by the existing count-refresh Cloud Function.
+ *
+ * Dedupes case-insensitively (so "Venice" and "venice" collapse to one chip)
+ * and always emits a Title-Cased label AND value. The filter application
+ * logic in FoodPassportScreen compares city filters case-insensitively, so
+ * standardizing the value to Title Case doesn't break existing filters.
  */
 export function buildCityChips(
   uniqueCities: string[] | undefined | null,
   limit: number = 10
 ): Chip[] {
   if (!Array.isArray(uniqueCities) || uniqueCities.length === 0) return [];
-  return uniqueCities.slice(0, limit).map((city) => ({
-    label: city
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' '),
-    type: 'city',
-    value: city,
-  }));
+
+  const titleCase = (s: string) =>
+    s
+      .trim()
+      .split(/\s+/)
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ''))
+      .join(' ');
+
+  const seen = new Set<string>();
+  const chips: Chip[] = [];
+  for (const raw of uniqueCities) {
+    if (typeof raw !== 'string') continue;
+    const key = raw.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const display = titleCase(raw);
+    chips.push({ label: display, type: 'city', value: display });
+    if (chips.length >= limit) break;
+  }
+  return chips;
 }

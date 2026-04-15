@@ -46,7 +46,8 @@ import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import { checkIfMigrationNeeded, updateUserMealsWithProfile } from '../services/userProfileMigration';
 import { getTotalCheersForUser } from '../services/cheersService';
 import { refreshUserCounts } from '../services/countRefreshService';
-import { loadPixelArtLayout, savePixelArtLayout, reconcilePixelArtLayout, TableConfig } from '../services/pixelArtOrderService';
+import { loadPixelArtLayout, savePixelArtLayout, savePixelArtOrder, reconcilePixelArtLayout, TableConfig } from '../services/pixelArtOrderService';
+import DraggableEmojiGrid from '../components/DraggableEmojiGrid';
 import { followUser, unfollowUser, isFollowing, getFollowCounts } from '../services/followService';
 import { getPhotoWithMetadata } from '../services/photoLibraryService';
 // Import for accolades section
@@ -84,6 +85,9 @@ type Props = {
   userName?: string;
   userPhoto?: string;
   onStatsUpdate?: (stats: { totalMeals: number; totalCheers: number; badgeCount: number; followersCount: number }) => void;
+  // Fires after loadAllAccolades derives cuisine/city counts from mealEntries.
+  // Wrapper uses these to render "47 meals, 12 cuisines, 8 cities" in the tab bar.
+  onAccoladeCountsChange?: (counts: { cuisines: number; cities: number }) => void;
   onFilterChange?: (filters: FilterItem[] | null) => void;
   onTabChange?: (tabIndex: number) => void;
   onThemePress?: () => void;
@@ -184,7 +188,7 @@ type TabRoutes = {
   title: string;
 };
 
-const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onFilterChange, onTabChange, onThemePress, bgColor, onRefreshReady }) => {
+const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, activeRatingFilters, sortOption = 'chronological', userId, userName, userPhoto, onStatsUpdate, onAccoladeCountsChange, onFilterChange, onTabChange, onThemePress, bgColor, onRefreshReady }) => {
     const [meals, setMeals] = useState<MealEntry[]>([]);
     const [filteredMeals, setFilteredMeals] = useState<MealEntry[]>([]);
     // Iconic Eats state — used when the "Iconic Eats" filter chip is active
@@ -265,6 +269,10 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
     // State for accolades section
     const [pixelArtEmojis, setPixelArtEmojis] = useState<string[]>([]);
+    // Map pixel-art URL → mealId so tapping an emoji in the collection modal
+    // can navigate to the matching MealDetail screen. Built alongside
+    // pixelArtEmojis in loadAllAccolades.
+    const [pixelArtMealIdByUrl, setPixelArtMealIdByUrl] = useState<{ [url: string]: string }>({});
     const [emojiTableSizes, setEmojiTableSizes] = useState<number[]>([]);
     const [emojiTableConfigs, setEmojiTableConfigs] = useState<TableConfig[]>([]);
     const [emojisLoading, setEmojisLoading] = useState(true);
@@ -620,6 +628,36 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
         }
     };
 
+    // Simple-modal flat reorder: caller passes a single "table" containing
+    // all emojis in their new order. Persists just the flat list — leaves
+    // saved tableSizes/tableConfigs untouched.
+    const handleSimpleReorder = async (tables: string[][], _configs: TableConfig[]) => {
+        const flat = tables.reduce((acc, t) => [...acc, ...t], []);
+        setPixelArtEmojis(flat);
+        const currentUserId = auth().currentUser?.uid;
+        if (currentUserId) {
+            try {
+                await savePixelArtOrder(currentUserId, flat);
+            } catch (e) {
+                console.error('Failed to save pixel art order:', e);
+            }
+        }
+    };
+
+    // Shared tap-handler for the simple modal: navigate to MealDetail for the
+    // tapped pixel-art URL. Leave the modal open so pop-back lands on it.
+    const handleEmojiTapToDetail = (url: string) => {
+        const mealId = pixelArtMealIdByUrl[url];
+        if (!mealId) return;
+        navigation.navigate('MealDetail', {
+            mealId,
+            previousScreen: 'FoodPassport',
+            passportUserId: userId,
+            passportUserName: userName,
+            passportUserPhoto: userPhoto,
+        });
+    };
+
     // Apply filter to meals - now handles multiple filters
     const applyFilter = () => {
         if (!meals.length) {
@@ -973,6 +1011,9 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
 
             // --- Derive pixel art emojis ---
             const emojiUrls: string[] = [];
+            // Parallel map from emoji URL → mealId, so the collection modal
+            // can turn a tap-on-emoji into a MealDetail navigation.
+            const mealIdByEmojiUrl: { [url: string]: string } = {};
             // --- Derive city meal counts ---
             // cityMealCounts is keyed by lowercase city name (used for joining
             // against cityImages/uniqueCities). cityDisplayNames preserves the
@@ -995,8 +1036,11 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 if (data.rating && data.rating > 0) {
                     if (data.pixel_art_url) {
                         emojiUrls.push(data.pixel_art_url);
+                        mealIdByEmojiUrl[data.pixel_art_url] = doc.id;
                     } else if (data.pixel_art_data) {
-                        emojiUrls.push(`data:image/png;base64,${data.pixel_art_data}`);
+                        const dataUri = `data:image/png;base64,${data.pixel_art_data}`;
+                        emojiUrls.push(dataUri);
+                        mealIdByEmojiUrl[dataUri] = doc.id;
                     }
                 }
 
@@ -1194,11 +1238,20 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
             // --- Single batched state update ---
             console.log(`📊 Accolades loaded: ${orderedEmojis.length} emojis, ${citiesWithData.length} cities, ${cuisinesWithData.length} cuisines, ${restaurantsWithData.length} restaurants`);
             setPixelArtEmojis(orderedEmojis);
+            setPixelArtMealIdByUrl(mealIdByEmojiUrl);
             setEmojiTableSizes(loadedTableSizes);
             setEmojiTableConfigs(loadedConfigs);
             setCities(citiesWithData);
             setCuisines(cuisinesWithData);
             setRestaurants(restaurantsWithData);
+
+            // Feed the tab-bar count in the wrapper.
+            if (onAccoladeCountsChange) {
+                onAccoladeCountsChange({
+                    cuisines: cuisinesWithData.length,
+                    cities: citiesWithData.length,
+                });
+            }
 
             // Load custom restaurant sections/order
             const allRestaurantNames = restaurantsWithData.map(r => r.name);
@@ -1998,6 +2051,7 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                     );
                 })}
             </ScrollView>
+
         </>
     ), [userId, onThemePress, bgColor, activeFilters, onFilterChange, userName, userPhoto, navigation, QUICK_FILTER_CHIPS, tabIndex]);
 
@@ -2827,9 +2881,26 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                 tableConfigs={emojiTableConfigs}
                 isOwnProfile={isOwnProfile}
                 onReorder={handleEmojiReorder}
+                onEmojiPress={(url) => {
+                    const mealId = pixelArtMealIdByUrl[url];
+                    if (!mealId) return;
+                    setShowMealsModal(false);
+                    navigation.navigate('MealDetail', {
+                        mealId,
+                        previousScreen: 'FoodPassport',
+                        passportUserId: userId,
+                        passportUserName: userName,
+                        passportUserPhoto: userPhoto,
+                    });
+                }}
             />
 
-            {/* Simple pixel art grid modal */}
+            {/* Simple pixel art grid modal
+                Tapping an emoji navigates to its MealDetail; long-press +
+                drag reorders and auto-saves via savePixelArtOrder. Rendered
+                with DraggableEmojiGrid in a flat 4-column single-table layout
+                (renderTableBackdrop returns null = no wooden tiles, matching
+                the old simple look). */}
             <Modal
                 visible={showSimpleGridModal}
                 animationType="slide"
@@ -2842,21 +2913,17 @@ const FoodPassportScreen: React.FC<Props> = ({ navigation, activeFilters, active
                             <Text style={styles.simpleGridDone}>Done</Text>
                         </TouchableOpacity>
                     </View>
-                    <ScrollView
-                        contentContainerStyle={styles.simpleGridContent}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        <View style={styles.simpleGrid}>
-                            {pixelArtEmojis.map((uri, index) => (
-                                <Image
-                                    key={`emoji_${index}`}
-                                    source={{ uri }}
-                                    style={styles.simpleGridItem}
-                                    resizeMode="contain"
-                                />
-                            ))}
-                        </View>
-                    </ScrollView>
+                    <DraggableEmojiGrid
+                        tables={[pixelArtEmojis]}
+                        tableConfigs={[{ columns: 4, maxRows: 9999, furniture: 'wooden_table' }]}
+                        onTablesChange={handleSimpleReorder}
+                        onTilePress={handleEmojiTapToDetail}
+                        dragEnabled={isOwnProfile}
+                        maxColumnsOverride={4}
+                        emojiScale={0.92}
+                        previewReorder
+                        renderTableBackdrop={() => null}
+                    />
                 </SafeAreaView>
             </Modal>
             {/* Iconic Eat Modal — opens from grid placeholder tiles */}

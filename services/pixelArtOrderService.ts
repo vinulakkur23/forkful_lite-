@@ -96,6 +96,29 @@ export const savePixelArtLayout = async (
   }
 };
 
+// --- Save (flat order only) ---
+
+// Used by the simple pixel-art modal on the Food Passport: it only reorders
+// the flat list, so we don't want to overwrite the multi-table
+// `pixel_art_table_sizes` / `pixel_art_table_configs` that the richer modal
+// (currently sunsetted) relies on. When that fancy modal is reopened, its
+// reconcile pass will re-chunk the new order into the saved table sizes.
+export const savePixelArtOrder = async (
+  userId: string,
+  flatEmojis: string[],
+): Promise<void> => {
+  try {
+    const urlsOnly = flatEmojis.filter(url => !url.startsWith('data:'));
+    await firestore().collection('users').doc(userId).update({
+      pixel_art_emoji_order: urlsOnly,
+    });
+    console.log('PixelArtOrderService: Flat order saved');
+  } catch (error) {
+    console.error('PixelArtOrderService: Error saving flat order:', error);
+    throw error;
+  }
+};
+
 // --- Reconcile ---
 
 export const reconcilePixelArtLayout = (

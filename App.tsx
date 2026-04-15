@@ -850,7 +850,7 @@ const App: React.FC = () => {
                   navigationRef.current.navigate('MainTabs', {
                     screen: 'FoodPassport',
                     params: {
-                      tabIndex: 1  // Stamps tab
+                      tabIndex: 0  // Accolades now render inline on the Meals tab
                     }
                   });
                 }
