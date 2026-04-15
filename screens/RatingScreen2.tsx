@@ -49,6 +49,7 @@ import { ensureServerAwake } from '../config/api';
 import Carousel3D, { CarouselItem } from '../components/Carousel3D';
 // getDrinkPairings and getDishHistory removed — redundant with extractDishInsights
 import { generatePixelArtIcon, PixelArtData, createImageDataUri } from '../services/geminiPixelArtService';
+import { findIconicEatMatch } from '../services/iconicEatsService';
 // Monument service removed — no longer used
 // Enhanced metadata service removed - now handled by Cloud Functions
 // REMOVED: Facts service no longer used
@@ -1103,18 +1104,49 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 
       let mealId: string;
 
+      // ICONIC EATS MATCH — kicked off NOT-awaited below, after the meal
+      // doc is written. Previously this sat in the critical path (awaited
+      // before navigation), adding 500ms–2s to every save. Now:
+      //   1. Meal doc is written without iconic fields → navigate immediately.
+      //   2. findIconicEatMatch resolves in the background (~100–500ms).
+      //   3. If it matches, a follow-up update() writes iconic_eat_id +
+      //      pixel_art_url. The follow-up lands long before the user finishes
+      //      rating + writing thoughts on EditMealScreen (10–30s), so the
+      //      celebration modal still fires reliably.
+      //   4. No place_id → Cloud Function safety net handles matching.
+      //
+      // Initial writes set iconic_eat_id: null. The follow-up overwrites it
+      // if matched.
+      const iconicInitialFields = { iconic_eat_id: null as string | null };
+
       if (isUnratedMeal && existingMealId) {
         // Path 1: Update existing unrated meal
         logWithSession('Updating existing unrated meal:', existingMealId);
         mealId = existingMealId;
 
         // Update meal with user-entered details
+        // NOTE: location is persisted here so the map marker lands at the
+        // restaurant the user picked, not wherever they captured the photo.
+        // The initial CameraScreen write stamps the capture-time location;
+        // this update overwrites it with the restaurant-selected location
+        // (handleRestaurantSelection sets this via setLocation). If location
+        // is null (rare), skip the field — never overwrite with null.
         await firestore().collection('mealEntries').doc(mealId).update({
           meal: mealName || '',
           restaurant: restaurant || '',
           city: (cityInfo || '').toLowerCase().trim(),
           place_id: selectedRestaurantId || null,
-          iconic_eat_id: null,
+          ...(location
+            ? {
+                location: {
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  source: location.source || 'unknown',
+                  city: (cityInfo || '').toLowerCase().trim(),
+                },
+              }
+            : {}),
+          ...iconicInitialFields,
           isUnrated: false, // Mark as no longer unrated
           updatedAt: firestore.FieldValue.serverTimestamp(),
           sessionId: sessionId,
@@ -1136,7 +1168,7 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
           mealType: mealType || 'Restaurant',
           city: (cityInfo || '').toLowerCase().trim(),
           place_id: selectedRestaurantId || null,
-          iconic_eat_id: null,
+          ...iconicInitialFields,
           comments: thoughts ? { thoughts: thoughts } : {},
           location: location ? {
             latitude: location.latitude,
@@ -1236,6 +1268,52 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
         logWithSession('Navigating to ResultScreen (default flow)');
         navigation.navigate('Result', resultParams);
       }
+
+      // ========================================
+      // FIRE-AND-FORGET: Iconic Eat match
+      // ========================================
+      // Runs AFTER navigation so the critical path stays fast. Previously this
+      // was awaited before the meal doc was written, adding 500ms–2s to every
+      // save. Now it resolves in the background (~100–500ms) and updates the
+      // meal doc if a match is found. The follow-up update lands long before
+      // the user finishes rating + writing thoughts on EditMealScreen, so the
+      // celebration modal still fires reliably when they hit save there.
+      //
+      // If no place_id → server Cloud Function handles matching as a safety
+      // net (proximity + name match).
+      (async () => {
+        try {
+          if (!selectedRestaurantId) {
+            return; // No place_id → Cloud Function will handle match
+          }
+          const match = await findIconicEatMatch({
+            place_id: selectedRestaurantId,
+            dish_name: mealName || '',
+          });
+          if (!match) {
+            return;
+          }
+          console.log(`🏆 Iconic eat matched (background): ${match.id} → ${match.dish_name}`);
+          logWithSession(`Iconic match (bg): ${match.id}`);
+
+          // Overwrite pixel art with the curated iconic emoji. Using set(merge)
+          // semantics via update() is safe here because the meal doc exists
+          // (we just created it above).
+          await firestore()
+            .collection('mealEntries')
+            .doc(mealId)
+            .update({
+              iconic_eat_id: match.id,
+              pixel_art_url: match.emoji_url,
+              pixel_art_options: [match.emoji_url],
+              pixel_art_user_selected: true,
+              pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
+            });
+          logWithSession(`Iconic fields written to meal ${mealId}`);
+        } catch (err) {
+          console.error('❌ Iconic match background task failed:', err);
+        }
+      })();
 
       // Upload image in background for gallery flow — EditMealScreen's listener will pick it up
       if (photoSource === 'gallery' && !isUnratedMeal && freshPhoto?.uri) {
@@ -1354,7 +1432,11 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
 
       // Step 2: Start pixel art with 1.5 second delay (staggered processing)
       // SKIP pixel art for unrated meals (already generated in CameraScreen)
-      // ONLY generate for gallery uploads (which don't go through CameraScreen)
+      // ONLY generate for gallery uploads (which don't go through CameraScreen).
+      // Iconic match is handled separately by the fire-and-forget block below
+      // and by a pre-read guard at the pixel art write site (we re-read the
+      // meal doc before overwriting pixel_art_url so the iconic emoji wins
+      // the race if findIconicEatMatch landed first).
       if (photoSource === 'gallery') {
         setTimeout(() => {
           console.log('🎨 Starting pixel art generation for gallery upload after 1.5s delay...');
@@ -1390,15 +1472,38 @@ const RatingScreen2: React.FC<Props> = ({ route, navigation }) => {
               }
               console.log(`✅ Uploaded ${optionUrls.length} pixel art options`);
 
-              await firestore()
+              // Pre-read guard: if findIconicEatMatch already stamped an
+              // iconic emoji on this meal, don't clobber it. Save options
+              // only, leave pixel_art_url alone. Mirrors CameraScreen's
+              // pattern so the two flows stay consistent.
+              const preWriteSnap = await firestore()
                 .collection('mealEntries')
                 .doc(mealId)
-                .update({
-                  pixel_art_options: optionUrls,
-                  pixel_art_url: optionUrls[0], // Default to first option until user picks
-                  pixel_art_prompt: pixelArtResult.prompt_used,
-                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
-                });
+                .get();
+              const preWriteData = preWriteSnap.data();
+              if (preWriteData?.iconic_eat_id) {
+                console.log(
+                  `🏆 Gallery pixel art: meal ${mealId} matched iconic eat ${preWriteData.iconic_eat_id}; saving options only (preserving iconic emoji)`,
+                );
+                await firestore()
+                  .collection('mealEntries')
+                  .doc(mealId)
+                  .update({
+                    pixel_art_options: optionUrls,
+                    pixel_art_prompt: pixelArtResult.prompt_used,
+                    pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
+                  });
+              } else {
+                await firestore()
+                  .collection('mealEntries')
+                  .doc(mealId)
+                  .update({
+                    pixel_art_options: optionUrls,
+                    pixel_art_url: optionUrls[0], // Default to first option until user picks
+                    pixel_art_prompt: pixelArtResult.prompt_used,
+                    pixel_art_updated_at: firestore.FieldValue.serverTimestamp()
+                  });
+              }
 
               console.log('✅ Pixel art options saved to Firestore');
               logWithSession('Pixel art options saved successfully');

@@ -3,6 +3,9 @@ const {getFirestore, FieldValue} = require('firebase-admin/firestore');
 
 const EARTH_RADIUS_KM = 6371;
 const PROXIMITY_KM = 0.05; // 50 meters
+const DISH_TRIGRAM_THRESHOLD = 0.35;
+// Mirror of utils/iconicMatching.ts on the client. Keep in sync — changes to
+// thresholds or normalization rules must land in both files together.
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -49,6 +52,47 @@ function namesLooselyMatch(a, b) {
   return tokensB.some((t) => tokensA.has(t));
 }
 
+/** Build trigram set for a normalized string. Mirrors iconicMatching.ts. */
+function trigrams(s) {
+  const padded = `  ${s}  `;
+  const out = new Set();
+  for (let i = 0; i < padded.length - 2; i++) {
+    out.add(padded.slice(i, i + 3));
+  }
+  return out;
+}
+
+function trigramSimilarity(a, b) {
+  const na = normalizeRestaurantName(a);
+  const nb = normalizeRestaurantName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  const ta = trigrams(na);
+  const tb = trigrams(nb);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let intersect = 0;
+  ta.forEach((g) => {
+    if (tb.has(g)) intersect++;
+  });
+  const union = ta.size + tb.size - intersect;
+  return union === 0 ? 0 : intersect / union;
+}
+
+/**
+ * Returns true if two dish names are similar enough to be considered the
+ * same dish. Also accepts substring containment (so "Margherita" matches
+ * "Margherita Pizza") since trigram Jaccard drops for extra tokens.
+ */
+function dishNamesMatch(a, b, threshold) {
+  const na = normalizeRestaurantName(a);
+  const nb = normalizeRestaurantName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const t = typeof threshold === 'number' ? threshold : DISH_TRIGRAM_THRESHOLD;
+  return trigramSimilarity(na, nb) >= t;
+}
+
 function extractMealCity(meal) {
   const raw =
     (meal && meal.city) ||
@@ -79,23 +123,31 @@ function extractEatCoords(eatData) {
  * (already filtered to the meal's city), return the best matching dish or null.
  *
  * Match rules:
- *   1. Primary — meal.place_id === eat.place_id.
- *   2. Fallback — Haversine ≤ 50m AND restaurant names loosely match.
+ *   1. Primary — meal.place_id === eat.place_id AND dish names match.
+ *   2. Fallback — Haversine ≤ 50m AND restaurant names loosely match AND
+ *      dish names match.
+ *
+ * Dish-name matching uses trigram Jaccard (threshold 0.35) plus substring
+ * containment, so "Amore Pizza" typed by user matches "Apizza Amore Pie",
+ * but a coffee logged at Lotus of Siam does NOT match Khao Soi.
  *
  * Exported so the backfill script can reuse it.
  */
 function findMatchingIconicEat(meal, candidates) {
   if (!meal || !candidates || candidates.length === 0) return null;
 
-  // Primary: place_id
+  // Primary: place_id + dish-name match
   if (meal.place_id) {
-    const byPlaceId = candidates.find(
+    const placeIdMatches = candidates.filter(
       (c) => c.data.place_id && c.data.place_id === meal.place_id,
     );
-    if (byPlaceId) return byPlaceId;
+    const byDish = placeIdMatches.find((c) =>
+      dishNamesMatch(meal.meal, c.data.dish_name),
+    );
+    if (byDish) return byDish;
   }
 
-  // Fallback: proximity + name similarity
+  // Fallback: proximity + restaurant-name + dish-name
   const mealCoords = extractMealCoords(meal);
   if (!mealCoords) return null;
 
@@ -110,6 +162,7 @@ function findMatchingIconicEat(meal, candidates) {
     );
     if (distanceKm > PROXIMITY_KM) continue;
     if (!namesLooselyMatch(meal.restaurant, candidate.data.restaurant_name)) continue;
+    if (!dishNamesMatch(meal.meal, candidate.data.dish_name)) continue;
     return candidate;
   }
 
@@ -255,4 +308,6 @@ module.exports = {
   namesLooselyMatch,
   normalizeRestaurantName,
   haversineKm,
+  dishNamesMatch,
+  trigramSimilarity,
 };

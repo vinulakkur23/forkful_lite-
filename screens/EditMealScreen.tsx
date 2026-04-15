@@ -26,6 +26,7 @@ import EmojiRating from '../components/EmojiRating';
 import EmojiDisplay from '../components/EmojiDisplay';
 import MultiPhotoGallery, { PhotoItem } from '../components/MultiPhotoGallery';
 import FoodFactsModal from '../components/FoodFactsModal';
+import IconicUnlockCelebration from '../components/IconicUnlockCelebration';
 import { saveUserChallenge } from '../services/userChallengesService';
 import challengeNotificationService from '../services/challengeNotificationService';
 import { RootStackParamList, TabParamList } from '../App';
@@ -140,6 +141,14 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
   // Success modal state (Path 1 vs Path 2)
   const [showEmojiAwardModal, setShowEmojiAwardModal] = useState<boolean>(false);
   const [showThankYouModal, setShowThankYouModal] = useState<boolean>(false);
+
+  // Iconic Eat celebration (takes precedence over thank-you / award modals when meal.iconic_eat_id set)
+  const [showIconicCelebration, setShowIconicCelebration] = useState<boolean>(false);
+  const [iconicCelebrationData, setIconicCelebrationData] = useState<{
+    emojiUrl: string;
+    dishName: string;
+    restaurantName: string;
+  } | null>(null);
 
   // Ref for scroll view
   const scrollViewRef = useRef<any>(null);
@@ -1077,6 +1086,20 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
         const freshMealDoc = await firestore().collection('mealEntries').doc(route.params.mealId).get();
         const freshMealData = freshMealDoc.data();
 
+        // Iconic Eat capture: if the meal matched an iconic eat at save time
+        // (RatingScreen2 set iconic_eat_id + pixel_art_url to the iconic emoji),
+        // show the celebration modal in place of the thank-you / award modal.
+        if (freshMealData?.iconic_eat_id) {
+          console.log('🎉 Iconic eat captured — showing celebration');
+          setIconicCelebrationData({
+            emojiUrl: freshMealData.pixel_art_url || '',
+            dishName: freshMealData.meal || meal?.meal || '',
+            restaurantName: freshMealData.restaurant || meal?.restaurant || '',
+          });
+          setShowIconicCelebration(true);
+          return;
+        }
+
         // If user already selected pixel art (e.g., from MealTips notification picker),
         // skip the emoji selection modal and show a simple confirmation instead
         if (freshMealData?.pixel_art_user_selected === true) {
@@ -1849,6 +1872,18 @@ const EditMealScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Iconic Eat Celebration — shown when meal matched an iconic eat */}
+      <IconicUnlockCelebration
+        visible={showIconicCelebration}
+        emojiUrl={iconicCelebrationData?.emojiUrl || ''}
+        dishName={iconicCelebrationData?.dishName || ''}
+        restaurantName={iconicCelebrationData?.restaurantName || ''}
+        onClose={() => {
+          setShowIconicCelebration(false);
+          navigation.navigate('FoodPassport', { tabIndex: 0 });
+        }}
+      />
 
       {/* Thank You Modal (Path 2: Gallery) */}
       <Modal

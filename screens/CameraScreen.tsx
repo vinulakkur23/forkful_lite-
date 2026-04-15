@@ -398,16 +398,35 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
                 });
               }
 
-              await firestore().collection('mealEntries').doc(mealId).update({
-                pixel_art_options: optionUrls,
-                pixel_art_url: optionUrls[0], // Default to first option until user picks
-                pixel_art_local_path: localPixelArtPath,
-                pixel_art_prompt: pixelArtData.prompt_used,
-                pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
-                api_step_3_success: true,
-                api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
-              });
-              console.log('✅ [Background] Pixel art options saved to Firestore');
+              // Before overwriting pixel art fields, check whether the user's
+              // save flow matched an iconic eat. If so, leave the iconic emoji
+              // in place and don't clobber it with the generated pixel art.
+              const preWriteSnap = await firestore()
+                .collection('mealEntries')
+                .doc(mealId)
+                .get();
+              const preWriteData = preWriteSnap.data();
+              if (preWriteData?.iconic_eat_id) {
+                console.log(
+                  `🏆 [Background] Meal ${mealId} matched iconic eat ${preWriteData.iconic_eat_id}; skipping pixel art write`,
+                );
+                await firestore().collection('mealEntries').doc(mealId).update({
+                  pixel_art_local_path: localPixelArtPath,
+                  api_step_3_skipped_iconic: true,
+                  api_step_3_timestamp: firestore.FieldValue.serverTimestamp(),
+                });
+              } else {
+                await firestore().collection('mealEntries').doc(mealId).update({
+                  pixel_art_options: optionUrls,
+                  pixel_art_url: optionUrls[0], // Default to first option until user picks
+                  pixel_art_local_path: localPixelArtPath,
+                  pixel_art_prompt: pixelArtData.prompt_used,
+                  pixel_art_updated_at: firestore.FieldValue.serverTimestamp(),
+                  api_step_3_success: true,
+                  api_step_3_timestamp: firestore.FieldValue.serverTimestamp()
+                });
+                console.log('✅ [Background] Pixel art options saved to Firestore');
+              }
             } catch (uploadError: any) {
               console.error('❌ [Background] Error uploading pixel art:', uploadError);
               await firestore().collection('mealEntries').doc(mealId).update({

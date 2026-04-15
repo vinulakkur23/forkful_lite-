@@ -281,18 +281,20 @@ const MealDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     fetchMealDetails();
   }, []);
   
-  // Auto-show pixel art picker for meal owner if options exist and they haven't explicitly picked
+  // Auto-show pixel art picker for meal owner if options exist and they haven't explicitly picked.
+  // Skipped when the meal matched an iconic eat — the iconic emoji is the pixel art, no choice to make.
   useEffect(() => {
     if (!meal || hasAutoShownPicker.current) return;
     const isOwner = meal.userId === auth().currentUser?.uid;
     const hasOptions = meal.pixel_art_options?.length > 1;
     const alreadySelected = meal.pixel_art_user_selected === true;
-    if (isOwner && hasOptions && !alreadySelected) {
+    const isIconic = !!meal.iconic_eat_id;
+    if (isOwner && hasOptions && !alreadySelected && !isIconic) {
       hasAutoShownPicker.current = true;
       // Small delay so the screen renders first
       setTimeout(() => setShowPixelArtPicker(true), 500);
     }
-  }, [meal?.pixel_art_options, meal?.pixel_art_user_selected]);
+  }, [meal?.pixel_art_options, meal?.pixel_art_user_selected, meal?.iconic_eat_id]);
 
   // Subscribe to cheers data
   useEffect(() => {
